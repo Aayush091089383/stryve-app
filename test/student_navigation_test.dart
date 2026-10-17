@@ -6,13 +6,15 @@
 //   competing with the timetable request);
 // * a tab, once opened, keeps its state and never refetches when switching
 //   back and forth;
-// * the bottom-navigation container has no outline (transparent border) while
-//   keeping its geometry;
+// * the bottom-navigation container has no outline (transparent border) and no
+//   drop shadow while keeping its geometry;
 // * the day selector pill actually interpolates between its two existing
 //   states instead of snapping;
 // * the Assignments destination opens the dedicated Assignments screen as a
-//   tab body, while the Tasks quick-access card on Home pushes TasksPage - the
-//   two screens are separate and must stay separate.
+//   tab body, and it is the only way to assignments (the Home quick-access
+//   grid no longer links to TasksPage);
+// * Home's scroll view leaves the floating nav bar's footprint clear at the
+//   bottom, so the "Latest Update" card is never clipped.
 //
 // Safety: no live backend, no database. Every request is answered by a
 // MockClient; ApiCache is cleared so tests cannot serve each other's data.
@@ -119,6 +121,30 @@ void main() {
         reason: 'only the visible tab may talk to the backend',
       );
       expect(find.byType(TasksPage), findsNothing);
+      // The quick-access grid is five cards, no Tasks card.
+      expect(find.byKey(const Key('home_tasks_card')), findsNothing);
+      expect(find.text('Tasks'), findsNothing);
+      expect(find.text('Attendance'), findsOneWidget);
+
+      // Home scrolls under the floating nav bar, so its padding must include
+      // the bar's footprint or the last card sits behind it.
+      final homeScroll = tester.widget<SingleChildScrollView>(
+        find.byType(SingleChildScrollView),
+      );
+      final homePadding = homeScroll.padding! as EdgeInsets;
+      expect(
+        homePadding.bottom,
+        greaterThanOrEqualTo(HomePage.kGlassNavInset),
+        reason: 'the Latest Update card must clear the nav bar',
+      );
+      expect(
+        homePadding.bottom,
+        greaterThan(100),
+        reason: 'the nav inset is added to the existing bottom padding',
+      );
+      expect(homePadding.top, 16);
+      expect(homePadding.left, 20);
+      expect(homePadding.right, 20);
     });
 
     testWidgets('opening Assignments fetches once and switching back does not refetch', (
@@ -196,29 +222,6 @@ void main() {
       );
     });
 
-    testWidgets('the Tasks quick card on Home opens the Tasks screen', (
-      tester,
-    ) async {
-      final recorder = RecordingClient();
-      await pumpHomeWith(tester, recorder);
-
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('home_tasks_card')),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.tap(find.byKey(const Key('home_tasks_card')));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(TasksPage), findsOneWidget);
-      expect(find.byType(AssignmentsPage), findsNothing);
-      expect(find.text('Pending Tasks'), findsOneWidget);
-      expect(
-        recorder.paths.where((p) => p == '/assignments'),
-        hasLength(1),
-      );
-    });
-
     testWidgets('the bottom navigation container has no outline', (
       tester,
     ) async {
@@ -235,6 +238,8 @@ void main() {
       );
 
       expect(navGlass.borderColor, Colors.transparent);
+      // ...and no drop shadow, which reads as an outline on a near-white bar.
+      expect(navGlass.shadowColor, Colors.transparent);
       // Geometry is untouched.
       expect(navGlass.borderRadius, 24);
       expect(navGlass.padding, const EdgeInsets.symmetric(horizontal: 8, vertical: 8));

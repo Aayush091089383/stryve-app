@@ -11,7 +11,6 @@ import 'role_selection_page.dart';
 import 'services/api_cache.dart';
 import 'services/auth_service.dart';
 import 'student.dart';
-import 'tasks.dart';
 import 'timetable.dart';
 import 'profile.dart';
 import 'utils/glass_container.dart';
@@ -74,31 +73,8 @@ class _HomePageState extends State<HomePage> {
       case 2:
         return ProfilePage(student: widget.student);
       default:
-        return _HomeTab(
-          student: widget.student,
-          client: widget.client,
-          onOpenTasks: _openTasks,
-        );
+        return _HomeTab(student: widget.student, client: widget.client);
     }
-  }
-
-  /// The Tasks quick-access card opens the Tasks screen, which is pushed on
-  /// top of Home so Back returns to the dashboard.
-  ///
-  /// Assignments is the bottom tab now, so this pushed route is the only way
-  /// into Tasks.
-  void _openTasks() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          extendBodyBehindAppBar: true,
-          appBar: const GlassAppBar(title: Text('Tasks')),
-          body: GlassBackground(
-            child: TasksPage(student: widget.student, client: widget.client),
-          ),
-        ),
-      ),
-    );
   }
 
   /// Switches tab, creating its page on first visit. Used by the bottom
@@ -179,6 +155,8 @@ class _GlassBottomNav extends StatelessWidget {
       // No outline around the white navigation container. A transparent 1px
       // border keeps the exact same inner geometry as before.
       borderColor: Colors.transparent,
+      // Flat surface: no drop shadow (read as an outline).
+      shadowColor: Colors.transparent,
       child: NavigationBar(
         selectedIndex: selectedIndex,
         onDestinationSelected: onDestinationSelected,
@@ -215,19 +193,12 @@ class _GlassBottomNav extends StatelessWidget {
 }
 
 class _HomeTab extends StatefulWidget {
-  const _HomeTab({
-    required this.student,
-    required this.onOpenTasks,
-    this.client,
-  });
+  const _HomeTab({required this.student, this.client});
 
   final Student student;
 
   /// Optional injected HTTP client, for tests only.
   final http.Client? client;
-
-  /// Opens the Tasks screen (pushed route, not a tab).
-  final VoidCallback onOpenTasks;
 
   @override
   State<_HomeTab> createState() => _HomeTabState();
@@ -355,7 +326,9 @@ class _HomeTabState extends State<_HomeTab> {
     final student = widget.student;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+      // 100 of breathing room plus the floating nav's footprint, so the
+      // "Latest Update" card can scroll fully clear of the bar.
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 100 + HomePage.kGlassNavInset),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -589,7 +562,9 @@ class _HomeTabState extends State<_HomeTab> {
 
           const SizedBox(height: 14),
 
-          // Simple non-scrollable grid replacement
+          // Simple non-scrollable grid replacement. Five cards, two per row,
+          // with the fifth (Announcements) full width in the last row. Tasks
+          // is not here: the Assignments tab is the way in.
           Row(
             children: [
               Expanded(
@@ -609,10 +584,8 @@ class _HomeTabState extends State<_HomeTab> {
               const SizedBox(width: 12),
               Expanded(
                 child: _glassQuickCard(
-                  key: const Key('home_tasks_card'),
-                  icon: Icons.assignment_rounded,
-                  title: 'Tasks',
-                  onTap: widget.onOpenTasks,
+                  icon: Icons.bar_chart_rounded,
+                  title: 'Attendance',
                 ),
               ),
             ],
@@ -637,17 +610,6 @@ class _HomeTabState extends State<_HomeTab> {
               const SizedBox(width: 12),
               Expanded(
                 child: _glassQuickCard(
-                  icon: Icons.bar_chart_rounded,
-                  title: 'Attendance',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _glassQuickCard(
                   icon: Icons.science_rounded,
                   title: 'Labs',
                   onTap: () {
@@ -660,7 +622,11 @@ class _HomeTabState extends State<_HomeTab> {
                   },
                 ),
               ),
-              const SizedBox(width: 12),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
               Expanded(
                 child: _glassQuickCard(
                   icon: Icons.campaign_rounded,
