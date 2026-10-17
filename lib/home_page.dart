@@ -35,14 +35,14 @@ class _HomePageState extends State<HomePage> {
 
   /// A slot stays null until its tab is first shown.
   ///
-  /// Building all three tabs up front (the previous behaviour) meant the Tasks
-  /// tab fired `GET /assignments` while the user was still on Home, competing
-  /// with the timetable request and delaying the first screen. Once created, a
-  /// tab is kept alive by the IndexedStack exactly as before, so switching back
-  /// never refetches or resets scroll position.
+  /// Building all three tabs up front (the previous behaviour) meant the
+  /// Assignments tab fired `GET /assignments` while the user was still on
+  /// Home, competing with the timetable request and delaying the first
+  /// screen. Once created, a tab is kept alive by the IndexedStack exactly as
+  /// before, so switching back never refetches or resets scroll position.
   final List<Widget?> _pages = List<Widget?>.filled(3, null);
 
-  static const List<String> _tabTitles = ['CampusSync', 'Tasks', 'Profile'];
+  static const List<String> _tabTitles = ['CampusSync', 'Assignments', 'Profile'];
 
   @override
   void initState() {
@@ -53,29 +53,39 @@ class _HomePageState extends State<HomePage> {
   Widget _buildPage(int index) {
     switch (index) {
       case 1:
-        // Forward the injected client too, so the Tasks screen uses the same
-        // test seam as this page's other network calls.
-        return TasksPage(student: widget.student, client: widget.client);
+        // Forward the injected client too, so the Assignments tab uses the
+        // same test seam as this page's other network calls. `embedded` keeps
+        // this page's Scaffold, app bar and background as the only chrome.
+        return AssignmentsPage(
+          student: widget.student,
+          client: widget.client,
+          embedded: true,
+        );
       case 2:
         return ProfilePage(student: widget.student);
       default:
         return _HomeTab(
           student: widget.student,
           client: widget.client,
-          onOpenAssignments: _openAssignments,
+          onOpenTasks: _openTasks,
         );
     }
   }
 
-  /// The Assignments quick-access card opens its own screen, which is pushed
-  /// on top of Home so Back returns to the dashboard. It is not a second copy
-  /// of the Tasks tab.
-  void _openAssignments() {
+  /// The Tasks quick-access card opens the Tasks screen, which is pushed on
+  /// top of Home so Back returns to the dashboard.
+  ///
+  /// Assignments is the bottom tab now, so this pushed route is the only way
+  /// into Tasks.
+  void _openTasks() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => AssignmentsPage(
-          student: widget.student,
-          client: widget.client,
+        builder: (_) => Scaffold(
+          extendBodyBehindAppBar: true,
+          appBar: const GlassAppBar(title: Text('Tasks')),
+          body: GlassBackground(
+            child: TasksPage(student: widget.student, client: widget.client),
+          ),
         ),
       ),
     );
@@ -178,9 +188,10 @@ class _GlassBottomNav extends StatelessWidget {
             label: 'Home',
           ),
           NavigationDestination(
+            key: Key('nav_assignments'),
             icon: Icon(Icons.assignment_outlined),
             selectedIcon: Icon(Icons.assignment_rounded),
-            label: 'Tasks',
+            label: 'Assignments',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
@@ -196,7 +207,7 @@ class _GlassBottomNav extends StatelessWidget {
 class _HomeTab extends StatefulWidget {
   const _HomeTab({
     required this.student,
-    required this.onOpenAssignments,
+    required this.onOpenTasks,
     this.client,
   });
 
@@ -205,8 +216,8 @@ class _HomeTab extends StatefulWidget {
   /// Optional injected HTTP client, for tests only.
   final http.Client? client;
 
-  /// Opens the dedicated Assignments screen (pushed route, not a tab).
-  final VoidCallback onOpenAssignments;
+  /// Opens the Tasks screen (pushed route, not a tab).
+  final VoidCallback onOpenTasks;
 
   @override
   State<_HomeTab> createState() => _HomeTabState();
@@ -588,9 +599,10 @@ class _HomeTabState extends State<_HomeTab> {
               const SizedBox(width: 12),
               Expanded(
                 child: _glassQuickCard(
+                  key: const Key('home_tasks_card'),
                   icon: Icons.assignment_rounded,
-                  title: 'Assignments',
-                  onTap: widget.onOpenAssignments,
+                  title: 'Tasks',
+                  onTap: widget.onOpenTasks,
                 ),
               ),
             ],
@@ -715,11 +727,13 @@ class _HomeTabState extends State<_HomeTab> {
   }
 
   Widget _glassQuickCard({
+    Key? key,
     required IconData icon,
     required String title,
     VoidCallback? onTap,
   }) {
     return GlassContainer(
+      key: key,
       padding: const EdgeInsets.all(18),
       margin: EdgeInsets.zero,
       borderRadius: 16,

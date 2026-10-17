@@ -37,6 +37,14 @@ class AssignmentsPage extends StatefulWidget {
   final AssignmentPdfSave? savePdf;
   final PdfSurfaceFactory? surfaceFactory;
 
+  /// When true this page renders only its content, for use as a tab body.
+  ///
+  /// The host (``HomePage``) already provides the ``Scaffold``, the glass app
+  /// bar and the ``GlassBackground``, so drawing them here as well would stack
+  /// two app bars and two backgrounds. The pushed route leaves this false and
+  /// is unchanged.
+  final bool embedded;
+
   const AssignmentsPage({
     super.key,
     required this.student,
@@ -44,6 +52,7 @@ class AssignmentsPage extends StatefulWidget {
     this.loadPdf,
     this.savePdf,
     this.surfaceFactory,
+    this.embedded = false,
   });
 
   @override
@@ -151,31 +160,39 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.embedded) {
+      return _content(context);
+    }
     return Scaffold(
       appBar: const GlassAppBar(title: Text('Assignments')),
-      body: GlassBackground(
-        child: AnimatedSwitcher(
-          duration: motionDuration(context, kMotionStandard),
-          switchInCurve: Curves.easeOut,
-          switchOutCurve: Curves.easeIn,
-          child: _isLoading
-              ? const Center(
-                  key: ValueKey('assignments-loading'),
-                  child: CircularProgressIndicator(
-                    color: GlassColors.primaryBlue,
-                  ),
-                )
-              : _errorMessage != null
-              ? KeyedSubtree(
-                  key: const ValueKey('assignments-error'),
-                  child: _buildError(),
-                )
-              : KeyedSubtree(
-                  key: const ValueKey('assignments-content'),
-                  child: _buildList(),
-                ),
-        ),
-      ),
+      body: GlassBackground(child: _content(context)),
+    );
+  }
+
+  /// The loading/error/list switcher, without any page chrome.
+  ///
+  /// Shared by both modes so the two can never drift apart.
+  Widget _content(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: motionDuration(context, kMotionStandard),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      child: _isLoading
+          ? const Center(
+              key: ValueKey('assignments-loading'),
+              child: CircularProgressIndicator(
+                color: GlassColors.primaryBlue,
+              ),
+            )
+          : _errorMessage != null
+          ? KeyedSubtree(
+              key: const ValueKey('assignments-error'),
+              child: _buildError(),
+            )
+          : KeyedSubtree(
+              key: const ValueKey('assignments-content'),
+              child: _buildList(),
+            ),
     );
   }
 

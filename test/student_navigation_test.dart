@@ -1,7 +1,7 @@
 // Student navigation + timetable day-selector regressions.
 //
 // What is pinned here:
-// * Home starts only the request it needs: the Tasks tab must not call
+// * Home starts only the request it needs: the Assignments tab must not call
 //   GET /assignments until it is actually opened (it used to load up front,
 //   competing with the timetable request);
 // * a tab, once opened, keeps its state and never refetches when switching
@@ -10,9 +10,9 @@
 //   keeping its geometry;
 // * the day selector pill actually interpolates between its two existing
 //   states instead of snapping;
-// * the Assignments quick-access card opens the dedicated Assignments screen
-//   (a pushed route) while the Tasks bottom tab keeps opening TasksPage - the
-//   two destinations are separate and must stay separate.
+// * the Assignments destination opens the dedicated Assignments screen as a
+//   tab body, while the Tasks quick-access card on Home pushes TasksPage - the
+//   two screens are separate and must stay separate.
 //
 // Safety: no live backend, no database. Every request is answered by a
 // MockClient; ApiCache is cleared so tests cannot serve each other's data.
@@ -107,7 +107,7 @@ Future<void> pumpHomeWith(
 
 void main() {
   group('student tab navigation', () {
-    testWidgets('Home does not load the Tasks tab until it is opened', (
+    testWidgets('Home does not load the Assignments tab until it is opened', (
       tester,
     ) async {
       final recorder = RecordingClient();
@@ -121,34 +121,34 @@ void main() {
       expect(find.byType(TasksPage), findsNothing);
     });
 
-    testWidgets('opening Tasks fetches once and switching back does not refetch', (
+    testWidgets('opening Assignments fetches once and switching back does not refetch', (
       tester,
     ) async {
       final recorder = RecordingClient();
       await pumpHomeWith(tester, recorder);
 
-      await tester.tap(find.byIcon(Icons.assignment_outlined));
+      await tester.tap(find.byKey(const Key('nav_assignments')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.byType(TasksPage), findsOneWidget);
-      // The Tasks tab keeps its own content, untouched by the new screen.
-      expect(find.text('Pending Tasks'), findsOneWidget);
+      expect(find.byType(AssignmentsPage), findsOneWidget);
+      expect(find.byType(TasksPage), findsNothing);
+      expect(find.text('All Assignments'), findsOneWidget);
       expect(
         recorder.paths.where((p) => p == '/assignments'),
         hasLength(1),
       );
 
-      // Home, then back to Tasks: state is kept, so no second request.
+      // Home, then back to Assignments: state is kept, so no second request.
       await tester.tap(find.byIcon(Icons.home_outlined));
       await tester.pump();
-      expect(find.byType(TasksPage), findsNothing);
+      expect(find.byType(AssignmentsPage), findsNothing);
 
-      await tester.tap(find.byIcon(Icons.assignment_outlined));
+      await tester.tap(find.byKey(const Key('nav_assignments')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.byType(TasksPage), findsOneWidget);
+      expect(find.byType(AssignmentsPage), findsOneWidget);
       expect(
         recorder.paths.where((p) => p == '/assignments'),
         hasLength(1),
@@ -156,28 +156,52 @@ void main() {
       );
     });
 
-    testWidgets('the Assignments quick card opens the dedicated screen', (
+    testWidgets('the Assignments destination opens the dedicated screen', (
       tester,
     ) async {
       final recorder = RecordingClient();
       await pumpHomeWith(tester, recorder);
 
-      await tester.scrollUntilVisible(
-        find.text('Assignments'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.tap(find.text('Assignments'));
+      await tester.tap(find.byKey(const Key('nav_assignments')));
       await tester.pumpAndSettle();
 
       expect(find.byType(AssignmentsPage), findsOneWidget);
       expect(
         find.byType(TasksPage),
         findsNothing,
-        reason: 'Assignments is its own screen, not the Tasks tab',
+        reason: 'Assignments is its own screen, not the Tasks screen',
+      );
+      // `embedded` must not bring its own Scaffold/app bar into HomePage's.
+      expect(
+        find.byType(Scaffold),
+        findsOneWidget,
+        reason: 'the tab body adds no second Scaffold',
       );
       expect(find.text('All Assignments'), findsOneWidget);
       // Opening it reads the same endpoint exactly once.
+      expect(
+        recorder.paths.where((p) => p == '/assignments'),
+        hasLength(1),
+      );
+    });
+
+    testWidgets('the Tasks quick card on Home opens the Tasks screen', (
+      tester,
+    ) async {
+      final recorder = RecordingClient();
+      await pumpHomeWith(tester, recorder);
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('home_tasks_card')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('home_tasks_card')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TasksPage), findsOneWidget);
+      expect(find.byType(AssignmentsPage), findsNothing);
+      expect(find.text('Pending Tasks'), findsOneWidget);
       expect(
         recorder.paths.where((p) => p == '/assignments'),
         hasLength(1),
