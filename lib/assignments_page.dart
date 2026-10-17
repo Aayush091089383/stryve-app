@@ -45,6 +45,14 @@ class AssignmentsPage extends StatefulWidget {
   /// is unchanged.
   final bool embedded;
 
+  /// Extra bottom padding for the embedded (tab) mode.
+  ///
+  /// The pushed route fills the whole screen, so 0 is correct there. As a tab
+  /// body this list sits under HomePage's floating glass navigation bar, and it
+  /// must leave room for it - otherwise the last card ends up behind the bar,
+  /// where taps belong to the bar instead of the card.
+  final double bottomInset;
+
   const AssignmentsPage({
     super.key,
     required this.student,
@@ -53,6 +61,7 @@ class AssignmentsPage extends StatefulWidget {
     this.savePdf,
     this.surfaceFactory,
     this.embedded = false,
+    this.bottomInset = 0,
   });
 
   @override
@@ -246,7 +255,7 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
 
   Widget _buildList() {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + widget.bottomInset),
       children: [
         const Text(
           'All Assignments',

@@ -177,6 +177,17 @@ void main() {
         findsOneWidget,
         reason: 'the tab body adds no second Scaffold',
       );
+      // The tab body must clear HomePage's floating glass navigation bar.
+      expect(
+        tester.widget<AssignmentsPage>(find.byType(AssignmentsPage)).bottomInset,
+        HomePage.kGlassNavInset,
+        reason: 'the embedded list leaves room for the nav bar',
+      );
+      expect(
+        HomePage.kGlassNavInset,
+        greaterThan(0),
+        reason: 'a zero inset would put the last card behind the bar',
+      );
       expect(find.text('All Assignments'), findsOneWidget);
       // Opening it reads the same endpoint exactly once.
       expect(

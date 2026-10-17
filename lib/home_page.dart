@@ -24,6 +24,15 @@ class HomePage extends StatefulWidget {
   /// teacher panel and the finder screens). Null in the app.
   final http.Client? client;
 
+  /// The floating glass navigation bar's footprint: the distance from the
+  /// bottom of the screen to the top edge of the bar.
+  ///
+  /// Derived from [_GlassBottomNav]'s own geometry - 16 bottom margin + 8
+  /// bottom padding + 60 bar height + 8 top padding. A tab body that scrolls
+  /// uses this so its last card clears the bar instead of sitting behind it,
+  /// where taps belong to the bar.
+  static const double kGlassNavInset = 92;
+
   const HomePage({super.key, required this.student, this.client});
 
   @override
@@ -60,6 +69,7 @@ class _HomePageState extends State<HomePage> {
           student: widget.student,
           client: widget.client,
           embedded: true,
+          bottomInset: HomePage.kGlassNavInset,
         );
       case 2:
         return ProfilePage(student: widget.student);
