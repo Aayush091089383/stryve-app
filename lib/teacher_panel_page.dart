@@ -22,17 +22,19 @@ export 'teacher_models.dart';
 
 /// Teacher Panel / Admin Panel shell.
 ///
-/// Two separate dashboards that only share backend infrastructure:
+/// One shell, two home dashboards, one shared set of tabs:
 ///
-/// * Teacher Panel - exactly three bottom tabs: **Home, Assignments, Profile**.
-///   Student Registration Approvals is a separate section reached from Home
-///   (and only when the backend says this account may review registrations).
-/// * Admin Panel - three tabs: **Home, Approvals, Profile**, with the admin
-///   overview and navigation to teacher management. The Admin Logout button
-///   lives on the Profile tab, never on Home.
+/// * Both roles get the same four bottom tabs - **Home, Assignments, Approvals,
+///   Profile**. A teacher uploads assignments and reviews student registrations;
+///   an admin does both from the same tabs.
+/// * Only the Home tab differs by role: the teacher home shows today's classes,
+///   the admin home adds the overview and navigation to teacher management. The
+///   Admin Logout button lives on the Profile tab, never on Home.
 ///
 /// Every authorization decision is the backend's: this page only reflects what
-/// `/teacher/me` and the feature endpoints return.
+/// `/teacher/me` and the feature endpoints return. A visible tab never grants a
+/// permission the server would refuse - approvals still need
+/// `can_approve_registrations` on the account (admins always have it).
 class TeacherPanelPage extends StatefulWidget {
   const TeacherPanelPage({super.key, this.authService, this.client});
 
@@ -78,14 +80,24 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
   String? _loadError;
   int _tabIndex = 0;
 
+  /// Tab positions in the shared four-tab bar.
+  static const int _approvalsTabIndex = 2;
+
+  /// Tabs that have been shown at least once, so their view is only built (and
+  /// so only fetches) after the first visit. Index 0 is Home, which build()
+  /// always renders.
+  final Set<int> _seenTabs = {0};
+
   bool get _isAdmin => _teacher?.role == 'admin';
 
-  static const List<String> _teacherTabTitles = [
+  /// The same four tabs for teachers and admins, in the same order, so the
+  /// bottom navigation never reshuffles between roles.
+  static const List<String> _tabTitles = [
     'Home',
     'Assignments',
+    'Approvals',
     'Profile',
   ];
-  static const List<String> _adminTabTitles = ['Home', 'Approvals', 'Profile'];
 
   @override
   void initState() {
@@ -161,6 +173,11 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
       await _loadClaims(token);
       if (_isAdmin) {
         await _loadAdminOverview(token);
+      } else if (_canReviewRegistrations) {
+        // A teacher holding the approval permission gets the same pending badge
+        // the admin tab shows. `/teacher/list` stays admin-only, so only the
+        // count is fetched here.
+        await _loadPendingCount(token);
       }
     } catch (_) {
       if (!mounted) return;
@@ -223,6 +240,35 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
       }
     } catch (_) {
       // Non-fatal: the Claim Free Period screen reports its own errors.
+    }
+  }
+
+  /// Pending registration count, for the Approvals tab badge.
+  ///
+  /// The endpoint is permission-gated on the server: a 403 (or a failure) leaves
+  /// the count untouched, and the badge renders nothing for a null count.
+  Future<void> _loadPendingCount(String token) async {
+    try {
+      final pending = await _client
+          .get(
+            Uri.parse('${Environment.backendUrl}/teacher/registrations/pending'),
+            headers: teacherHeaders(token),
+          )
+          .timeout(kTeacherRequestTimeout);
+
+      if (!mounted) return;
+
+      if (pending.statusCode == 401) {
+        await _handleSessionExpired();
+        return;
+      }
+      if (pending.statusCode == 200) {
+        setState(() {
+          _pendingRegistrationCount = teacherJsonList(pending.body).length;
+        });
+      }
+    } catch (_) {
+      // Counts are informational only.
     }
   }
 
@@ -384,21 +430,20 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
     }
 
     final isAdmin = _isAdmin;
-    final tabTitles = isAdmin ? _adminTabTitles : _teacherTabTitles;
 
+    // Four tabs for both roles. Only the Home page behind index 0 differs.
     final pages = <Widget>[
       isAdmin ? _buildAdminHome() : _buildTeacherHome(),
-      isAdmin
-          ? TeacherApprovalsView(
-              authService: _authService,
-              client: _client,
-              onSessionExpired: _handleSessionExpired,
-            )
-          : TeacherAssignmentsView(
-              authService: _authService,
-              client: _client,
-              onSessionExpired: _handleSessionExpired,
-            ),
+      TeacherAssignmentsView(
+        authService: _authService,
+        client: _client,
+        onSessionExpired: _handleSessionExpired,
+      ),
+      TeacherApprovalsView(
+        authService: _authService,
+        client: _client,
+        onSessionExpired: _handleSessionExpired,
+      ),
       TeacherProfileView(
         name: _teacher?.name ?? (isAdmin ? 'Administrator' : 'Teacher'),
         email: _teacher?.email ?? '',
@@ -416,8 +461,8 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
       appBar: GlassAppBar(
         title: Text(
           isAdmin
-              ? 'Admin Panel · ${tabTitles[_tabIndex]}'
-              : 'Teacher Panel · ${tabTitles[_tabIndex]}',
+              ? 'Admin Panel · ${_tabTitles[_tabIndex]}'
+              : 'Teacher Panel · ${_tabTitles[_tabIndex]}',
         ),
         automaticallyImplyLeading: false,
         actions: [
@@ -443,39 +488,51 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
       ),
       body: GlassBackground(
         child: SafeArea(
-          child: IndexedStack(index: _tabIndex, children: pages),
+          child: IndexedStack(
+            index: _tabIndex,
+            // Both roles carry both tabs now, and the Approvals view fetches as
+            // soon as it builds. Build each tab on first visit, so an account
+            // that is not permitted to review never fires a doomed request for
+            // a tab it has not opened.
+            children: [
+              for (var i = 0; i < pages.length; i++)
+                _seenTabs.contains(i) ? pages[i] : const SizedBox.shrink(),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: _GlassBottomNav(
         selectedIndex: _tabIndex,
-        onDestinationSelected: (index) => setState(() => _tabIndex = index),
+        onDestinationSelected: (index) => setState(() {
+          _tabIndex = index;
+          _seenTabs.add(index);
+        }),
         destinations: [
           const SlidingNavDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home_rounded),
             label: 'Home',
           ),
-          isAdmin
-              ? SlidingNavDestination(
-                  // Pending registrations are the only real, already-fetched
-                  // count in the app (GET /teacher/registrations/pending).
-                  // `null` means "could not fetch", which must never be drawn
-                  // as a badge, so it is passed as 0.
-                  icon: AnimatedCountBadge(
-                    count: _pendingRegistrationCount ?? 0,
-                    child: const Icon(Icons.assignment_ind_outlined),
-                  ),
-                  selectedIcon: AnimatedCountBadge(
-                    count: _pendingRegistrationCount ?? 0,
-                    child: const Icon(Icons.assignment_ind_rounded),
-                  ),
-                  label: 'Approvals',
-                )
-              : const SlidingNavDestination(
-                  icon: Icon(Icons.upload_file_outlined),
-                  selectedIcon: Icon(Icons.upload_file_rounded),
-                  label: 'Assignments',
-                ),
+          const SlidingNavDestination(
+            icon: Icon(Icons.upload_file_outlined),
+            selectedIcon: Icon(Icons.upload_file_rounded),
+            label: 'Assignments',
+          ),
+          SlidingNavDestination(
+            // Pending registrations are the only real, already-fetched count in
+            // the app (GET /teacher/registrations/pending). `null` means "could
+            // not fetch", which must never be drawn as a badge, so it is
+            // passed as 0.
+            icon: AnimatedCountBadge(
+              count: _pendingRegistrationCount ?? 0,
+              child: const Icon(Icons.assignment_ind_outlined),
+            ),
+            selectedIcon: AnimatedCountBadge(
+              count: _pendingRegistrationCount ?? 0,
+              child: const Icon(Icons.assignment_ind_rounded),
+            ),
+            label: 'Approvals',
+          ),
           const SlidingNavDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person_rounded),
@@ -779,7 +836,10 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                 icon: Icons.how_to_reg_rounded,
                 title: 'Student Registration Approvals',
                 subtitle: 'Approve or reject pending student registrations.',
-                onTap: () => setState(() => _tabIndex = 1),
+                onTap: () => setState(() {
+                  _tabIndex = _approvalsTabIndex;
+                  _seenTabs.add(_approvalsTabIndex);
+                }),
               ),
               const SizedBox(height: 12),
               _buildActionCard(

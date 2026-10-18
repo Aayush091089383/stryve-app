@@ -4,8 +4,9 @@
 // so the live backend and the real SQLite database are never contacted.
 //
 // What is covered:
-//   * the Teacher Panel's bottom navigation is EXACTLY Home / Assignments /
-//     Profile, and Student Registration Approvals is a separate section;
+//   * both roles get the same four bottom tabs - Home / Assignments /
+//     Approvals / Profile - and the Approvals view is built only on first
+//     visit, so a teacher without the permission never fires its requests;
 //   * the approvals workflow (load, empty, approve, reject, refusals, network
 //     failure, repeated taps, session expiry);
 //   * the approval permission is honoured both ways;
@@ -281,7 +282,9 @@ Future<void> openTab(WidgetTester tester, IconData icon) async {
 void main() {
   // =====================================================================
   group('Teacher Panel bottom navigation', () {
-    testWidgets('has exactly Home, Assignments and Profile', (tester) async {
+    testWidgets('a teacher gets all four tabs, Approvals included', (
+      tester,
+    ) async {
       await pumpPanel(tester, panelRouter());
       await pumpUntilFound(tester, find.text('Dr. Meera Rao'));
 
@@ -289,15 +292,10 @@ void main() {
           .widget<SlidingNavBar>(find.byType(SlidingNavBar))
           .destinations;
 
-      expect(destinations, hasLength(3));
+      expect(destinations, hasLength(4));
       expect(
         destinations.map((destination) => destination.label).toList(),
-        ['Home', 'Assignments', 'Profile'],
-      );
-      // Approvals is NOT a bottom tab.
-      expect(
-        destinations.map((destination) => destination.label),
-        isNot(contains('Approvals')),
+        ['Home', 'Assignments', 'Approvals', 'Profile'],
       );
       // Logout is not on Home (it moved to Profile).
       expect(find.text('LOG OUT'), findsNothing);
@@ -323,7 +321,7 @@ void main() {
 
       expect(
         destinations.map((destination) => destination.label).toList(),
-        ['Home', 'Approvals', 'Profile'],
+        ['Home', 'Assignments', 'Approvals', 'Profile'],
       );
       expect(find.text('Teacher Management'), findsOneWidget);
       // The Admin Home never carries a logout button.

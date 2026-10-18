@@ -314,13 +314,14 @@ void main() {
         expect(find.text('Teacher Management'), findsNothing);
         expect(find.text('ADMIN'), findsNothing);
 
-        // The teacher's panel has no admin tab ...
+        // The tabs are shared by both roles, but none of them is an admin
+        // surface: no teacher management, no account list.
         final destinations = tester
             .widget<SlidingNavBar>(find.byType(SlidingNavBar))
             .destinations;
         expect(
           destinations.map((destination) => destination.label).toList(),
-          ['Home', 'Assignments', 'Profile'],
+          ['Home', 'Assignments', 'Approvals', 'Profile'],
         );
 
         // ... and the admin-only endpoints are not even attempted.
