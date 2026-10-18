@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'teacher_panel_page.dart';
+import 'role_selection_page.dart';
 import 'config/environment.dart';
 import 'services/teacher_auth_service.dart';
 import 'utils/glass_container.dart';
@@ -110,13 +111,32 @@ class _TeacherLoginPageState extends State<TeacherLoginPage> {
     }
   }
 
+  /// Back to Role Selection. This page is usually pushed from there, so a pop
+  /// is enough; after a logout or an expired session it is the root route, so
+  /// replace it rather than leaving a button that does nothing.
+  Future<void> _backToRoleSelection() async {
+    final navigator = Navigator.of(context);
+    if (await navigator.maybePop()) return;
+    if (!mounted) return;
+    navigator.pushReplacement(
+      MaterialPageRoute(builder: (_) => const RoleSelectionPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(
-        title: Text('Teacher Login'),
-        automaticallyImplyLeading: true,
+      appBar: GlassAppBar(
+        title: const Text('Teacher Login'),
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          // Same label Flutter's own BackButton carries, so screen readers and
+          // long-press both name the action.
+          tooltip: 'Back',
+          onPressed: _backToRoleSelection,
+        ),
       ),
       body: GlassBackground(
         child: SafeArea(
