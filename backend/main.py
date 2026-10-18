@@ -158,7 +158,16 @@ STUDENT_REGISTRY = [
     {"roll_number": "72", "name": "BASTE TUKARAM TUSHAR", "course": "E&TC", "year": 1, "division": "D", "batch": "D-3"},
 ]
 
-app = FastAPI(title="Stryve Backend")
+# The API is exposed through a public tunnel, so the interactive documentation is
+# off: /docs and /redoc are 404 in every environment. `openapi_url` goes with
+# them - a public schema tells an attacker every route and payload shape even
+# without the Swagger UI. Re-enable all three only behind authentication.
+app = FastAPI(
+    title="Stryve Backend",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 
 # ------------------------------------------------------------------
 # CORS - now configurable via environment
