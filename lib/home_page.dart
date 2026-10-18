@@ -331,7 +331,12 @@ class _HomeTabState extends State<_HomeTab> {
     // so the header has to start below it. With only the old 16px of top
     // padding the welcome line was painted behind the bar and read as an empty
     // gap above "Today's Schedule".
-    final topInset = MediaQuery.paddingOf(context).top + kToolbarHeight + 8;
+    //
+    // Scaffold already reports the app bar's footprint in `padding.top` for a
+    // body that scrolls behind it, so only the small gap is ours to add -
+    // adding `kToolbarHeight` on top of it pushed the greeting ~84dp lower
+    // than the bar.
+    final topInset = MediaQuery.paddingOf(context).top + 8;
     final firstName = _titleCase(
       student.name.trim().split(RegExp(r'\s+')).first,
     );

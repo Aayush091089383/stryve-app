@@ -208,6 +208,11 @@ void main() {
       greaterThanOrEqualTo(appBarBottom),
       reason: 'the greeting must clear the app bar, not hide behind it',
     );
+    expect(
+      greetingTop,
+      lessThanOrEqualTo(appBarBottom + 24),
+      reason: 'and sit right below it - the app bar is not counted twice',
+    );
     expect(tester.widget<Text>(greetingFinder).style!.color!.a, 1.0);
   });
 }
