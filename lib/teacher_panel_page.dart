@@ -466,23 +466,12 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
         ),
         automaticallyImplyLeading: false,
         actions: [
+          // Same affordance as the student Home: a notification bell. The
+          // app-bar refresh is gone; the Retry button on a load error, the
+          // refresh on each tab and re-entering a tab still reload data.
           IconButton(
-            icon: _isRefreshing
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        GlassColors.primaryBlue,
-                      ),
-                    ),
-                  )
-                : const Icon(Icons.refresh_rounded),
-            onPressed: _isRefreshing
-                ? null
-                : () => _load(isRefresh: true),
-            tooltip: 'Refresh',
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () {},
           ),
         ],
       ),

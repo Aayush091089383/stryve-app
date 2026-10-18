@@ -302,6 +302,18 @@ void main() {
       expect(find.byTooltip('Logout'), findsNothing);
     });
 
+    testWidgets('the app bar carries the bell, not a refresh button', (
+      tester,
+    ) async {
+      await pumpPanel(tester, panelRouter());
+      await pumpUntilFound(tester, find.text('Dr. Meera Rao'));
+
+      // Matches the student Home's affordance.
+      expect(find.byIcon(Icons.notifications_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.refresh_rounded), findsNothing);
+      expect(find.byTooltip('Refresh'), findsNothing);
+    });
+
     testWidgets('an admin gets the separate admin dashboard, not the teacher one', (
       tester,
     ) async {
