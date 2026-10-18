@@ -158,9 +158,18 @@ class GlassContainer extends StatelessWidget {
     // a border on the nav pill and the cards. So the filter is clipped by an
     // inner shape expanded by 2px - its own AA edge then falls outside the
     // view - and the exact shape is cut by the outer ClipRRect.
+    //
+    // The outer clip asks for a save layer: the gradient fill and this clip are
+    // the *same* rounded rect, so with plain antialiasing both of their edges
+    // are blended into the backdrop at the same pixels and the seam survives as
+    // a hairline (a bigger inner expansion cannot help - the two edges coincide
+    // whatever the radius). Rendering the cut-out into its own layer collapses
+    // it to one antialiased edge. It is not free: one offscreen layer per glass
+    // surface per frame, which is the price of the clean edge.
     final glassWidget = isNested
         ? surface
         : ClipRRect(
+            clipBehavior: Clip.antiAliasWithSaveLayer,
             // Outer exact clip: masks the expanded inner clip.
             borderRadius: effectiveBorderRadius,
             child: ClipPath(
@@ -369,26 +378,18 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       surfaceTintColor: Colors.transparent,
       elevation: elevation,
       scrolledUnderElevation: 0,
-      flexibleSpace: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  GlassColors.surface.withValues(alpha: 0.8),
-                  GlassColors.surface.withValues(alpha: 0.6),
-                  GlassColors.surface.withValues(alpha: 0.8),
-                ],
-              ),
-              border: Border(
-                bottom: BorderSide(
-                  color: GlassColors.border.withValues(alpha: 0.5),
-                  width: 1,
-                ),
-              ),
+      // The bar used to blur the whole screen width behind itself: at sigma 20
+      // over ~278k physical px that single filter cost more than every card on
+      // the page combined, and it re-ran on every frame of every scroll. A
+      // near-opaque surface reads the same way at this size, so the backdrop
+      // filter is gone; the bottom hairline and the bar's geometry stay.
+      flexibleSpace: Container(
+        decoration: BoxDecoration(
+          color: GlassColors.surface.withValues(alpha: 0.85),
+          border: Border(
+            bottom: BorderSide(
+              color: GlassColors.border.withValues(alpha: 0.5),
+              width: 1,
             ),
           ),
         ),
