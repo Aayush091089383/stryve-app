@@ -28,14 +28,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:campus_sync/assignments_page.dart';
-import 'package:campus_sync/home_page.dart';
-import 'package:campus_sync/services/api_cache.dart';
-import 'package:campus_sync/student.dart';
-import 'package:campus_sync/tasks.dart';
-import 'package:campus_sync/timetable.dart';
-import 'package:campus_sync/utils/glass_container.dart';
-import 'package:campus_sync/utils/sliding_nav_bar.dart';
+import 'package:stryve/assignments_page.dart';
+import 'package:stryve/home_page.dart';
+import 'package:stryve/services/api_cache.dart';
+import 'package:stryve/student.dart';
+import 'package:stryve/tasks.dart';
+import 'package:stryve/timetable.dart';
+import 'package:stryve/utils/glass_container.dart';
+import 'package:stryve/utils/sliding_nav_bar.dart';
 
 const String kToken = 'student-navigation-token';
 

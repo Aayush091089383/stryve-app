@@ -16,10 +16,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:campus_sync/config/environment.dart';
-import 'package:campus_sync/main.dart';
-import 'package:campus_sync/services/auth_service.dart';
-import 'package:campus_sync/services/teacher_auth_service.dart';
+import 'package:stryve/config/environment.dart';
+import 'package:stryve/main.dart';
+import 'package:stryve/services/auth_service.dart';
+import 'package:stryve/services/teacher_auth_service.dart';
 
 // ---------------------------------------------------------------------------
 // Fixtures and helpers

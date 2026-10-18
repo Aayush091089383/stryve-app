@@ -279,7 +279,7 @@ class _LabFinderPageState extends State<LabFinderPage> {
                 const SizedBox(height: 8),
                 const Text(
                   'Room numbers, blocks and floors come from the department. '
-                  'Until they are provided, CampusSync shows nothing rather '
+                  'Until they are provided, Stryve shows nothing rather '
                   'than a guessed location.',
                   textAlign: TextAlign.center,
                   style: TextStyle(

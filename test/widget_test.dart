@@ -1,8 +1,8 @@
-// Startup smoke test for CampusSync.
+// Startup smoke test for Stryve.
 //
 // This file previously held the unmodified Flutter template counter test,
-// which asserted on a counter widget CampusSync has never had (and therefore
-// always failed). It now boots the real `CampusSyncApp` and checks the
+// which asserted on a counter widget Stryve has never had (and therefore
+// always failed). It now boots the real `StryveApp` and checks the
 // authentication gate it actually ships.
 //
 // Safety: no live backend and no database. `TeacherAuthService` reads only
@@ -17,7 +17,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // main.dart re-exports the screens asserted on below.
-import 'package:campus_sync/main.dart';
+import 'package:stryve/main.dart';
 
 // ---------------------------------------------------------------------------
 // Fixtures and helpers
@@ -62,7 +62,7 @@ Future<void> _pumpApp(WidgetTester tester) async {
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
-  await tester.pumpWidget(const CampusSyncApp());
+  await tester.pumpWidget(const StryveApp());
 }
 
 /// Pumps frames until [finder] matches, or fails after [maxFrames].
@@ -103,7 +103,7 @@ void main() {
 
     expect(find.byType(HomePage), findsNothing);
     expect(find.byType(TeacherPanelPage), findsNothing);
-    expect(find.text('CampusSync'), findsOneWidget);
+    expect(find.text('Stryve'), findsOneWidget);
     // Title case: the two roles are equal choices, not form-field labels.
     expect(find.text('Student'), findsOneWidget);
     expect(find.text('Teacher'), findsOneWidget);

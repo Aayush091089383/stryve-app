@@ -161,7 +161,7 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
       if (!mounted) return;
       setState(() {
         _errorMessage =
-            'Could not connect to CampusSync server. Please check your internet connection and try again.';
+            'Could not connect to Stryve server. Please check your internet connection and try again.';
         _isLoading = false;
       });
     }

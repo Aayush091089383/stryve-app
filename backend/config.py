@@ -1,5 +1,5 @@
 """
-Configuration management for CampusSync backend.
+Configuration management for Stryve backend.
 
 Loads environment variables from .env file and provides
 configuration settings for the application.

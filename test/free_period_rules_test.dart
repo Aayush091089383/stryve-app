@@ -17,11 +17,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:campus_sync/claim_free_period_page.dart';
-import 'package:campus_sync/home_page.dart';
-import 'package:campus_sync/services/api_cache.dart';
-import 'package:campus_sync/student.dart';
-import 'package:campus_sync/timetable.dart';
+import 'package:stryve/claim_free_period_page.dart';
+import 'package:stryve/home_page.dart';
+import 'package:stryve/services/api_cache.dart';
+import 'package:stryve/student.dart';
+import 'package:stryve/timetable.dart';
 
 const String kFreePeriodSubject = 'RELM';
 
@@ -515,7 +515,7 @@ void main() {
             canClaim: true,
             message:
                 'Your account is not linked to a faculty code from the official '
-                'timetable, so CampusSync cannot show which classes are yours.',
+                'timetable, so Stryve cannot show which classes are yours.',
             slots: [
               slotJson(
                 day: 'Tuesday',

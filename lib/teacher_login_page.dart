@@ -97,7 +97,7 @@ class _TeacherLoginPageState extends State<TeacherLoginPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Could not connect to CampusSync server. Please check your internet connection and try again.',
+            'Could not connect to Stryve server. Please check your internet connection and try again.',
           ),
         ),
       );

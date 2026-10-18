@@ -87,10 +87,10 @@ class AssignmentPdfResult {
         // The app supplies its own explanation for a PDF it could not render;
         // the backend's wording wins when it sent one.
         if (detail != null) return detail!;
-        return 'CampusSync could not prepare this PDF'
+        return 'Stryve could not prepare this PDF'
             '${statusCode == null ? '' : ' ($statusCode)'}. Please try again.';
       case AssignmentPdfFailure.network:
-        return 'Could not reach CampusSync. Check your internet connection '
+        return 'Could not reach Stryve. Check your internet connection '
             'and try again.';
       case null:
         return '';

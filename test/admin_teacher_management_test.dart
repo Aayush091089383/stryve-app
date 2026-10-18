@@ -19,12 +19,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:campus_sync/services/teacher_auth_service.dart';
-import 'package:campus_sync/teacher_login_page.dart';
-import 'package:campus_sync/teacher_management_page.dart';
-import 'package:campus_sync/teacher_panel_page.dart';
-import 'package:campus_sync/utils/glass_container.dart';
-import 'package:campus_sync/utils/sliding_nav_bar.dart';
+import 'package:stryve/services/teacher_auth_service.dart';
+import 'package:stryve/teacher_login_page.dart';
+import 'package:stryve/teacher_management_page.dart';
+import 'package:stryve/teacher_panel_page.dart';
+import 'package:stryve/utils/glass_container.dart';
+import 'package:stryve/utils/sliding_nav_bar.dart';
 
 // ---------------------------------------------------------------------------
 // Fixtures and helpers
@@ -635,7 +635,7 @@ void main() {
 
       expect(attempts, 1);
       expect(
-        find.textContaining('Could not reach the CampusSync server'),
+        find.textContaining('Could not reach the Stryve server'),
         findsOneWidget,
       );
       expect(find.text('Teacher account created successfully'), findsNothing);
@@ -749,7 +749,7 @@ void main() {
       await _pumpPanel(tester, client);
       await _pumpUntilFound(
         tester,
-        find.textContaining('Could not reach the CampusSync server'),
+        find.textContaining('Could not reach the Stryve server'),
       );
 
       expect(find.text('Retry'), findsOneWidget);

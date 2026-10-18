@@ -241,7 +241,7 @@ health_body = health_resp.json() if health_resp.status_code == 200 else {}
 check("health body has status ok", health_body.get("status") == "ok", str(health_body))
 check(
     "health body names the service",
-    health_body.get("service") == "CampusSync backend",
+    health_body.get("service") == "Stryve backend",
     str(health_body),
 )
 check(

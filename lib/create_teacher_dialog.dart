@@ -193,7 +193,7 @@ class _CreateTeacherDialogState extends State<_CreateTeacherDialog> {
       if (!mounted) return;
       setState(
         () => _errorMessage =
-            'Could not reach the CampusSync server. Check your connection and try again.',
+            'Could not reach the Stryve server. Check your connection and try again.',
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

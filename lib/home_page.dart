@@ -51,7 +51,7 @@ class _HomePageState extends State<HomePage> {
   /// before, so switching back never refetches or resets scroll position.
   final List<Widget?> _pages = List<Widget?>.filled(3, null);
 
-  static const List<String> _tabTitles = ['CampusSync', 'Assignments', 'Profile'];
+  static const List<String> _tabTitles = ['Stryve', 'Assignments', 'Profile'];
 
   @override
   void initState() {
@@ -298,7 +298,7 @@ class _HomeTabState extends State<_HomeTab> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _scheduleError = 'Could not connect to CampusSync server.';
+        _scheduleError = 'Could not connect to Stryve server.';
         _isLoadingSchedule = false;
       });
     }

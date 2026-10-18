@@ -156,7 +156,7 @@ STUDENT_REGISTRY = [
     {"roll_number": "72", "name": "BASTE TUKARAM TUSHAR", "course": "E&TC", "year": 1, "division": "D", "batch": "D-3"},
 ]
 
-app = FastAPI(title="CampusSync Backend")
+app = FastAPI(title="Stryve Backend")
 
 # ------------------------------------------------------------------
 # CORS - now configurable via environment
@@ -202,7 +202,7 @@ database.init_database()
 @app.get("/")
 def home():
     return {
-        "message": "CampusSync backend is running!"
+        "message": "Stryve backend is running!"
     }
 
 
@@ -219,7 +219,7 @@ def health():
     """
     return {
         "status": "ok",
-        "service": "CampusSync backend",
+        "service": "Stryve backend",
     }
 
 

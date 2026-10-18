@@ -1,4 +1,4 @@
-package com.example.campus_sync
+package com.stryve.app
 
 import io.flutter.embedding.android.FlutterActivity
 

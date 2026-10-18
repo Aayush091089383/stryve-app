@@ -25,17 +25,17 @@ void main() {
     systemNavigationBarDividerColor: Colors.transparent,
   ));
 
-  runApp(const CampusSyncApp());
+  runApp(const StryveApp());
 }
 
-class CampusSyncApp extends StatelessWidget {
-  const CampusSyncApp({super.key});
+class StryveApp extends StatelessWidget {
+  const StryveApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'CampusSync',
+      title: 'Stryve',
 
       theme: _buildGlassmorphismTheme(),
 

@@ -197,11 +197,12 @@ class _ProfileContentState extends State<_ProfileContent> {
                   width: 110,
                   height: 110,
                   borderRadius: 55,
-                  // Tuned 25 -> 8 -> 4 for perf; measure before reverting. This
-                  // circle was the single most expensive filter on the page:
-                  // its blur cost grows with sigma squared and the photo covers
-                  // most of what it frosts.
-                  blurStrength: 4,
+                  // Tuned 25 -> 8 -> 4 for perf, now back at 8 pending a
+                  // cool-device measurement (warm readings are not comparable:
+                  // the clocks track AP temperature). This circle was the single
+                  // most expensive filter on the page - its blur cost grows with
+                  // sigma squared and the photo covers most of what it frosts.
+                  blurStrength: 8,
                   opacity: 0.8,
                   borderOpacity: 0.5,
                   padding: EdgeInsets.zero,
@@ -371,10 +372,10 @@ class _ProfileContentState extends State<_ProfileContent> {
     required String value,
   }) {
     return GlassCard(
-      // Tuned 15 -> 8 -> 4 for perf; measure before reverting. These six cards
-      // are the largest glass surfaces in the app, and the page was the only one
-      // still stuck at 2 vsyncs per frame.
-      blurStrength: 4,
+      // Tuned 15 -> 8 -> 4 for perf, now back at 8 pending a cool-device
+      // measurement (warm readings are not comparable). These six cards are the
+      // largest glass surfaces in the app.
+      blurStrength: 8,
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 12),
       borderRadius: 16,

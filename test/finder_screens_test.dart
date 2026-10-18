@@ -13,10 +13,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:campus_sync/faculty_finder_page.dart';
-import 'package:campus_sync/home_page.dart';
-import 'package:campus_sync/lab_finder_page.dart';
-import 'package:campus_sync/student.dart';
+import 'package:stryve/faculty_finder_page.dart';
+import 'package:stryve/home_page.dart';
+import 'package:stryve/lab_finder_page.dart';
+import 'package:stryve/student.dart';
 
 const String kToken = 'student-finder-token-xyz';
 

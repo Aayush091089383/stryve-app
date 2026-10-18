@@ -16,10 +16,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:campus_sync/login_page.dart';
-import 'package:campus_sync/role_selection_page.dart';
-import 'package:campus_sync/teacher_login_page.dart';
-import 'package:campus_sync/utils/glass_container.dart';
+import 'package:stryve/login_page.dart';
+import 'package:stryve/role_selection_page.dart';
+import 'package:stryve/teacher_login_page.dart';
+import 'package:stryve/utils/glass_container.dart';
 
 Future<void> pumpRoleSelection(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 2400);

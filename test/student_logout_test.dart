@@ -13,8 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:campus_sync/config/environment.dart';
-import 'package:campus_sync/services/auth_service.dart';
+import 'package:stryve/config/environment.dart';
+import 'package:stryve/services/auth_service.dart';
 
 const String kStudentToken = 'logout-test-student-token';
 const String kTeacherToken = 'logout-test-teacher-token';

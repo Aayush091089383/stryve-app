@@ -49,7 +49,7 @@ class RoleSelectionPage extends StatelessWidget {
                 const SizedBox(height: 28),
 
                 const Text(
-                  'CampusSync',
+                  'Stryve',
                   style: TextStyle(
                     fontSize: 38,
                     fontWeight: FontWeight.bold,

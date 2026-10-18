@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:campus_sync/utils/validators.dart';
+import 'package:stryve/utils/validators.dart';
 
 void main() {
   group('validateGmail', () {

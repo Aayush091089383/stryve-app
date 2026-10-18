@@ -20,7 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:campus_sync/login_page.dart';
+import 'package:stryve/login_page.dart';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -332,7 +332,7 @@ void main() {
 
       expect(recorder.registerRequests.length, 1);
       expect(
-        find.textContaining('Could not connect to CampusSync server'),
+        find.textContaining('Could not connect to Stryve server'),
         findsOneWidget,
       );
       expect(

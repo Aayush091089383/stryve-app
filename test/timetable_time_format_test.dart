@@ -8,7 +8,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:campus_sync/timetable.dart';
+import 'package:stryve/timetable.dart';
 
 void main() {
   group('formatClock', () {

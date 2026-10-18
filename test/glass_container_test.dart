@@ -13,7 +13,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:campus_sync/utils/glass_container.dart';
+import 'package:stryve/utils/glass_container.dart';
 
 /// The `BoxDecoration` the glass surface actually paints with.
 ///

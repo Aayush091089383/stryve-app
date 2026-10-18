@@ -228,7 +228,7 @@ class _TimetablePageState extends State<TimetablePage> {
       });
     } catch (e) {
       setState(() {
-        errorMessage = 'Could not connect to CampusSync server. Please check your internet connection and try again.';
+        errorMessage = 'Could not connect to Stryve server. Please check your internet connection and try again.';
         isLoading = false;
       });
     }

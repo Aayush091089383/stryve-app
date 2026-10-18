@@ -13,7 +13,7 @@ const double kTeacherMaxContentWidth = 760;
 /// Shown whenever the backend could not be reached at all (as opposed to
 /// answering with a refusal, which is reported from its own `detail`).
 const String kTeacherUnreachableMessage =
-    'Could not reach the CampusSync server. Check your connection and try again.';
+    'Could not reach the Stryve server. Check your connection and try again.';
 
 /// Headers for an authenticated JSON call. The backend derives every permission
 /// from this token, so no screen ever sends a role or a batch of its own.

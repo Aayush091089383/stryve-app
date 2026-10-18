@@ -7,7 +7,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:campus_sync/utils/assignment_file_name.dart';
+import 'package:stryve/utils/assignment_file_name.dart';
 
 void main() {
   group('buildAssignmentPdfFileName', () {

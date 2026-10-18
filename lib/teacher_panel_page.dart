@@ -527,7 +527,7 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                   icon: Icons.event_available_rounded,
                   title: 'No classes assigned for $todayName',
                   body: _assignments.isEmpty
-                      ? 'CampusSync has no verified teaching assignments for '
+                      ? 'Stryve has no verified teaching assignments for '
                             'your account yet. Ask an administrator to link '
                             'your faculty code from the official Division D '
                             'timetable.'

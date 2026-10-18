@@ -148,7 +148,7 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Could not connect to CampusSync server. Please check your internet connection and try again.',
+            'Could not connect to Stryve server. Please check your internet connection and try again.',
           ),
         ),
       );
@@ -212,7 +212,7 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 8),
 
                 const Text(
-                  'Login to your CampusSync account',
+                  'Login to your Stryve account',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
@@ -546,7 +546,7 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Could not connect to CampusSync server. Please check your internet connection and try again.',
+            'Could not connect to Stryve server. Please check your internet connection and try again.',
           ),
         ),
       );

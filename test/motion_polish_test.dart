@@ -11,8 +11,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:campus_sync/utils/animated_count_badge.dart';
-import 'package:campus_sync/utils/glass_container.dart';
+import 'package:stryve/utils/animated_count_badge.dart';
+import 'package:stryve/utils/glass_container.dart';
 
 double _badgeOpacity(WidgetTester tester) {
   final opacity = tester.widget<Opacity>(find.byType(Opacity).first);

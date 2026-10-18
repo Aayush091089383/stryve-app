@@ -1,5 +1,5 @@
-name: campus_sync
-description: "A new Flutter project."
+name: stryve
+description: "Stryve - the campus app for students and teachers (timetable, assignments, attendance)."
 publish_to: 'none'
 
 version: 1.0.0+1

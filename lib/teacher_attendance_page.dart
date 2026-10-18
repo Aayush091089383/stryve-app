@@ -455,7 +455,7 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
           ),
           SizedBox(height: 8),
           Text(
-            'CampusSync only records attendance for classes you are assigned '
+            'Stryve only records attendance for classes you are assigned '
             'to teach. Ask an administrator to link your faculty code from the '
             'official Division D timetable (or add your assignments) and try '
             'again.',

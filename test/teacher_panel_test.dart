@@ -21,12 +21,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:campus_sync/services/teacher_auth_service.dart';
-import 'package:campus_sync/utils/animated_count_badge.dart';
-import 'package:campus_sync/utils/sliding_nav_bar.dart';
-import 'package:campus_sync/teacher_approvals_page.dart';
-import 'package:campus_sync/teacher_login_page.dart';
-import 'package:campus_sync/teacher_panel_page.dart';
+import 'package:stryve/services/teacher_auth_service.dart';
+import 'package:stryve/utils/animated_count_badge.dart';
+import 'package:stryve/utils/sliding_nav_bar.dart';
+import 'package:stryve/teacher_approvals_page.dart';
+import 'package:stryve/teacher_login_page.dart';
+import 'package:stryve/teacher_panel_page.dart';
 
 // ---------------------------------------------------------------------------
 // Fixtures and helpers
@@ -640,7 +640,7 @@ void main() {
       await pumpApprovals(tester, client);
       await pumpUntilFound(
         tester,
-        find.textContaining('Could not reach the CampusSync server'),
+        find.textContaining('Could not reach the Stryve server'),
       );
       expect(find.text('No Pending Registrations'), findsNothing);
 

@@ -20,13 +20,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:campus_sync/assignment_pdf_viewer_page.dart';
-import 'package:campus_sync/role_selection_page.dart';
-import 'package:campus_sync/services/api_cache.dart';
-import 'package:campus_sync/services/assignment_pdf_service.dart';
-import 'package:campus_sync/student.dart';
-import 'package:campus_sync/tasks.dart';
-import 'package:campus_sync/utils/pdf_surface.dart';
+import 'package:stryve/assignment_pdf_viewer_page.dart';
+import 'package:stryve/role_selection_page.dart';
+import 'package:stryve/services/api_cache.dart';
+import 'package:stryve/services/assignment_pdf_service.dart';
+import 'package:stryve/student.dart';
+import 'package:stryve/tasks.dart';
+import 'package:stryve/utils/pdf_surface.dart';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -377,7 +377,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Could not reach CampusSync'), findsOneWidget);
+      expect(find.textContaining('Could not reach Stryve'), findsOneWidget);
       expect(find.text('Retry'), findsOneWidget);
 
       await tester.tap(find.text('Retry'));
