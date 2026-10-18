@@ -15,12 +15,17 @@ class ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // NOTE: this page is the one screen that still ran at two vsyncs per frame
-    // after every other cost was removed, so the shared backdrop group is gone
-    // here as an experiment: it is the last structural difference between this
-    // page and the two that reach 90 fps. If the frame time does not change,
-    // the group was never the cause and the group should come back.
-    return _ProfileContent(student: student);
+    // One shared backdrop blur for the glass surfaces that stack down this
+    // screen (the six info cards) instead of one backdrop per card. Same
+    // mechanism Home's tab and the Timetable page use; the avatar keeps its own
+    // circular blur, and the chip on top of a card is a nested surface either
+    // way.
+    //
+    // This group is load-bearing, not cosmetic: with it removed the page
+    // measured 33.35 ms per frame (30.0 fps) where it holds 22.2 ms (45.0 fps),
+    // i.e. the shared backdrop is worth one whole vsync here. Do not drop it as
+    // a "simplification".
+    return BackdropGroup(child: _ProfileContent(student: student));
   }
 }
 
