@@ -114,7 +114,14 @@ class GlassContainer extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: effectiveBorderRadius,
           gradient: effectiveGradient,
-          border: Border.all(color: effectiveBorderColor, width: 1),
+          // A transparent border is not the same as no border: it still takes
+          // 1px of the surface, insets the gradient by it and leaves a ring
+          // where only the blurred backdrop shows - which reads as an outline
+          // on the floating nav pill (the two callers that pass
+          // `borderColor: Colors.transparent` mean "no outline at all").
+          border: effectiveBorderColor.a == 0
+              ? null
+              : Border.all(color: effectiveBorderColor, width: 1),
           // When the caller passes a fully-transparent shadowColor, both shadow
           // layers are skipped (otherwise the hardcoded secondary layer would
           // still render, defeating the caller's intent).
@@ -149,7 +156,7 @@ class GlassContainer extends StatelessWidget {
     // filter stop exactly on its antialiased edge, and those half-covered
     // pixels let the *unblurred* backdrop through as a 1px seam that reads as
     // a border on the nav pill and the cards. So the filter is clipped by an
-    // inner shape expanded by 1.5px - its own AA edge then falls outside the
+    // inner shape expanded by 2px - its own AA edge then falls outside the
     // view - and the exact shape is cut by the outer ClipRRect.
     final glassWidget = isNested
         ? surface
@@ -163,7 +170,7 @@ class GlassContainer extends StatelessWidget {
                   borderRadius: effectiveBorderRadius
                       .resolve(TextDirection.ltr)
                       .add(
-                        const BorderRadius.all(Radius.circular(1.5)),
+                        const BorderRadius.all(Radius.circular(2.0)),
                       ),
                 ),
               ),

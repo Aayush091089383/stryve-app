@@ -250,26 +250,33 @@ class _TimetablePageState extends State<TimetablePage> {
         ),
       ),
       body: GlassBackground(
-        child: AnimatedSwitcher(
-          duration: motionDuration(context, kMotionStandard),
-          switchInCurve: Curves.easeOut,
-          switchOutCurve: Curves.easeIn,
-          child: isLoading
-              ? const Center(
-                  key: ValueKey('timetable-loading'),
-                  child: CircularProgressIndicator(
-                    color: GlassColors.primaryBlue,
+        // One shared backdrop blur for the glass surfaces that sit side by side
+        // on this screen (the day pills, the student card, the entries) instead
+        // of one backdrop per surface. Same mechanism Home's tab already uses;
+        // a surface nested *inside* a card still blurs its own backdrop, so the
+        // look of the chips on top of a card is unchanged.
+        child: BackdropGroup(
+          child: AnimatedSwitcher(
+            duration: motionDuration(context, kMotionStandard),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            child: isLoading
+                ? const Center(
+                    key: ValueKey('timetable-loading'),
+                    child: CircularProgressIndicator(
+                      color: GlassColors.primaryBlue,
+                    ),
+                  )
+                : errorMessage != null
+                ? KeyedSubtree(
+                    key: const ValueKey('timetable-error'),
+                    child: _buildError(context),
+                  )
+                : KeyedSubtree(
+                    key: const ValueKey('timetable-content'),
+                    child: _buildTimetable(context),
                   ),
-                )
-              : errorMessage != null
-              ? KeyedSubtree(
-                  key: const ValueKey('timetable-error'),
-                  child: _buildError(context),
-                )
-              : KeyedSubtree(
-                  key: const ValueKey('timetable-content'),
-                  child: _buildTimetable(context),
-                ),
+          ),
         ),
       ),
     );

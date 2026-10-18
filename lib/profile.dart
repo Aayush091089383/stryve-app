@@ -15,7 +15,11 @@ class ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _ProfileContent(student: student);
+    // One shared backdrop blur for the glass surfaces that stack down this
+    // screen (the six info cards) instead of one backdrop per card. Same
+    // mechanism Home's tab already uses; the avatar keeps its own circular
+    // blur, and the chip on top of a card is a nested surface either way.
+    return BackdropGroup(child: _ProfileContent(student: student));
   }
 }
 
