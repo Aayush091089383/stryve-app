@@ -58,6 +58,55 @@ void main() {
     expect(decoration.border, isNotNull);
   });
 
+  testWidgets('a nested surface does not blur the already-blurred parent', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: GlassContainer(
+            child: GlassContainer(child: SizedBox(width: 40, height: 40)),
+          ),
+        ),
+      ),
+    );
+
+    final surfaces = find.byType(GlassContainer);
+    expect(surfaces, findsNWidgets(2));
+
+    // The parent card filters the backdrop exactly once...
+    expect(
+      find.descendant(
+        of: surfaces.first,
+        matching: find.byType(BackdropFilter),
+      ),
+      findsOneWidget,
+    );
+    // ...and the inner chip, sitting on that already-blurred surface, adds no
+    // second filter (it used to: a full clip + blur pass each).
+    expect(
+      find.descendant(
+        of: surfaces.last,
+        matching: find.byType(BackdropFilter),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a standalone surface still blurs its own backdrop', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: GlassContainer(child: SizedBox(width: 40, height: 40)),
+        ),
+      ),
+    );
+
+    expect(find.byType(BackdropFilter), findsOneWidget);
+  });
+
   testWidgets('the default surface still draws both shadow layers', (
     tester,
   ) async {

@@ -139,12 +139,17 @@ class GlassContainer extends StatelessWidget {
       ),
     );
 
-    final glassWidget = ClipRRect(
-      borderRadius: effectiveBorderRadius,
-      child: isNested
-          ? BackdropFilter(filter: blur, child: surface)
-          : BackdropFilter.grouped(filter: blur, child: surface),
-    );
+    // A nested surface sits on top of an already-blurred parent card, so its
+    // own backdrop filter only re-blurs a blur - it changes nothing visible
+    // but costs a full clip + blur pass per surface (7 of Home's 15 filters
+    // were exactly this). Nested surfaces therefore paint their surface
+    // directly; the parent card still blurs everything behind it.
+    final glassWidget = isNested
+        ? surface
+        : ClipRRect(
+            borderRadius: effectiveBorderRadius,
+            child: BackdropFilter.grouped(filter: blur, child: surface),
+          );
 
     if (onTap != null) {
       return _PressFeedback(
