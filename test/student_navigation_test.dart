@@ -143,7 +143,14 @@ void main() {
         greaterThan(100),
         reason: 'the nav inset is added to the existing bottom padding',
       );
-      expect(homePadding.top, 16);
+      // `extendBodyBehindAppBar` paints the body under the app bar, so the
+      // header's top inset has to clear it - a fixed 16 spoke a greeting that
+      // was hidden behind the bar.
+      expect(
+        homePadding.top,
+        greaterThanOrEqualTo(kToolbarHeight),
+        reason: 'the greeting must start below the glass app bar',
+      );
       expect(homePadding.left, 20);
       expect(homePadding.right, 20);
     });

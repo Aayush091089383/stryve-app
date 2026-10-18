@@ -304,10 +304,10 @@ class _HomeTabState extends State<_HomeTab> {
   Widget build(BuildContext context) {
     final hour = DateTime.now().hour;
     final greeting = hour >= 5 && hour < 12
-        ? 'Good morning'
+        ? 'morning'
         : hour >= 12 && hour < 17
-        ? 'Good afternoon'
-        : 'Good evening';
+        ? 'afternoon'
+        : 'evening';
 
     // One shared backdrop blur for the glass surfaces that sit side by side on
     // this screen (the schedule rows, the quick-access cards, the update card)
@@ -318,19 +318,43 @@ class _HomeTabState extends State<_HomeTab> {
     );
   }
 
+  /// "AAYUSH" -> "Ayush". The registry stores names upper case.
+  String _titleCase(String value) {
+    if (value.isEmpty) return value;
+    return value[0].toUpperCase() + value.substring(1).toLowerCase();
+  }
+
   Widget _buildHomeContent(BuildContext context, String greeting) {
     final student = widget.student;
+
+    // `extendBodyBehindAppBar` draws the body *under* the translucent app bar,
+    // so the header has to start below it. With only the old 16px of top
+    // padding the welcome line was painted behind the bar and read as an empty
+    // gap above "Today's Schedule".
+    final topInset = MediaQuery.paddingOf(context).top + kToolbarHeight + 8;
+    final firstName = _titleCase(
+      student.name.trim().split(RegExp(r'\s+')).first,
+    );
 
     return SingleChildScrollView(
       // 100 of breathing room plus the floating nav's footprint, so the
       // "Latest Update" card can scroll fully clear of the bar.
-      padding: EdgeInsets.fromLTRB(20, 16, 20, 100 + HomePage.kGlassNavInset),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        topInset,
+        20,
+        100 + HomePage.kGlassNavInset,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Welcome
+          // Welcome. Only the first token of the stored name is greeted - the
+          // full official name stays on the line below, because some registry
+          // rows are stored family-name-first (`SHINDE AJAY ANGATRAO`).
           Text(
-            greeting,
+            'Good $greeting $firstName',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,

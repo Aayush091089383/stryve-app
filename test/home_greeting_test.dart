@@ -150,4 +150,64 @@ void main() {
     expect(textWithData(kGivenFirst), findsOneWidget);
     expect(find.text(kGivenFirst.split(' ').first), findsNothing);
   });
+
+  // -------------------------------------------------------------------------
+  // Welcome line: time-of-day + title-case first name, and actually visible.
+  // -------------------------------------------------------------------------
+
+  final Finder greetingFinder = find.byWidgetPredicate(
+    (widget) => widget is Text && (widget.data ?? '').startsWith('Good '),
+  );
+
+  testWidgets('the welcome line greets the first name in title case', (
+    tester,
+  ) async {
+    await pumpHome(
+      tester,
+      studentNamed(kGivenFirst, rollNumber: '71', course: 'AI&DS', batch: 'D-3'),
+    );
+
+    expect(greetingFinder, findsOneWidget);
+    expect(
+      tester.widget<Text>(greetingFinder).data,
+      matches(RegExp(r'^Good (morning|afternoon|evening) Aayush$')),
+    );
+    // The full official name is still on its own line, not folded into the
+    // greeting (registry rows are not all stored given-name-first).
+    expect(textWithData(kGivenFirst), findsOneWidget);
+  });
+
+  testWidgets('a family-name-first row is greeted with its first token, '
+      'and keeps the full name', (tester) async {
+    await pumpHome(tester, studentNamed(kSurnameFirst));
+
+    expect(
+      tester.widget<Text>(greetingFinder).data,
+      matches(RegExp(r'^Good (morning|afternoon|evening) Shinde$')),
+    );
+    expect(
+      textWithData(kSurnameFirst),
+      findsOneWidget,
+      reason: 'the full stored name stays visible on its own line',
+    );
+  });
+
+  testWidgets('the welcome line sits below the app bar, not behind it', (
+    tester,
+  ) async {
+    // Home uses extendBodyBehindAppBar, so the body starts at y=0 and the
+    // header used to be painted under the translucent bar - the greeting was
+    // in the tree but unreadable.
+    await pumpHome(tester, studentNamed(kGivenFirst, rollNumber: '71'));
+
+    final greetingTop = tester.getTopLeft(greetingFinder).dy;
+    final appBarBottom = tester.getBottomLeft(find.byType(AppBar)).dy;
+
+    expect(
+      greetingTop,
+      greaterThanOrEqualTo(appBarBottom),
+      reason: 'the greeting must clear the app bar, not hide behind it',
+    );
+    expect(tester.widget<Text>(greetingFinder).style!.color!.a, 1.0);
+  });
 }
