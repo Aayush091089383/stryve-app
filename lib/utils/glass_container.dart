@@ -54,6 +54,7 @@ class GlassContainer extends StatelessWidget {
     this.gradient,
     this.onTap,
     this.borderRadiusGeometry,
+    this.useSaveLayer = false,
   });
 
   final Widget child;
@@ -70,6 +71,12 @@ class GlassContainer extends StatelessWidget {
   final Gradient? gradient;
   final VoidCallback? onTap;
   final BorderRadiusGeometry? borderRadiusGeometry;
+
+  /// Render this surface's cut-out in its own save layer, which collapses the
+  /// fill edge and the clip edge into one antialiased edge (see the note in
+  /// [build]). Costs an extra offscreen pass per frame, so it is off by default
+  /// and only the surfaces whose edge reads as a border ask for it.
+  final bool useSaveLayer;
 
   @override
   Widget build(BuildContext context) {
@@ -159,17 +166,21 @@ class GlassContainer extends StatelessWidget {
     // inner shape expanded by 2px - its own AA edge then falls outside the
     // view - and the exact shape is cut by the outer ClipRRect.
     //
-    // The outer clip asks for a save layer: the gradient fill and this clip are
-    // the *same* rounded rect, so with plain antialiasing both of their edges
-    // are blended into the backdrop at the same pixels and the seam survives as
-    // a hairline (a bigger inner expansion cannot help - the two edges coincide
-    // whatever the radius). Rendering the cut-out into its own layer collapses
-    // it to one antialiased edge. It is not free: one offscreen layer per glass
-    // surface per frame, which is the price of the clean edge.
+    // Cutting the surface out in its own save layer collapses the two edges
+    // into one antialiased edge, which is what removes the hairline: the fill
+    // and the clip are the *same* rounded rect, so with plain antialiasing both
+    // of their edges blend into the backdrop at the same pixels and no inner
+    // expansion can help - the two edges coincide whatever the radius. The
+    // extra layer is opt-in (`useSaveLayer`) because it is one offscreen render
+    // per surface per frame: only the surface whose edge is actually read as a
+    // border over scrolling content - the floating nav pill - pays for it, and
+    // the cards keep the cheaper exact clip.
     final glassWidget = isNested
         ? surface
         : ClipRRect(
-            clipBehavior: Clip.antiAliasWithSaveLayer,
+            clipBehavior: useSaveLayer
+                ? Clip.antiAliasWithSaveLayer
+                : Clip.antiAlias,
             // Outer exact clip: masks the expanded inner clip.
             borderRadius: effectiveBorderRadius,
             child: ClipPath(

@@ -151,6 +151,10 @@ class _GlassBottomNav extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       borderRadius: 24,
       blurStrength: 25,
+      // The one surface that pays for the extra save layer: its edge floats
+      // over scrolling content and the seam there reads as a border. The cards
+      // keep the cheaper exact clip.
+      useSaveLayer: true,
       opacity: 0.8,
       borderOpacity: 0.5,
       // No outline around the white navigation container. A transparent 1px
