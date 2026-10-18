@@ -24,6 +24,7 @@ import 'package:campus_sync/teacher_login_page.dart';
 import 'package:campus_sync/teacher_management_page.dart';
 import 'package:campus_sync/teacher_panel_page.dart';
 import 'package:campus_sync/utils/glass_container.dart';
+import 'package:campus_sync/utils/sliding_nav_bar.dart';
 
 // ---------------------------------------------------------------------------
 // Fixtures and helpers
@@ -315,8 +316,8 @@ void main() {
 
         // The teacher's panel has no admin tab ...
         final destinations = tester
-            .widgetList<NavigationDestination>(find.byType(NavigationDestination))
-            .toList();
+            .widget<SlidingNavBar>(find.byType(SlidingNavBar))
+            .destinations;
         expect(
           destinations.map((destination) => destination.label).toList(),
           ['Home', 'Assignments', 'Profile'],

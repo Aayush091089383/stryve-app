@@ -33,6 +33,7 @@ import 'package:campus_sync/student.dart';
 import 'package:campus_sync/tasks.dart';
 import 'package:campus_sync/timetable.dart';
 import 'package:campus_sync/utils/glass_container.dart';
+import 'package:campus_sync/utils/sliding_nav_bar.dart';
 
 const String kToken = 'student-navigation-token';
 
@@ -231,7 +232,7 @@ void main() {
       final navGlass = tester.widget<GlassContainer>(
         find
             .ancestor(
-              of: find.byType(NavigationBar),
+              of: find.byType(SlidingNavBar),
               matching: find.byType(GlassContainer),
             )
             .first,
@@ -243,6 +244,72 @@ void main() {
       // Geometry is untouched.
       expect(navGlass.borderRadius, 24);
       expect(navGlass.padding, const EdgeInsets.symmetric(horizontal: 8, vertical: 8));
+    });
+
+    testWidgets('the selected pill slides to its tab instead of snapping', (
+      tester,
+    ) async {
+      final recorder = RecordingClient();
+      await pumpHomeWith(tester, recorder);
+
+      final pill = find.byKey(const Key('nav_pill'));
+      final bar = find.byType(SlidingNavBar);
+      expect(pill, findsOneWidget);
+
+      final slotWidth = tester.getSize(bar).width / 3;
+      final pillElement = tester.element(pill);
+      final barLeft = tester.getTopLeft(bar).dx;
+      final startLeft = tester.getTopLeft(pill).dx;
+
+      // It starts in Home's slot, floating inside it.
+      expect(startLeft - barLeft, closeTo(SlidingNavBar.pillInset, 0.5));
+      expect(
+        tester.getSize(pill).width,
+        closeTo(slotWidth - SlidingNavBar.pillInset * 2, 0.5),
+      );
+
+      await tester.tap(find.byKey(const Key('nav_assignments')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 125));
+
+      final midway = tester.getTopLeft(pill).dx;
+      expect(
+        midway,
+        greaterThan(startLeft + 1),
+        reason: 'half-way through, the pill has already left Home\'s slot',
+      );
+      expect(
+        midway,
+        lessThan(startLeft + slotWidth - 1),
+        reason: '250 ms have not elapsed, so it must not have arrived yet',
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getTopLeft(pill).dx - startLeft,
+        closeTo(slotWidth, 1),
+        reason: 'the pill lands exactly one slot to the right',
+      );
+      expect(
+        identical(tester.element(pill), pillElement),
+        isTrue,
+        reason: 'same widget element throughout: it slid, it did not remount',
+      );
+    });
+
+    testWidgets('every tab label is visible, selected or not', (tester) async {
+      final recorder = RecordingClient();
+      await pumpHomeWith(tester, recorder);
+
+      final bar = find.byType(SlidingNavBar);
+      for (final label in ['Home', 'Assignments', 'Profile']) {
+        expect(
+          find.descendant(of: bar, matching: find.text(label)),
+          findsOneWidget,
+          reason: '"$label" stays visible whether or not it is selected',
+        );
+      }
     });
   });
 

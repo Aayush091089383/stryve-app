@@ -15,6 +15,7 @@ import 'timetable.dart';
 import 'profile.dart';
 import 'utils/glass_container.dart';
 import 'utils/motion.dart';
+import 'utils/sliding_nav_bar.dart';
 
 class HomePage extends StatefulWidget {
   final Student student;
@@ -157,31 +158,26 @@ class _GlassBottomNav extends StatelessWidget {
       borderColor: Colors.transparent,
       // Flat surface: no drop shadow (read as an outline).
       shadowColor: Colors.transparent,
-      child: NavigationBar(
+      // One pill slides between the three equal slots instead of each tab
+      // flashing its own indicator on. Height stays 60 so
+      // [HomePage.kGlassNavInset] keeps describing the bar's footprint.
+      child: SlidingNavBar(
         selectedIndex: selectedIndex,
         onDestinationSelected: onDestinationSelected,
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
         height: 60,
-        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-        indicatorColor: GlassColors.primaryBlue.withValues(alpha: 0.2),
-        indicatorShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
         destinations: const [
-          NavigationDestination(
+          SlidingNavDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home_rounded),
             label: 'Home',
           ),
-          NavigationDestination(
+          SlidingNavDestination(
             key: Key('nav_assignments'),
             icon: Icon(Icons.assignment_outlined),
             selectedIcon: Icon(Icons.assignment_rounded),
             label: 'Assignments',
           ),
-          NavigationDestination(
+          SlidingNavDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person_rounded),
             label: 'Profile',

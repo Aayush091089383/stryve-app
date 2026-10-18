@@ -15,6 +15,7 @@ import 'teacher_models.dart';
 import 'teacher_profile_page.dart';
 import 'utils/animated_count_badge.dart';
 import 'utils/glass_container.dart';
+import 'utils/sliding_nav_bar.dart';
 import 'utils/teacher_api.dart';
 
 export 'teacher_models.dart';
@@ -449,13 +450,13 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
         selectedIndex: _tabIndex,
         onDestinationSelected: (index) => setState(() => _tabIndex = index),
         destinations: [
-          const NavigationDestination(
+          const SlidingNavDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home_rounded),
             label: 'Home',
           ),
           isAdmin
-              ? NavigationDestination(
+              ? SlidingNavDestination(
                   // Pending registrations are the only real, already-fetched
                   // count in the app (GET /teacher/registrations/pending).
                   // `null` means "could not fetch", which must never be drawn
@@ -470,12 +471,12 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                   ),
                   label: 'Approvals',
                 )
-              : const NavigationDestination(
+              : const SlidingNavDestination(
                   icon: Icon(Icons.upload_file_outlined),
                   selectedIcon: Icon(Icons.upload_file_rounded),
                   label: 'Assignments',
                 ),
-          const NavigationDestination(
+          const SlidingNavDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person_rounded),
             label: 'Profile',
@@ -1113,7 +1114,7 @@ class _GlassBottomNav extends StatelessWidget {
 
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
-  final List<NavigationDestination> destinations;
+  final List<SlidingNavDestination> destinations;
 
   @override
   Widget build(BuildContext context) {
@@ -1127,18 +1128,11 @@ class _GlassBottomNav extends StatelessWidget {
       // No outline around the white navigation container. A transparent 1px
       // border keeps the exact same inner geometry as before.
       borderColor: Colors.transparent,
-      child: NavigationBar(
+      // Same sliding pill as the student bar, so both glass navs behave alike.
+      child: SlidingNavBar(
         selectedIndex: selectedIndex,
         onDestinationSelected: onDestinationSelected,
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
         height: 60,
-        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-        indicatorColor: GlassColors.primaryBlue.withValues(alpha: 0.2),
-        indicatorShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
         destinations: destinations,
       ),
     );

@@ -23,6 +23,7 @@ import 'package:http/testing.dart';
 
 import 'package:campus_sync/services/teacher_auth_service.dart';
 import 'package:campus_sync/utils/animated_count_badge.dart';
+import 'package:campus_sync/utils/sliding_nav_bar.dart';
 import 'package:campus_sync/teacher_approvals_page.dart';
 import 'package:campus_sync/teacher_login_page.dart';
 import 'package:campus_sync/teacher_panel_page.dart';
@@ -285,8 +286,8 @@ void main() {
       await pumpUntilFound(tester, find.text('Dr. Meera Rao'));
 
       final destinations = tester
-          .widgetList<NavigationDestination>(find.byType(NavigationDestination))
-          .toList();
+          .widget<SlidingNavBar>(find.byType(SlidingNavBar))
+          .destinations;
 
       expect(destinations, hasLength(3));
       expect(
@@ -317,8 +318,8 @@ void main() {
       await pumpUntilFound(tester, find.text('ADMIN'));
 
       final destinations = tester
-          .widgetList<NavigationDestination>(find.byType(NavigationDestination))
-          .toList();
+          .widget<SlidingNavBar>(find.byType(SlidingNavBar))
+          .destinations;
 
       expect(
         destinations.map((destination) => destination.label).toList(),
