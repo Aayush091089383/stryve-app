@@ -525,11 +525,6 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
                       ? GlassColors.warning
                       : GlassColors.primaryBlue,
                 ),
-                const SizedBox(width: 8),
-                _badge(
-                  account.isActive ? 'Active' : 'Inactive',
-                  account.isActive ? GlassColors.success : GlassColors.error,
-                ),
               ],
             ),
             const SizedBox(height: 4),
@@ -557,7 +552,10 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
                 ),
               ),
             ),
-            _buildPasswordRow(account),
+            // Admins have no provisioned credential to hand out - the panel
+            // keeps no plaintext for them - so the row would only ever say
+            // "no stored password". Omit it instead.
+            if (!account.isAdmin) _buildPasswordRow(account),
             const SizedBox(height: 12),
             Row(
               children: [

@@ -295,7 +295,12 @@ void main() {
       expect(find.text('Teacher Management (Admin Only)'), findsOneWidget);
       expect(find.text('2 accounts'), findsOneWidget);
       expect(find.text('meera@campussync.edu'), findsOneWidget);
-      expect(find.text('Active'), findsNWidgets(2));
+
+      // Status is carried by the switch alone: the old Active/Inactive pill
+      // duplicated it and was removed on request.
+      expect(find.text('Active'), findsNothing);
+      expect(find.text('Inactive'), findsNothing);
+      expect(find.text('Account active'), findsNWidgets(2));
 
       final listRequests = recorder.to(kListPath);
       expect(listRequests, hasLength(1));
@@ -839,6 +844,49 @@ void main() {
       await tester.pump();
 
       expect(find.textContaining(secret), findsNothing);
+    });
+
+    testWidgets('an admin card has no password row at all', (tester) async {
+      final client = _router(
+        onList: (request) async => jsonResponse(<Map<String, dynamic>>[
+          {
+            ...teacherJson(
+              id: 10,
+              name: 'Stryve Admin',
+              email: 'Stryve.edu@gmail.com',
+              role: 'admin',
+            ),
+            'can_review_registrations': true,
+          },
+        ]),
+      );
+
+      await _pumpPanel(tester, client);
+      await _pumpUntilFound(tester, find.text('Stryve Admin'));
+
+      expect(find.textContaining('Password:'), findsNothing);
+      expect(find.text('No stored password for this account'), findsNothing);
+      expect(find.byTooltip('Show password'), findsNothing);
+      expect(find.byTooltip('Copy password'), findsNothing);
+      // The role pill stays - only the status pill went away.
+      expect(find.text('ADMIN'), findsOneWidget);
+    });
+
+    testWidgets('a teacher card still shows the password row', (tester) async {
+      final client = _router(
+        onList: (request) async => jsonResponse(<Map<String, dynamic>>[
+          {
+            ...teacherJson(id: 11, name: 'Teacher 1', email: 'teacher1@stryve.edu'),
+            'plain_password': 'Abc123!@#xyz',
+          },
+        ]),
+      );
+
+      await _pumpPanel(tester, client);
+      await _pumpUntilFound(tester, find.text('Teacher 1'));
+
+      expect(find.byTooltip('Show password'), findsOneWidget);
+      expect(find.text('TEACHER'), findsOneWidget);
     });
 
     testWidgets('an account with no stored password says so', (tester) async {
