@@ -398,6 +398,8 @@ class _HomeTabState extends State<_HomeTab> {
                     padding: EdgeInsets.all(16),
                     margin: EdgeInsets.zero,
                     borderRadius: 16,
+                    // Tuned from 15 to 8 for perf; measure before reverting.
+                    blurStrength: 8,
                     child: Center(
                       child: Padding(
                         padding: EdgeInsets.symmetric(vertical: 12),
@@ -413,6 +415,7 @@ class _HomeTabState extends State<_HomeTab> {
                     padding: const EdgeInsets.all(16),
                     margin: EdgeInsets.zero,
                     borderRadius: 16,
+                    blurStrength: 8,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -443,8 +446,9 @@ class _HomeTabState extends State<_HomeTab> {
                 ? GlassCard(
                     key: const ValueKey('schedule-empty'),
                     padding: const EdgeInsets.all(16),
-              margin: EdgeInsets.zero,
+                    margin: EdgeInsets.zero,
                     borderRadius: 16,
+                    blurStrength: 8,
                     child: Row(
                       children: [
                         GlassContainer(
@@ -484,6 +488,7 @@ class _HomeTabState extends State<_HomeTab> {
                             padding: const EdgeInsets.all(16),
                             margin: EdgeInsets.zero,
                             borderRadius: 16,
+                            blurStrength: 8,
                             child: Row(
                               children: [
                                 GlassContainer(
@@ -652,6 +657,7 @@ class _HomeTabState extends State<_HomeTab> {
             padding: const EdgeInsets.all(16),
             margin: EdgeInsets.zero,
             borderRadius: 16,
+            blurStrength: 8,
             child: Row(
               children: [
                 GlassContainer(
@@ -711,7 +717,8 @@ class _HomeTabState extends State<_HomeTab> {
       padding: const EdgeInsets.all(18),
       margin: EdgeInsets.zero,
       borderRadius: 16,
-      blurStrength: 15,
+      // Tuned from 15 to 8 for perf; measure before reverting.
+      blurStrength: 8,
       opacity: 0.6,
       borderOpacity: 0.4,
       onTap: onTap,
