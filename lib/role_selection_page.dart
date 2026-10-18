@@ -83,8 +83,11 @@ class RoleSelectionPage extends StatelessWidget {
 
                 const SizedBox(height: 30),
 
-                // Student button
-                GlassButton(
+                // Both roles are equal choices, so they are the same button:
+                // same fill, same white label and icon, same geometry.
+                _RoleButton(
+                  icon: Icons.school_rounded,
+                  label: 'Student',
                   onPressed: () {
                     Navigator.push(
                       context,
@@ -93,29 +96,13 @@ class RoleSelectionPage extends StatelessWidget {
                       ),
                     );
                   },
-                  height: 64,
-                  borderRadius: 18,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.school_rounded, size: 24),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'STUDENT',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
 
                 const SizedBox(height: 18),
 
-                // Teacher button (outlined)
-                GlassOutlinedButton(
+                _RoleButton(
+                  icon: Icons.person_rounded,
+                  label: 'Teacher',
                   onPressed: () {
                     Navigator.push(
                       context,
@@ -124,28 +111,62 @@ class RoleSelectionPage extends StatelessWidget {
                       ),
                     );
                   },
-                  height: 64,
-                  borderRadius: 18,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.person_rounded, size: 24),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'TEACHER',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// One role-choice button.
+///
+/// Student and teacher are first-class paths, so they are built from a single
+/// place: identical solid fill, identical white label and icon, identical
+/// geometry. The teacher option used to be the outlined variant, which made it
+/// read as the secondary choice, and neither label set its own colour - both
+/// inherited the ambient body text colour, which is why the label looked
+/// washed out on the blue fill instead of white.
+class _RoleButton extends StatelessWidget {
+  const _RoleButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  /// 54dp: ~16 % shorter than the previous 64dp, and still well above the
+  /// 48dp minimum touch target.
+  static const double height = 54;
+  static const double borderRadius = 18;
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassButton(
+      onPressed: onPressed,
+      color: GlassColors.primaryBlue,
+      height: height,
+      borderRadius: borderRadius,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 24, color: Colors.white),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0,
+              color: Colors.white,
+            ),
+          ),
+        ],
       ),
     );
   }

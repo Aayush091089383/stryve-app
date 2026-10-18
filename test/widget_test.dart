@@ -104,8 +104,9 @@ void main() {
     expect(find.byType(HomePage), findsNothing);
     expect(find.byType(TeacherPanelPage), findsNothing);
     expect(find.text('CampusSync'), findsOneWidget);
-    expect(find.text('STUDENT'), findsOneWidget);
-    expect(find.text('TEACHER'), findsOneWidget);
+    // Title case: the two roles are equal choices, not form-field labels.
+    expect(find.text('Student'), findsOneWidget);
+    expect(find.text('Teacher'), findsOneWidget);
 
     await tester.pumpAndSettle();
   });
