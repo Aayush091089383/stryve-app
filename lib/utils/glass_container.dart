@@ -115,20 +115,25 @@ class GlassContainer extends StatelessWidget {
           borderRadius: effectiveBorderRadius,
           gradient: effectiveGradient,
           border: Border.all(color: effectiveBorderColor, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: effectiveShadowColor,
-              blurRadius: 20,
-              offset: const Offset(0, 4),
-              spreadRadius: -2,
-            ),
-            BoxShadow(
-              color: GlassColors.heading.withValues(alpha: 0.04),
-              blurRadius: 40,
-              offset: const Offset(0, 8),
-              spreadRadius: -4,
-            ),
-          ],
+          // When the caller passes a fully-transparent shadowColor, both shadow
+          // layers are skipped (otherwise the hardcoded secondary layer would
+          // still render, defeating the caller's intent).
+          boxShadow: effectiveShadowColor.a == 0
+              ? const <BoxShadow>[]
+              : [
+                  BoxShadow(
+                    color: effectiveShadowColor,
+                    blurRadius: 20,
+                    offset: const Offset(0, 4),
+                    spreadRadius: -2,
+                  ),
+                  BoxShadow(
+                    color: GlassColors.heading.withValues(alpha: 0.04),
+                    blurRadius: 40,
+                    offset: const Offset(0, 8),
+                    spreadRadius: -4,
+                  ),
+                ],
         ),
         child: child,
       ),
