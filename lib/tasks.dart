@@ -145,7 +145,7 @@ class _TasksPageState extends State<TasksPage> {
       });
     } catch (e) {
       setState(() {
-        errorMessage = 'Could not connect to CampusSync server. Please check your internet connection and try again.';
+        errorMessage = 'Could not connect to Stryve server. Please check your internet connection and try again.';
         isLoading = false;
       });
     }
