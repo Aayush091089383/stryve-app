@@ -187,7 +187,11 @@ class _ProfileContentState extends State<_ProfileContent> {
                   width: 110,
                   height: 110,
                   borderRadius: 55,
-                  blurStrength: 25,
+                  // Tuned from 25 to 8 for perf; measure before reverting. This
+                  // circle was the single most expensive filter on the page:
+                  // its blur cost grows with sigma squared and the photo covers
+                  // most of what it frosts.
+                  blurStrength: 8,
                   opacity: 0.8,
                   borderOpacity: 0.5,
                   padding: EdgeInsets.zero,
@@ -357,6 +361,8 @@ class _ProfileContentState extends State<_ProfileContent> {
     required String value,
   }) {
     return GlassCard(
+      // Tuned from 15 to 8 for perf; measure before reverting.
+      blurStrength: 8,
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 12),
       borderRadius: 16,

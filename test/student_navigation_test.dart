@@ -14,7 +14,9 @@
 //   tab body, and it is the only way to assignments (the Home quick-access
 //   grid no longer links to TasksPage);
 // * Home's scroll view leaves the floating nav bar's footprint clear at the
-//   bottom, so the "Latest Update" card is never clipped.
+//   bottom, so the "Latest Update" card is never clipped;
+// * the Timetable header carries a back arrow that pops the pushed screen back
+//   to Home, and is harmless when Timetable is the root route.
 //
 // Safety: no live backend, no database. Every request is answered by a
 // MockClient; ApiCache is cleared so tests cannot serve each other's data.
@@ -393,6 +395,57 @@ void main() {
         0.8,
         reason: 'the settled pill must not animate again on a rebuild',
       );
+    });
+  });
+
+  // Timetable is a pushed route (Home's Quick Access card), so its header
+  // carries the way back.
+  group('timetable back arrow', () {
+    testWidgets('the back arrow pops the pushed Timetable back to Home', (
+      tester,
+    ) async {
+      final recorder = RecordingClient();
+      await pumpHomeWith(tester, recorder);
+
+      await tester.tap(find.text('Timetable'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TimetablePage), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(TimetablePage),
+        findsNothing,
+        reason: 'the header arrow is the way back to Home',
+      );
+      expect(find.text('Quick Access'), findsOneWidget);
+    });
+
+    testWidgets('the arrow is a no-op when Timetable is the root route', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      ApiCache.clear();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TimetablePage(
+            student: studentFixture(),
+            client: RecordingClient().client,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(TimetablePage), findsOneWidget);
     });
   });
 }

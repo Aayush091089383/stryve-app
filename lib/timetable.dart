@@ -236,9 +236,18 @@ class _TimetablePageState extends State<TimetablePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(
-        title: Text('Timetable'),
+      appBar: GlassAppBar(
+        title: const Text('Timetable'),
         automaticallyImplyLeading: false,
+        // Timetable is pushed from Home's Quick Access card, so the header gets
+        // its way back. maybePop is a no-op when there is nothing beneath
+        // (a widget test may mount this page as the root).
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          color: GlassColors.heading,
+          tooltip: 'Back',
+          onPressed: () => Navigator.maybePop(context),
+        ),
       ),
       body: GlassBackground(
         child: AnimatedSwitcher(
@@ -271,6 +280,8 @@ class _TimetablePageState extends State<TimetablePage> {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: GlassCard(
+          // Tuned from 15 to 8 for perf; measure before reverting.
+          blurStrength: 8,
           padding: const EdgeInsets.all(32),
           margin: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
@@ -352,7 +363,8 @@ class _TimetablePageState extends State<TimetablePage> {
                       ),
                       margin: EdgeInsets.zero,
                       borderRadius: 14,
-                      blurStrength: 15,
+                      // Tuned from 15 to 8 for perf; measure before reverting.
+                      blurStrength: 8,
                       opacity: 0.5 + 0.3 * t,
                       borderOpacity: 0.3 + 0.3 * t,
                       onTap: () => onDaySelected(index),
@@ -386,6 +398,8 @@ class _TimetablePageState extends State<TimetablePage> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: GlassCard(
+            // Tuned from 15 to 8 for perf; measure before reverting.
+            blurStrength: 8,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             margin: EdgeInsets.zero,
             child: Row(
@@ -475,6 +489,8 @@ class _TimetablePageState extends State<TimetablePage> {
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: GlassCard(
+          // Tuned from 15 to 8 for perf; measure before reverting.
+          blurStrength: 8,
           padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -521,6 +537,8 @@ class _TimetablePageState extends State<TimetablePage> {
   Widget _buildEntryCard(TimetableEntry entry) {
     if (entry.isBreak) {
       return GlassCard(
+        // Tuned from 15 to 8 for perf; measure before reverting.
+        blurStrength: 8,
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
@@ -569,6 +587,8 @@ class _TimetablePageState extends State<TimetablePage> {
     }
 
     return GlassCard(
+      // Tuned from 15 to 8 for perf; measure before reverting.
+      blurStrength: 8,
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
