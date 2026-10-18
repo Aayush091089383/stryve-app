@@ -1570,7 +1570,7 @@ def _free_period_availability(
         if not code:
             message = (
                 "Your account is not linked to a faculty code from the official "
-                "timetable, so CampusSync cannot show which classes are yours. "
+                "timetable, so Stryve cannot show which classes are yours. "
                 "The department's free periods below can still be claimed - ask "
                 "an administrator to set your faculty short code to see your own "
                 "classes."
