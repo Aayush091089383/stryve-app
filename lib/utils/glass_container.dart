@@ -144,11 +144,31 @@ class GlassContainer extends StatelessWidget {
     // but costs a full clip + blur pass per surface (7 of Home's 15 filters
     // were exactly this). Nested surfaces therefore paint their surface
     // directly; the parent card still blurs everything behind it.
+    //
+    // The two clips are deliberate. A single ClipRRect makes the backdrop
+    // filter stop exactly on its antialiased edge, and those half-covered
+    // pixels let the *unblurred* backdrop through as a 1px seam that reads as
+    // a border on the nav pill and the cards. So the filter is clipped by an
+    // inner shape expanded by 1.5px - its own AA edge then falls outside the
+    // view - and the exact shape is cut by the outer ClipRRect.
     final glassWidget = isNested
         ? surface
         : ClipRRect(
+            // Outer exact clip: masks the expanded inner clip.
             borderRadius: effectiveBorderRadius,
-            child: BackdropFilter.grouped(filter: blur, child: surface),
+            child: ClipPath(
+              // Inner expanded clip: pushes the AA seam out of view.
+              clipper: ShapeBorderClipper(
+                shape: RoundedRectangleBorder(
+                  borderRadius: effectiveBorderRadius
+                      .resolve(TextDirection.ltr)
+                      .add(
+                        const BorderRadius.all(Radius.circular(1.5)),
+                      ),
+                ),
+              ),
+              child: BackdropFilter.grouped(filter: blur, child: surface),
+            ),
           );
 
     if (onTap != null) {
