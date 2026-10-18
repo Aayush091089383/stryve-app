@@ -254,8 +254,18 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
   }
 
   Widget _buildList() {
+    // The embedded tab body scrolls *behind* HomePage's glass app bar
+    // (`extendBodyBehindAppBar`), and the Scaffold reports the bar's footprint
+    // in the inherited top padding. The fixed 16 this used to add put the
+    // "All Assignments" title under the bar, where the glass hid it. In the
+    // pushed (non-embedded) mode the page has its own Scaffold and only needs
+    // the plain gap.
+    final topInset = widget.embedded
+        ? MediaQuery.paddingOf(context).top + 8
+        : 16.0;
+
     return ListView(
-      padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + widget.bottomInset),
+      padding: EdgeInsets.fromLTRB(20, topInset, 20, 24 + widget.bottomInset),
       children: [
         const Text(
           'All Assignments',

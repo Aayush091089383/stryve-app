@@ -232,6 +232,29 @@ void main() {
       );
     });
 
+    testWidgets('the embedded Assignments list clears the glass app bar', (
+      tester,
+    ) async {
+      // The tab body scrolls behind HomePage's app bar. A fixed 16px top inset
+      // put the "All Assignments" title underneath it, where the glass made it
+      // invisible: the first line of the screen has to start below the bar.
+      final recorder = RecordingClient();
+      await pumpHomeWith(tester, recorder);
+
+      await tester.tap(find.byKey(const Key('nav_assignments')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final titleTop = tester.getTopLeft(find.text('All Assignments')).dy;
+      final appBarBottom = tester.getBottomLeft(find.byType(AppBar)).dy;
+
+      expect(
+        titleTop,
+        greaterThanOrEqualTo(appBarBottom),
+        reason: 'the title must not sit behind the glass app bar',
+      );
+    });
+
     testWidgets('the bottom navigation container has no outline', (
       tester,
     ) async {
