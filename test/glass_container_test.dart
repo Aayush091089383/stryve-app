@@ -6,7 +6,9 @@
 //   keep a hardcoded secondary shadow (blur 40, offset (0, 8)) that read as a
 //   halo around the pill, biased towards the bottom edge;
 // * the default (no shadowColor override) still draws both layers, so the fix
-//   cannot silently flatten every other glass surface in the app.
+//   cannot silently flatten every other glass surface in the app;
+// * `useBlur: false` drops the backdrop filter but keeps the painted surface,
+//   which is how Profile's six cards give up the filter without going flat.
 //
 // Safety: pure widget test, no backend, no database.
 
@@ -125,5 +127,45 @@ void main() {
     // and the secondary one keeps its own hardcoded tint.
     expect(decoration.boxShadow!.first.color.a, greaterThan(0));
     expect(decoration.boxShadow!.last.color.a, greaterThan(0));
+  });
+
+  testWidgets('useBlur: false paints the surface without a filter', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: GlassContainer(
+            useBlur: false,
+            child: SizedBox(width: 100, height: 100),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(BackdropFilter), findsNothing);
+    final decoration = glassDecoration(tester);
+    expect(decoration.gradient, isNotNull);
+    expect(decoration.border, isNotNull);
+    expect(decoration.boxShadow, hasLength(2));
+  });
+
+  testWidgets('GlassCard forwards useBlur to its container', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: GlassCard(
+            useBlur: false,
+            child: SizedBox(width: 100, height: 60),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(BackdropFilter), findsNothing);
+    expect(
+      tester.widget<GlassContainer>(find.byType(GlassContainer)).useBlur,
+      isFalse,
+    );
   });
 }

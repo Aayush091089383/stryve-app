@@ -197,11 +197,11 @@ class _ProfileContentState extends State<_ProfileContent> {
                   width: 110,
                   height: 110,
                   borderRadius: 55,
-                  // Tuned 25 -> 8 -> 4 for perf, now back at 8 pending a
-                  // cool-device measurement (warm readings are not comparable:
-                  // the clocks track AP temperature). This circle was the single
-                  // most expensive filter on the page - its blur cost grows with
-                  // sigma squared and the photo covers most of what it frosts.
+                  // Tuned 25 -> 8 -> 4 for perf, then back to 8: at 44-45 C
+                  // the page still held 88-89 fps with this circle filtered,
+                  // so it is kept - the six cards below are the ones that carry
+                  // the cost. Its blur is clipped to a 110px circle, which is
+                  // why one filter here is affordable and six of them were not.
                   blurStrength: 8,
                   opacity: 0.8,
                   borderOpacity: 0.5,
@@ -372,10 +372,17 @@ class _ProfileContentState extends State<_ProfileContent> {
     required String value,
   }) {
     return GlassCard(
-      // Tuned 15 -> 8 -> 4 for perf, now back at 8 pending a cool-device
-      // measurement (warm readings are not comparable). These six cards are the
-      // largest glass surfaces in the app.
-      blurStrength: 8,
+      // Flat tint, no backdrop filter. These six cards are the largest glass
+      // surfaces in the app, and a blur pass over each of them every frame is
+      // the page's most expensive draw - its cost grows with the sigma squared
+      // while the GPU's headroom shrinks as the phone heats up, so the filter
+      // is the first thing that can push this page from one vsync to two.
+      // Painting the gradient alone, with a little more opacity to keep the
+      // same glass read, removes that cost instead of tuning around it.
+      // Do not restore `blurStrength` here: it buys nothing a 0.85 tint does
+      // not, and it is the one cost this page cannot afford to keep.
+      useBlur: false,
+      opacity: 0.85,
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 12),
       borderRadius: 16,

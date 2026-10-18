@@ -55,6 +55,7 @@ class GlassContainer extends StatelessWidget {
     this.onTap,
     this.borderRadiusGeometry,
     this.useSaveLayer = false,
+    this.useBlur = true,
   });
 
   final Widget child;
@@ -77,6 +78,18 @@ class GlassContainer extends StatelessWidget {
   /// [build]). Costs an extra offscreen pass per frame, so it is off by default
   /// and only the surfaces whose edge reads as a border ask for it.
   final bool useSaveLayer;
+
+  /// Filter the backdrop behind this surface.
+  ///
+  /// A [BackdropFilter] is a full blur pass over the surface's area every
+  /// frame, and its cost grows with the sigma squared. On a screen made of
+  /// several large cards that is the difference between one vsync and two or
+  /// three once the GPU clocks down, so a page may trade the filter for a flat
+  /// tint: with `useBlur: false` the surface paints its gradient, border and
+  /// shadow exactly as before and simply never filters what is behind it.
+  ///
+  /// Defaults to true, so surfaces keep blurring unless their screen opts out.
+  final bool useBlur;
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +188,10 @@ class GlassContainer extends StatelessWidget {
     // per surface per frame: only the surface whose edge is actually read as a
     // border over scrolling content - the floating nav pill - pays for it, and
     // the cards keep the cheaper exact clip.
-    final glassWidget = isNested
+    //
+    // `useBlur: false` takes the same shortcut for a different reason: the
+    // page has asked for a flat tint, so there is no filter to run at all.
+    final glassWidget = isNested || !useBlur
         ? surface
         : ClipRRect(
             clipBehavior: useSaveLayer
@@ -276,6 +292,7 @@ class GlassCard extends StatelessWidget {
     this.borderOpacity = 0.4,
     this.onTap,
     this.borderRadiusGeometry,
+    this.useBlur = true,
   });
 
   final Widget child;
@@ -288,9 +305,14 @@ class GlassCard extends StatelessWidget {
   final VoidCallback? onTap;
   final BorderRadiusGeometry? borderRadiusGeometry;
 
+  /// See [GlassContainer.useBlur]: set false to paint a flat tint with no
+  /// backdrop filter, for the large repeated surfaces of one screen.
+  final bool useBlur;
+
   @override
   Widget build(BuildContext context) {
     return GlassContainer(
+      useBlur: useBlur,
       padding: padding,
       margin: margin,
       borderRadius: borderRadius,
