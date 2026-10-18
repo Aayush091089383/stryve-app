@@ -1,12 +1,19 @@
-// Regression tests for the student Home greeting.
+// Tests for the student Home header.
 //
-// The greeting used to render `student.name.split(' ').first`, i.e. it assumed
-// the first token of the stored name is the student's given name. That is not
-// true for every registry row (roll 4 is stored as "SHINDE AJAY ANGATRAO", and
-// roll 5 as "JAGTAP SIMA ASHOK"), so the line could present a surname where the
-// student's own name belongs. These tests pin the corrected behaviour: the whole
-// stored name is rendered, the ellipsis absorbs a long name, and the course and
-// division stay visible.
+// The header used to carry a second line - the full stored name plus
+// "course • division" - because the greeting took the first token of the name
+// and some registry rows are stored family-name-first (roll 4 "SHINDE AJAY
+// ANGATRAO", so the token is the surname). That line was removed on request:
+// it duplicated the greeting and cluttered the header.
+//
+// What is pinned here now:
+// * the header shows exactly one identity line, "Good <part of day> <First>";
+// * the full stored name and the course/division are NOT rendered on Home (the
+//   accepted tradeoff is that a family-name-first row greets with the surname -
+//   the database has no separate given-name field);
+// * the greeting sits below the app bar instead of behind it (Home uses
+//   extendBodyBehindAppBar);
+// * the longest stored name does not overflow the header at a narrow viewport.
 //
 // Safety: no live backend and no database. The timetable request is answered by
 // a MockClient; any other request is answered by flutter_test's built-in
@@ -66,6 +73,11 @@ http.Client emptyTimetableClient() => MockClient(
 Finder textWithData(String data) =>
     find.byWidgetPredicate((widget) => widget is Text && widget.data == data);
 
+/// The single identity line in the header.
+final Finder greetingFinder = find.byWidgetPredicate(
+  (widget) => widget is Text && (widget.data ?? '').startsWith('Good '),
+);
+
 Future<void> pumpHome(
   WidgetTester tester,
   Student student, {
@@ -86,30 +98,20 @@ Future<void> pumpHome(
 }
 
 void main() {
-  testWidgets(
-    'a surname-first stored name is rendered in full, not reduced to its first token',
-    (tester) async {
-      await pumpHome(tester, studentNamed(kSurnameFirst));
+  testWidgets('the full stored name is not rendered on Home', (tester) async {
+    await pumpHome(
+      tester,
+      studentNamed(kGivenFirst, rollNumber: '71', course: 'AI&DS', batch: 'D-3'),
+    );
 
-      final nameFinder = textWithData(kSurnameFirst);
-      expect(
-        nameFinder,
-        findsOneWidget,
-        reason: 'the greeting must show the whole stored name',
-      );
+    expect(
+      textWithData(kGivenFirst),
+      findsNothing,
+      reason: 'the header no longer repeats the official name',
+    );
+  });
 
-      final nameText = tester.widget<Text>(nameFinder);
-      expect(nameText.maxLines, 1);
-      expect(nameText.overflow, TextOverflow.ellipsis);
-
-      // The old behaviour presented the first token as if it were the name.
-      expect(find.text(kSurnameFirst.split(' ').first), findsNothing);
-      expect(find.text('SHINDE \u2022 Computer \u2022 D'), findsNothing);
-      expect(find.textContaining('SHINDE \u2022'), findsNothing);
-    },
-  );
-
-  testWidgets('the course and division stay visible beside the name', (
+  testWidgets('the course and division are not rendered on Home', (
     tester,
   ) async {
     await pumpHome(
@@ -117,49 +119,18 @@ void main() {
       studentNamed(kSurnameFirst, course: 'Computer', division: 'D'),
     );
 
-    expect(find.text(' \u2022 Computer \u2022 D'), findsOneWidget);
-  });
-
-  testWidgets('a long name at a narrow viewport does not overflow the header', (
-    tester,
-  ) async {
-    // 400 logical pixels is narrower than the common phone width, so the name
-    // has to truncate rather than overflow the row.
-    await pumpHome(
-      tester,
-      studentNamed(kLongName, rollNumber: '25', batch: 'D-2'),
-      size: const Size(400, 1600),
+    expect(find.text(' \u2022 Computer \u2022 D'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Text && (widget.data ?? '').contains(' \u2022 '),
+      ),
+      findsNothing,
+      reason: 'no course/division line is left in the header',
     );
-
-    final nameFinder = textWithData(kLongName);
-    expect(nameFinder, findsOneWidget);
-    expect(tester.widget<Text>(nameFinder).maxLines, 1);
-
-    // A RenderFlex overflow surfaces here instead of passing silently.
-    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a given-first stored name is still shown in full', (
-    tester,
-  ) async {
-    await pumpHome(
-      tester,
-      studentNamed(kGivenFirst, rollNumber: '71', course: 'AI&DS', batch: 'D-3'),
-    );
-
-    expect(textWithData(kGivenFirst), findsOneWidget);
-    expect(find.text(kGivenFirst.split(' ').first), findsNothing);
-  });
-
-  // -------------------------------------------------------------------------
-  // Welcome line: time-of-day + title-case first name, and actually visible.
-  // -------------------------------------------------------------------------
-
-  final Finder greetingFinder = find.byWidgetPredicate(
-    (widget) => widget is Text && (widget.data ?? '').startsWith('Good '),
-  );
-
-  testWidgets('the welcome line greets the first name in title case', (
+  testWidgets('the greeting is time of day plus a title-case first name', (
     tester,
   ) async {
     await pumpHome(
@@ -172,24 +143,31 @@ void main() {
       tester.widget<Text>(greetingFinder).data,
       matches(RegExp(r'^Good (morning|afternoon|evening) Aayush$')),
     );
-    // The full official name is still on its own line, not folded into the
-    // greeting (registry rows are not all stored given-name-first).
-    expect(textWithData(kGivenFirst), findsOneWidget);
   });
 
-  testWidgets('a family-name-first row is greeted with its first token, '
-      'and keeps the full name', (tester) async {
+  testWidgets('a family-name-first row greets with the first token', (
+    tester,
+  ) async {
+    // Accepted tradeoff: the greeting token is whatever the registry stores
+    // first. The database has no separate given-name field to do better.
     await pumpHome(tester, studentNamed(kSurnameFirst));
 
     expect(
       tester.widget<Text>(greetingFinder).data,
       matches(RegExp(r'^Good (morning|afternoon|evening) Shinde$')),
     );
-    expect(
-      textWithData(kSurnameFirst),
-      findsOneWidget,
-      reason: 'the full stored name stays visible on its own line',
-    );
+    expect(textWithData(kSurnameFirst), findsNothing);
+  });
+
+  testWidgets('the header never repeats the stored full name', (tester) async {
+    for (final name in [kSurnameFirst, kGivenFirst, kLongName]) {
+      await pumpHome(tester, studentNamed(name, rollNumber: name.hashCode.abs().toString()));
+      expect(
+        textWithData(name),
+        findsNothing,
+        reason: '"$name" must not appear in the header',
+      );
+    }
   });
 
   testWidgets('the welcome line sits below the app bar, not behind it', (
@@ -214,5 +192,24 @@ void main() {
       reason: 'and sit right below it - the app bar is not counted twice',
     );
     expect(tester.widget<Text>(greetingFinder).style!.color!.a, 1.0);
+  });
+
+  testWidgets('the longest stored name does not overflow the header', (
+    tester,
+  ) async {
+    // 400 logical pixels is narrower than the common phone width.
+    await pumpHome(
+      tester,
+      studentNamed(kLongName, rollNumber: '25', batch: 'D-2'),
+      size: const Size(400, 1600),
+    );
+
+    expect(
+      tester.widget<Text>(greetingFinder).data,
+      matches(RegExp(r'^Good (morning|afternoon|evening) Bhagyashri$')),
+    );
+    expect(textWithData(kLongName), findsNothing);
+    // A RenderFlex overflow surfaces here instead of passing silently.
+    expect(tester.takeException(), isNull);
   });
 }

@@ -353,9 +353,10 @@ class _HomeTabState extends State<_HomeTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Welcome. Only the first token of the stored name is greeted - the
-          // full official name stays on the line below, because some registry
-          // rows are stored family-name-first (`SHINDE AJAY ANGATRAO`).
+          // Welcome. The greeting is the only identity line on Home: only the
+          // first token of the stored name is shown, so a registry row stored
+          // family-name-first (`SHINDE AJAY ANGATRAO`) greets with the surname.
+          // The full details live on the Profile tab.
           Text(
             'Good $greeting $firstName',
             maxLines: 1,
@@ -368,38 +369,10 @@ class _HomeTabState extends State<_HomeTab> {
             ),
           ),
 
-          const SizedBox(height: 6),
-
-          // The student's official name, exactly as stored: no token is
-          // assumed to be the given name (some registry rows are not in
-          // given/father/family order). The name is the flexible part, so it
-          // is the name that ellipsizes; course and division stay visible.
-          Row(
-            children: [
-              Flexible(
-                child: Text(
-                  student.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w500,
-                    color: GlassColors.secondaryText,
-                  ),
-                ),
-              ),
-              Text(
-                ' \u2022 ${student.course} \u2022 ${student.division}',
-                maxLines: 1,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w500,
-                  color: GlassColors.secondaryText,
-                ),
-              ),
-            ],
-          ),
-
+          // The "AAYUSH SHANTARAM TITAME \u2022 AI&DS \u2022 D" line used to sit
+          // here. It duplicated the greeting and cluttered the header, so it
+          // was removed on request; the greeting carries the name and the full
+          // details remain on the Profile tab.
           const SizedBox(height: 28),
 
           // Today's Schedule - the student's own Division D timetable, filtered
