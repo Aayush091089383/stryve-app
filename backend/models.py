@@ -80,6 +80,12 @@ class Teacher(Base):
 
     password = Column(String, nullable=False)
 
+    # The password exactly as the admin provisioned it, so the Admin panel can
+    # read it back to the teacher (there is no e-mail delivery in this app).
+    # It exists ONLY for the admin-only account list - `TeacherOut` (everything
+    # a teacher or student can receive) deliberately has no such field.
+    plain_password = Column(String, nullable=True)
+
     role = Column(Enum(TeacherRole), default=TeacherRole.teacher, nullable=False)
 
     is_active = Column(Boolean, default=True, nullable=False)

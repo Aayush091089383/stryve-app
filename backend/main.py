@@ -53,6 +53,8 @@ from schemas import (
     TeacherTokenResponse,
     TeacherCreate,
     TeacherOut,
+    TeacherAdminOut,
+    TeacherStatusUpdate,
     StudentOut,
     PendingStudentOut,
     ApproveRequest,
@@ -699,6 +701,9 @@ def create_teacher(
         name=teacher_data.name,
         email=teacher_data.email,
         password=hashed_password,
+        # Kept so an admin can read the credential back out of the Admin panel;
+        # it never appears in a teacher-facing response.
+        plain_password=teacher_data.password,
         role=teacher_data.role,
         is_active=True,
         created_at=datetime.utcnow(),
@@ -717,7 +722,7 @@ def create_teacher(
         )
 
 
-@app.get("/teacher/list", response_model=list[TeacherOut])
+@app.get("/teacher/list", response_model=list[TeacherAdminOut])
 def list_teachers(
     admin: models.Teacher = Depends(require_admin),
     db: Session = Depends(get_db)
@@ -1228,6 +1233,41 @@ def update_teacher_permissions(
     if payload.short_code:
         _sync_assignments_from_timetable(db, target)
 
+    return target
+
+
+@app.patch("/teacher/{teacher_id}/status", response_model=TeacherOut)
+def update_teacher_status(
+    teacher_id: int,
+    payload: TeacherStatusUpdate,
+    admin: models.Teacher = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin-only: activate or deactivate an account.
+
+    Deactivating also drops the account's session token, so an existing login
+    stops working immediately instead of lingering until it expires. An admin
+    cannot deactivate their own account - that would lock the last operator out.
+    """
+    target = db.query(models.Teacher).filter(models.Teacher.id == teacher_id).first()
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Teacher not found"
+        )
+
+    if target.id == admin.id and not payload.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot deactivate your own account",
+        )
+
+    target.is_active = payload.is_active
+    if not payload.is_active:
+        target.token = None
+        target.token_expires_at = None
+
+    db.commit()
+    db.refresh(target)
     return target
 
 

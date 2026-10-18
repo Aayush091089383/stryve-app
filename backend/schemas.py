@@ -119,6 +119,24 @@ class TeacherOut(BaseModel):
         from_attributes = True
 
 
+class TeacherAdminOut(TeacherOut):
+    """An account as the Admin panel sees it.
+
+    Adds the provisioned password so an admin can hand it to the teacher. This
+    is the ONLY response model carrying it, and it is used exclusively by
+    admin-only routes (`GET /teacher/list`); every teacher-facing response stays
+    `TeacherOut`, which has no password field at all.
+    """
+
+    plain_password: str | None = None
+
+
+class TeacherStatusUpdate(BaseModel):
+    """Admin-only activation toggle: ``{"is_active": false}`` disables an account."""
+
+    is_active: bool
+
+
 class StudentOut(BaseModel):
     id: int
     name: str

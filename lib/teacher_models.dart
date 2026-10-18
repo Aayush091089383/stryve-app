@@ -18,6 +18,10 @@ class TeacherAccount {
   /// Whether the backend reports that this account may review registrations.
   final bool canReviewRegistrations;
 
+  /// The password as the admin provisioned it, returned only by the admin-only
+  /// `GET /teacher/list`. Null for accounts created before the column existed.
+  final String? plainPassword;
+
   TeacherAccount({
     required this.id,
     required this.name,
@@ -26,6 +30,7 @@ class TeacherAccount {
     this.isActive = true,
     this.shortCode,
     this.canReviewRegistrations = false,
+    this.plainPassword,
   });
 
   bool get isAdmin => role == 'admin';
@@ -43,6 +48,9 @@ class TeacherAccount {
       isActive: json['is_active'] as bool? ?? true,
       shortCode: (code == null || code.isEmpty) ? null : code,
       canReviewRegistrations: json['can_review_registrations'] as bool? ?? false,
+      plainPassword: (json['plain_password'] as String?)?.isEmpty == true
+          ? null
+          : json['plain_password'] as String?,
     );
   }
 }

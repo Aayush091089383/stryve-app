@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import 'config/environment.dart';
@@ -15,10 +16,14 @@ import 'utils/teacher_api.dart';
 /// permission and official faculty code.
 ///
 /// Every request here needs an admin token (`GET /teacher/list`,
-/// `POST /teacher/create`, `PATCH /teacher/{id}/permissions`), so a teacher who
-/// somehow reaches this screen still gets a 403 from the server. The list only
-/// ever renders the fields the backend returns - there is no password, hash or
-/// token in the response, and none is stored locally.
+/// `POST /teacher/create`, `PATCH /teacher/{id}/permissions`,
+/// `PATCH /teacher/{id}/status`), so a teacher who somehow reaches this screen
+/// still gets a 403 from the server.
+///
+/// The password an admin provisioned is returned by the admin-only list so it
+/// can be handed to the teacher; it stays masked until the eye is tapped and is
+/// copied on demand. Nothing is persisted on the device - the value lives only
+/// in the last response.
 class TeacherManagementPage extends StatefulWidget {
   const TeacherManagementPage({
     super.key,
@@ -48,6 +53,9 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
   bool _isCreateDialogOpen = false;
   int? _savingTeacherId;
   final Map<int, TextEditingController> _shortCodeControllers = {};
+
+  /// Accounts whose stored password is currently revealed on screen.
+  final Set<int> _revealedPasswords = {};
 
   @override
   void initState() {
@@ -220,6 +228,56 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
     } finally {
       if (mounted) setState(() => _savingTeacherId = null);
     }
+  }
+
+  /// Activate or deactivate an account. The server refuses to deactivate the
+  /// caller's own account, so the last admin cannot lock themselves out.
+  Future<void> _setActive(TeacherAccount account, bool isActive) async {
+    if (_savingTeacherId != null) return;
+
+    final token = await _authService.getToken();
+    if (!mounted) return;
+    if (token == null) {
+      await _sessionLost();
+      return;
+    }
+
+    setState(() => _savingTeacherId = account.id);
+
+    try {
+      final response = await _client
+          .patch(
+            Uri.parse('${Environment.backendUrl}/teacher/${account.id}/status'),
+            headers: teacherHeaders(token),
+            body: jsonEncode({'is_active': isActive}),
+          )
+          .timeout(kTeacherRequestTimeout);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        _showSnackBar(
+          isActive ? 'Account activated' : 'Account deactivated',
+          color: GlassColors.success,
+        );
+        await _fetchTeachers(isRefresh: true);
+      } else if (response.statusCode == 401) {
+        await _sessionLost();
+      } else {
+        _showSnackBar(teacherMessageFromBody(response));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _showSnackBar(kTeacherUnreachableMessage);
+    } finally {
+      if (mounted) setState(() => _savingTeacherId = null);
+    }
+  }
+
+  Future<void> _copy(String label, String value) async {
+    if (value.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: value));
+    _showSnackBar('$label copied');
   }
 
   @override
@@ -436,12 +494,27 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        account.email,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: GlassColors.secondaryText,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              account.email,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: GlassColors.secondaryText,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Copy email',
+                            icon: const Icon(Icons.copy_rounded, size: 15),
+                            visualDensity: VisualDensity.compact,
+                            constraints: const BoxConstraints(),
+                            padding: const EdgeInsets.all(4),
+                            onPressed: () => _copy('Email', account.email),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -459,6 +532,32 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
                 ),
               ],
             ),
+            const SizedBox(height: 4),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: account.isActive,
+              onChanged: isSaving
+                  ? null
+                  : (value) => _setActive(account, value),
+              title: const Text(
+                'Account active',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: GlassColors.heading,
+                ),
+              ),
+              subtitle: Text(
+                account.isActive
+                    ? 'Can sign in to the teacher panel.'
+                    : 'Cannot sign in until switched back on.',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: GlassColors.secondaryText,
+                ),
+              ),
+            ),
+            _buildPasswordRow(account),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -516,6 +615,72 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
           ],
         ),
       ),
+    );
+  }
+
+  /// The provisioned password: masked by default, revealed only on request,
+  /// copyable without revealing it.
+  Widget _buildPasswordRow(TeacherAccount account) {
+    final password = account.plainPassword;
+    final revealed = password != null && _revealedPasswords.contains(account.id);
+
+    return Row(
+      children: [
+        const Icon(
+          Icons.key_rounded,
+          size: 16,
+          color: GlassColors.secondaryText,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: password == null
+              ? const Text(
+                  'No stored password for this account',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                    color: GlassColors.secondaryText,
+                  ),
+                )
+              : Text(
+                  revealed
+                      ? 'Password: $password'
+                      : 'Password: \u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
+                  key: ValueKey('password-${account.id}-$revealed'),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: revealed ? 0.4 : 2,
+                    color: GlassColors.heading,
+                  ),
+                ),
+        ),
+        if (password != null) ...[
+          IconButton(
+            tooltip: revealed ? 'Hide password' : 'Show password',
+            icon: Icon(
+              revealed
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              size: 19,
+            ),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => setState(() {
+              if (revealed) {
+                _revealedPasswords.remove(account.id);
+              } else {
+                _revealedPasswords.add(account.id);
+              }
+            }),
+          ),
+          IconButton(
+            tooltip: 'Copy password',
+            icon: const Icon(Icons.copy_rounded, size: 17),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _copy('Password', password),
+          ),
+        ],
+      ],
     );
   }
 

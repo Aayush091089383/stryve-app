@@ -151,6 +151,13 @@ MockClient _router({
       if (onCreate != null) return onCreate(request);
       return createdResponse(request);
     }
+    if (request.method == 'PATCH' && request.url.path.endsWith('/status')) {
+      final id = int.tryParse(request.url.pathSegments[1]) ?? 0;
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      return jsonResponse(
+        teacherJson(id: id, isActive: body['is_active'] as bool? ?? true),
+      );
+    }
     return jsonResponse({
       'detail': 'unexpected ${request.method} ${request.url.path}',
     }, 500);
@@ -801,6 +808,80 @@ void main() {
         isNull,
       );
       expect(await FlutterSecureStorage().read(key: 'auth_token'), kStudentToken);
+    });
+
+    testWidgets('the stored password is masked until the eye is tapped', (
+      tester,
+    ) async {
+      const secret = 'Abc123!@#xyz';
+      final client = _router(
+        onList: (request) async => jsonResponse(<Map<String, dynamic>>[
+          {
+            ...teacherJson(id: 11, name: 'Teacher 1', email: 'teacher1@stryve.edu'),
+            'plain_password': secret,
+          },
+        ]),
+      );
+
+      await _pumpPanel(tester, client);
+      await _pumpUntilFound(tester, find.text('Teacher 1'));
+
+      expect(find.text('Password: \u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'), findsOneWidget);
+      expect(find.textContaining(secret), findsNothing);
+
+      await tester.tap(find.byTooltip('Show password'));
+      await tester.pump();
+
+      expect(find.text('Password: $secret'), findsOneWidget);
+      expect(find.byTooltip('Hide password'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Hide password'));
+      await tester.pump();
+
+      expect(find.textContaining(secret), findsNothing);
+    });
+
+    testWidgets('an account with no stored password says so', (tester) async {
+      final client = _router(
+        onList: (request) async => jsonResponse(<Map<String, dynamic>>[
+          teacherJson(id: 2, name: 'Old Teacher'),
+        ]),
+      );
+
+      await _pumpPanel(tester, client);
+      await _pumpUntilFound(tester, find.text('Old Teacher'));
+
+      expect(find.text('No stored password for this account'), findsOneWidget);
+      expect(find.byTooltip('Show password'), findsNothing);
+    });
+
+    testWidgets('the active switch PATCHes the status endpoint', (tester) async {
+      final recorder = _Recorder();
+      final client = _router(
+        onList: (request) async => jsonResponse(<Map<String, dynamic>>[
+          teacherJson(id: 11, name: 'Teacher 1', email: 'teacher1@stryve.edu'),
+        ]),
+        onRequest: recorder.add,
+      );
+
+      await _pumpPanel(tester, client);
+      await _pumpUntilFound(tester, find.text('Teacher 1'));
+
+      final activeSwitch = find.descendant(
+        of: find.widgetWithText(SwitchListTile, 'Account active'),
+        matching: find.byType(Switch),
+      );
+      expect(activeSwitch, findsOneWidget);
+
+      await tester.tap(activeSwitch);
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+
+      final patches = recorder.to('/teacher/11/status', method: 'PATCH');
+      expect(patches, hasLength(1), reason: 'one toggle, one request');
+      expect(jsonDecode(patches.single.body), {'is_active': false});
+      expect(_authorizationOf(patches.single), 'Bearer $kAdminToken');
     });
   });
 }

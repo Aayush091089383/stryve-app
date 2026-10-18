@@ -177,6 +177,7 @@ APPROVED_NEW_COLUMNS: dict[tuple[str, str], Any] = {
     ("timetable_entries", "is_free_period"): 0,
     ("teachers", "short_code"): None,
     ("teachers", "can_approve_registrations"): 0,
+    ("teachers", "plain_password"): None,
     ("assignments", "stored_name"): None,
     ("assignments", "original_name"): None,
     ("assignments", "file_size"): None,

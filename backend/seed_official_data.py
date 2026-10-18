@@ -87,6 +87,14 @@ ADDITIVE_COLUMNS = [
         "can_approve_registrations",
         "ALTER TABLE teachers ADD COLUMN can_approve_registrations BOOLEAN NOT NULL DEFAULT 0",
     ),
+    # The password as the admin provisioned it, readable only through the
+    # admin-only `GET /teacher/list`. NULL for accounts created before this
+    # column existed; the schema step never invents credentials.
+    (
+        "teachers",
+        "plain_password",
+        "ALTER TABLE teachers ADD COLUMN plain_password TEXT",
+    ),
     ("assignments", "stored_name", "ALTER TABLE assignments ADD COLUMN stored_name TEXT"),
     ("assignments", "original_name", "ALTER TABLE assignments ADD COLUMN original_name TEXT"),
     ("assignments", "file_size", "ALTER TABLE assignments ADD COLUMN file_size INTEGER"),
