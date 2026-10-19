@@ -201,7 +201,21 @@ def require_registration_reviewer(
     return teacher
 
 
-def require_teacher_or_admin(teacher: models.Teacher = Depends(get_current_teacher)) -> models.Teacher:
-    """Dependency that requires teacher or admin role."""
-    # Both teacher and admin can access
-    return teacher
+def require_teacher_or_admin(
+    actor: tuple[str, object] = Depends(get_current_actor),
+) -> models.Teacher:
+    """Dependency that requires a teacher or admin account.
+
+    A valid student token proves who the caller is, so reaching a teacher route
+    with one is a permission failure and must answer 403, not the 401 reserved
+    for missing, invalid or expired credentials. ``get_current_actor`` already
+    performs the same token, expiry and account-state checks as the role-
+    specific dependencies, so this does not become a weaker path.
+    """
+    role, account = actor
+    if role != "teacher":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Student accounts cannot access teacher routes",
+        )
+    return account

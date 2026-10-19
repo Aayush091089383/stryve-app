@@ -802,7 +802,15 @@ check("teacher logout left student tokens intact", active_students >= 1)
 # Direct dependency checks (unit level)
 expect_http("require_admin(teacher) -> 403", lambda: auth.require_admin(teacher), 403)
 check("require_admin(admin) returns the admin", auth.require_admin(admin).id == admin.id)
-check("require_teacher_or_admin(teacher) allows a teacher", auth.require_teacher_or_admin(teacher).id == teacher.id)
+check(
+    "require_teacher_or_admin(teacher) allows a teacher",
+    auth.require_teacher_or_admin(("teacher", teacher)).id == teacher.id,
+)
+expect_http(
+    "require_teacher_or_admin(student) -> 403",
+    lambda: auth.require_teacher_or_admin(("student", row)),
+    403,
+)
 expect_http(
     "get_current_student on an expired token -> 401",
     lambda: (

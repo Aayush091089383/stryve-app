@@ -96,6 +96,12 @@ android/key.properties
 *.log
 server_job.txt
 
+# Uploaded assignment PDFs are user data, never source. The backend writes
+# them under backend/uploads/assignments/ (see config.py); a stray `git add .`
+# must not publish another student's file.
+backend/uploads/
+backend/uploads/*
+
 # Graphify cache
 graphify-out/
 

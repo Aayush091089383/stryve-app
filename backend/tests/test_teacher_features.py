@@ -839,8 +839,9 @@ check(
     requests.post(f"{BASE}/teacher/attendance", json=unapproved, headers=auth(admin_token), timeout=10).status_code == 400,
 )
 check(
-    "a student token cannot save attendance",
-    requests.post(f"{BASE}/teacher/attendance", json=attendance_body, headers=auth(TOKENS["1"]), timeout=10).status_code == 401,
+    # A valid student token is authenticated but not permitted: 403, not 401.
+    "a student token cannot save attendance -> 403",
+    requests.post(f"{BASE}/teacher/attendance", json=attendance_body, headers=auth(TOKENS["1"]), timeout=10).status_code == 403,
 )
 check(
     "attendance without a session date is refused",
@@ -1635,7 +1636,7 @@ bad_batch = upload(admin_token, payload={"batch": "D-9"})
 check("an invalid batch is refused", bad_batch.status_code == 400, str(bad_batch.status_code))
 bad_date = upload(admin_token, payload={"due_date": "12/10/2026"})
 check("an invalid due date is refused", bad_date.status_code == 400, str(bad_date.status_code))
-check("a student cannot upload", upload(TOKENS["1"]).status_code == 401)
+check("a student cannot upload -> 403", upload(TOKENS["1"]).status_code == 403)
 check(
     "an unauthenticated upload is refused",
     requests.post(upload_url, files={"file": ("n.pdf", PDF_BYTES, "application/pdf")}, timeout=10).status_code == 401,
