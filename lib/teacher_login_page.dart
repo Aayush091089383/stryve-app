@@ -229,12 +229,16 @@ class _TeacherLoginPageState extends State<TeacherLoginPage> {
                   isLoading: isLoading,
                   height: 56,
                   borderRadius: 16,
+                  // Flat brand blue instead of the default gradient, so the
+                  // label sits on one solid colour.
+                  color: GlassColors.primaryBlue,
                   child: const Text(
                     'LOGIN',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
                       letterSpacing: 0.5,
+                      color: Colors.white,
                     ),
                   ),
                 ),

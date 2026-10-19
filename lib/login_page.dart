@@ -284,12 +284,16 @@ class _LoginPageState extends State<LoginPage> {
                   isLoading: isLoading,
                   height: 56,
                   borderRadius: 16,
+                  // Flat brand blue instead of the default gradient, so the
+                  // label sits on one solid colour.
+                  color: GlassColors.primaryBlue,
                   child: const Text(
                     'LOGIN',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
                       letterSpacing: 0.5,
+                      color: Colors.white,
                     ),
                   ),
                 ),
@@ -776,12 +780,14 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
                   isLoading: isLoading,
                   height: 56,
                   borderRadius: 16,
+                  color: GlassColors.primaryBlue,
                   child: const Text(
                     'SUBMIT FOR APPROVAL',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
                       letterSpacing: 0.5,
+                      color: Colors.white,
                     ),
                   ),
                 ),
