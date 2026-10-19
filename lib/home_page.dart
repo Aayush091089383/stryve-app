@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -211,8 +212,17 @@ class _HomeTabState extends State<_HomeTab> {
   http.Client? _ownedClient;
   http.Client get _client => widget.client ?? (_ownedClient ??= http.Client());
 
+  /// The day the current [_today] list was fetched for. Used to notice the
+  /// clock crossing midnight while the app stays open.
+  String? _scheduleDay;
+
+  /// Rebuilds the "Next Up" queue once a minute so a lecture that has just
+  /// ended disappears without the student touching the screen.
+  Timer? _refreshTimer;
+
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _ownedClient?.close();
     super.dispose();
   }
@@ -231,6 +241,78 @@ class _HomeTabState extends State<_HomeTab> {
   void initState() {
     super.initState();
     _fetchToday();
+    _refreshTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _onMinuteTick(),
+    );
+  }
+
+  void _onMinuteTick() {
+    if (!mounted) return;
+
+    // Stay on the right day: a device left on Home overnight would otherwise
+    // keep yesterday's rows and call them "caught up".
+    final todayName = _dayNames[DateTime.now().weekday - 1];
+    if (_scheduleDay != null && _scheduleDay != todayName) {
+      _fetchToday();
+      return;
+    }
+
+    setState(() {});
+  }
+
+  /// Minutes since midnight for a timetable time, or null when it is not a
+  /// plain clock time. The API prints the official sheet's 24-hour `HH:mm`;
+  /// the 12-hour form is accepted too so a malformed/older value still works.
+  static int? _minutesOfDay(String value) {
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})\s*(AM|PM)?$',
+      caseSensitive: false,
+    ).firstMatch(value.trim());
+    if (match == null) return null;
+
+    var hour = int.parse(match.group(1)!);
+    final minute = int.parse(match.group(2)!);
+    final meridiem = match.group(3)?.toUpperCase();
+    if (minute > 59) return null;
+
+    if (meridiem == null) {
+      if (hour > 23) return null;
+    } else {
+      if (hour < 1 || hour > 12) return null;
+      if (meridiem == 'AM') {
+        if (hour == 12) hour = 0;
+      } else if (hour != 12) {
+        hour += 12;
+      }
+    }
+
+    return hour * 60 + minute;
+  }
+
+  /// The next two lectures that have not ended yet, earliest first.
+  ///
+  /// A lecture disappears at its own end time, not when the following one
+  /// starts, so the one in progress stays at the top of the queue until it is
+  /// over. Sorting here (rather than trusting the fetch order) keeps the queue
+  /// chronological even if the API ever returns the rows in another order.
+  List<TimetableEntry> _upNext(DateTime now) {
+    final nowMinutes = now.hour * 60 + now.minute;
+
+    final upcoming =
+        _today.where((entry) {
+          final end = _minutesOfDay(entry.endTime);
+          // An unparseable end time stays visible: silently hiding a class is a
+          // worse failure than showing one stale row.
+          return end == null || end > nowMinutes;
+        }).toList()..sort((a, b) {
+          final aStart = _minutesOfDay(a.startTime);
+          final bStart = _minutesOfDay(b.startTime);
+          if (aStart != null && bStart != null) return aStart.compareTo(bStart);
+          return a.startTime.compareTo(b.startTime);
+        });
+
+    return upcoming.take(2).toList();
   }
 
   Future<void> _fetchToday() async {
@@ -297,6 +379,7 @@ class _HomeTabState extends State<_HomeTab> {
 
       setState(() {
         _today = entries;
+        _scheduleDay = todayName;
         _isLoadingSchedule = false;
       });
     } catch (_) {
@@ -347,6 +430,9 @@ class _HomeTabState extends State<_HomeTab> {
       student.name.trim().split(RegExp(r'\s+')).first,
     );
 
+    // Recomputed on every build, including the once-a-minute timer rebuild.
+    final nextUp = _upNext(DateTime.now());
+
     return SingleChildScrollView(
       // 100 of breathing room plus the floating nav's footprint, so the
       // "Latest Update" card can scroll fully clear of the bar.
@@ -381,8 +467,9 @@ class _HomeTabState extends State<_HomeTab> {
           // details remain on the Profile tab.
           const SizedBox(height: 28),
 
-          // Today's Schedule - the student's own Division D timetable, filtered
-          // by the batch stored on their account (the server decides).
+          // Next Up - the next two lectures of the student's own Division D
+          // timetable (batch filtering is decided server-side). The whole day
+          // no longer lives here: see [_upNext] for the rolling window.
           Text(
             "Today's Schedule",
             style: TextStyle(
@@ -448,46 +535,26 @@ class _HomeTabState extends State<_HomeTab> {
                       ],
                     ),
                   )
-                : _today.isEmpty
+                : nextUp.isEmpty
                 ? GlassCard(
                     key: const ValueKey('schedule-empty'),
                     padding: const EdgeInsets.all(16),
                     margin: EdgeInsets.zero,
                     borderRadius: 16,
                     blurStrength: 8,
-                    child: Row(
-                      children: [
-                        GlassContainer(
-                          width: 52,
-                          height: 52,
-                          borderRadius: 14,
-                          padding: EdgeInsets.zero,
-                          blurStrength: 15,
-                          opacity: 0.7,
-                          borderOpacity: 0.4,
-                          child: const Icon(
-                            Icons.event_available_rounded,
-                            size: 26,
-                            color: GlassColors.primaryBlue,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Text(
-                            'No classes scheduled for your batch today.',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: GlassColors.secondaryTextOf(context),
-                            ),
-                          ),
-                        ),
-                      ],
+                    // Deliberately text only - no icon, no second line.
+                    child: Text(
+                      "You're all caught up for today!",
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: GlassColors.secondaryTextOf(context),
+                      ),
                     ),
                   )
                 : Column(
                     key: const ValueKey('schedule-list'),
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: _today
+                    children: nextUp
                         .map(
                           (entry) => Padding(
                             padding: const EdgeInsets.only(bottom: 10),

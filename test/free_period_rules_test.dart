@@ -291,10 +291,13 @@ void main() {
 
       final client = MockClient(
         (request) async => jsonResponse([
+          // Home now shows only lectures that have not ended, so this
+          // positive control must stay live whenever the suite runs. Its
+          // times are irrelevant to the free-period assertion below.
           entryJson(
             day: todayName(),
-            start: '10:15',
-            end: '11:15',
+            start: '00:01',
+            end: '23:59',
             subject: 'EMI',
             faculty: 'SMG',
           ),
