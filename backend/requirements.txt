@@ -1,8 +1,16 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-pydantic
-pydantic-settings
-python-dotenv
-pwdlib[argon2]
-python-multipart
+# Runtime dependencies for the FastAPI backend.
+#
+# Pinned to the versions the backend is tested against locally (see
+# `pip freeze` in backend/.venv); Python 3.11 wheels exist for all of them.
+# `email-validator` is required by the EmailStr fields in schemas.py - without
+# it the app fails at import time - and was missing from this file before the
+# cloud-deployment preparation.
+fastapi==0.143.3
+uvicorn[standard]==0.54.0
+sqlalchemy==2.1.5
+pydantic==2.14.1
+pydantic-settings==2.16.0
+python-dotenv==1.2.4
+pwdlib[argon2]==0.3.1
+python-multipart==0.0.32
+email-validator==2.3.0

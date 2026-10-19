@@ -2419,3 +2419,20 @@ def directory_status(
     return DirectoryStatusOut(
         faculty_count=faculty_count, lab_count=lab_count, missing_data=missing
     )
+
+
+if __name__ == "__main__":
+    # Plain ``python main.py`` entrypoint for a container or a cloud host.
+    # Render/Railway/Fly inject $PORT and expect the process to bind 0.0.0.0;
+    # the Dockerfile CMD passes the same values to uvicorn directly. The app
+    # object is passed instead of the "main:app" string so importing this
+    # module once is enough (it initialises the database on import).
+    import os
+
+    import uvicorn
+
+    uvicorn.run(
+        app,
+        host=os.environ.get("HOST", "0.0.0.0"),
+        port=int(os.environ.get("PORT", "8000")),
+    )

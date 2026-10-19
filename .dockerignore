@@ -1,0 +1,41 @@
+# Docker build context = repository root (see backend/Dockerfile).
+# Never bake local credentials or user data into an image.
+.git
+.gitignore
+.github
+
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.DS_Store
+
+# Secrets and environment files
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local databases, backups and uploads
+backend/*.db
+backend/*.db.*
+backend/*.bak
+backend/*.backup*
+backend/*.broken-backup
+backend/campussync_backup*
+backend/uploads/
+
+# Local Python environments and test/developer scripts
+backend/venv/
+backend/.venv/
+backend/venv-*/
+backend/tests/
+backend/backend/
+backend/*.log
+backend/server_job.txt
+
+# Flutter frontend and its build output - not part of the backend image
+lib/
+test/
+android/
+windows/
+build/
+.dart_tool/
