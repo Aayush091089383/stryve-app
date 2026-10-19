@@ -27,6 +27,7 @@ import 'package:stryve/notifications_page.dart';
 import 'package:stryve/services/api_cache.dart';
 import 'package:stryve/services/notification_service.dart';
 import 'package:stryve/student.dart';
+import 'package:stryve/utils/glass_container.dart';
 
 const String kToken = 'notifications-test-token';
 
@@ -176,15 +177,20 @@ Badge bellBadge(WidgetTester tester) =>
 
 Future<void> pumpNotificationsPage(
   WidgetTester tester,
-  NotificationApi api,
-) async {
+  NotificationApi api, {
+  SystemNotifications? tray,
+}) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
   await tester.pumpWidget(
     MaterialApp(
-      home: NotificationsPage(student: studentFixture(), client: api.client),
+      home: NotificationsPage(
+        student: studentFixture(),
+        client: api.client,
+        systemNotifications: tray,
+      ),
     ),
   );
   await tester.pump();
@@ -337,13 +343,19 @@ void main() {
       expect(find.byKey(const Key('mark_all_read')), findsNothing);
     });
 
-    testWidgets('an empty feed is an empty state, not an error', (tester) async {
+    testWidgets('an empty feed is plain centred text, not an error', (
+      tester,
+    ) async {
       final api = NotificationApi();
 
       await pumpNotificationsPage(tester, api);
 
-      expect(find.text('No notifications yet'), findsOneWidget);
+      expect(find.text('No message yet'), findsOneWidget);
       expect(find.textContaining('Could not load'), findsNothing);
+      // Deliberately no card and no header: one line, nothing else.
+      expect(find.byType(GlassCard), findsNothing);
+      expect(find.byType(GlassContainer), findsNothing);
+      expect(find.text('All caught up'), findsNothing);
     });
 
     testWidgets('a failed load shows the error, never an empty state', (
@@ -354,7 +366,7 @@ void main() {
       await pumpNotificationsPage(tester, api);
 
       expect(find.text('Could not load notifications (500)'), findsOneWidget);
-      expect(find.text('No notifications yet'), findsNothing);
+      expect(find.text('No message yet'), findsNothing);
       expect(find.text('Try Again'), findsOneWidget);
     });
   });
@@ -395,6 +407,23 @@ void main() {
       await pumpHome(tester, api, tray: tray);
 
       expect(tray.shown, isEmpty);
+    });
+
+    testWidgets('the test button posts one tray alert and confirms it', (
+      tester,
+    ) async {
+      final tray = FakeTray();
+
+      await pumpNotificationsPage(tester, NotificationApi(), tray: tray);
+      await tester.tap(find.byKey(const Key('test_notification')));
+      await tester.pumpAndSettle();
+
+      expect(
+        tray.shown,
+        ['Stryve test|System tray notifications are working'],
+        reason: 'the button must go through the same service the app uses',
+      );
+      expect(find.textContaining('Test notification sent'), findsOneWidget);
     });
   });
 }

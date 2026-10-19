@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'config/environment.dart';
 import 'role_selection_page.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
 import 'student.dart';
 import 'student_notification.dart';
 import 'utils/glass_container.dart';
@@ -21,10 +22,17 @@ import 'utils/motion.dart';
 class NotificationsPage extends StatefulWidget {
   final Student student;
 
-  /// Injection seam for tests; production leaves it null.
+  /// Injection seams for tests; production leaves both null and the page uses
+  /// the real HTTP client and the real system tray.
   final http.Client? client;
+  final SystemNotifications? systemNotifications;
 
-  const NotificationsPage({super.key, required this.student, this.client});
+  const NotificationsPage({
+    super.key,
+    required this.student,
+    this.client,
+    this.systemNotifications,
+  });
 
   @override
   State<NotificationsPage> createState() => _NotificationsPageState();
@@ -186,10 +194,41 @@ class _NotificationsPageState extends State<NotificationsPage> {
     }
   }
 
+  SystemNotifications? _tray;
+
+  SystemNotifications get _systemNotifications =>
+      _tray ??= widget.systemNotifications ?? LocalSystemNotifications();
+
+  /// Proves the system tray path end-to-end: posts one real notification
+  /// through the same service the app uses, so the student (and any tester)
+  /// can see it appear in Android's tray.
+  Future<void> _sendTestNotification() async {
+    await _systemNotifications.show(
+      'Stryve test',
+      'System tray notifications are working',
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(content: Text('Test notification sent - check your tray')),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const GlassAppBar(title: Text('Notifications')),
+      appBar: GlassAppBar(
+        title: const Text('Notifications'),
+        actions: [
+          IconButton(
+            key: const Key('test_notification'),
+            tooltip: 'Send a test notification',
+            icon: const Icon(Icons.notification_add_outlined),
+            onPressed: _sendTestNotification,
+          ),
+        ],
+      ),
       body: GlassBackground(child: _content(context)),
     );
   }
@@ -265,6 +304,16 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Widget _buildList() {
+    // Plain text, no card: an empty feed says one line and nothing else.
+    if (_notifications.isEmpty) {
+      return const Center(
+        child: Text(
+          'No message yet',
+          style: TextStyle(fontSize: 16, color: Colors.grey),
+        ),
+      );
+    }
+
     final unreadCount = unreadNotificationCount(_notifications);
 
     return RefreshIndicator(
@@ -307,60 +356,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
             ],
           ),
           const SizedBox(height: 14),
-          if (_notifications.isEmpty)
-            _buildEmptyState()
-          else
-            ..._notifications.map(_buildNotificationCard),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return GlassCard(
-      padding: const EdgeInsets.all(24),
-      margin: EdgeInsets.zero,
-      child: Row(
-        children: [
-          GlassContainer(
-            width: 52,
-            height: 52,
-            borderRadius: 14,
-            padding: EdgeInsets.zero,
-            blurStrength: 15,
-            opacity: 0.6,
-            borderOpacity: 0.3,
-            child: Icon(
-              Icons.notifications_none_rounded,
-              size: 26,
-              color: GlassColors.secondaryTextOf(context),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'No notifications yet',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: GlassColors.headingOf(context),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'When a teacher uploads an assignment for your class, you '
-                  'will see it here.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: GlassColors.secondaryTextOf(context),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          ..._notifications.map(_buildNotificationCard),
         ],
       ),
     );
