@@ -36,6 +36,19 @@ const List<String> kAssignmentSubjects = <String>[
   'Professional Communication Skills',
 ];
 
+/// The filename the upload actually carries.
+///
+/// The picked name is used, never a path: `file_selector` returns a display
+/// name, and the basename is taken defensively anyway. Android's document
+/// picker can also hand back a cached copy whose name has no extension at all,
+/// so `.pdf` is appended when it is missing - the file itself is still a PDF,
+/// and the backend must not receive a name that looks like a bad upload.
+String uploadFileName(String pickedName) {
+  final base = pickedName.split(RegExp(r'[\\/]')).last.trim();
+  if (base.isEmpty) return 'assignment.pdf';
+  return base.toLowerCase().endsWith('.pdf') ? base : '$base.pdf';
+}
+
 Future<PickedAssignmentFile?> defaultPickPdf() async {
   const typeGroup = XTypeGroup(
     label: 'PDF',
@@ -193,8 +206,12 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
         http.MultipartFile.fromBytes(
           'file',
           payload.file.bytes,
-          filename: payload.file.name,
-          contentType: MediaType('application/pdf', 'pdf'),
+          filename: uploadFileName(payload.file.name),
+          // MediaType takes the type and the subtype separately: passing
+          // 'application/pdf' as the first argument produced
+          // "application/pdf/pdf", which the backend rightly rejects with
+          // "Only PDF files can be uploaded" for a perfectly valid PDF.
+          contentType: MediaType('application', 'pdf'),
         ),
       );
 

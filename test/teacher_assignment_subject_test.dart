@@ -61,6 +61,7 @@ Future<void> pumpAssignmentsView(
   List<http.Request> sent, {
   List<Object> mine = const [],
   bool openSheet = false,
+  String pickedName = 'notes.pdf',
 }) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 1.0;
@@ -81,7 +82,7 @@ Future<void> pumpAssignmentsView(
           authService: TeacherAuthService(),
           client: client,
           pickFile: () async =>
-              PickedAssignmentFile(name: 'notes.pdf', bytes: utf8.encode(kPdf)),
+              PickedAssignmentFile(name: pickedName, bytes: utf8.encode(kPdf)),
         ),
       ),
     ),
@@ -111,6 +112,26 @@ Map<String, dynamic> recordJson({
 void main() {
   setUp(() => FlutterSecureStorage.setMockInitialValues(teacherStorage()));
   tearDown(() => FlutterSecureStorage.setMockInitialValues({}));
+
+  group('upload filename', () {
+    test('appends .pdf to an extensionless cache name', () {
+      expect(uploadFileName('cache-7f3a2b19'), 'cache-7f3a2b19.pdf');
+    });
+
+    test('keeps an existing .pdf in any casing', () {
+      expect(uploadFileName('notes.pdf'), 'notes.pdf');
+      expect(uploadFileName('NOTES.PDF'), 'NOTES.PDF');
+    });
+
+    test('never carries a path', () {
+      expect(uploadFileName('/data/cache/1234'), '1234.pdf');
+      expect(uploadFileName(r'C:\Temp\notes.pdf'), 'notes.pdf');
+    });
+
+    test('falls back when the name is empty', () {
+      expect(uploadFileName('   '), 'assignment.pdf');
+    });
+  });
 
   testWidgets('the subject is chosen from the seven-subject dropdown', (
     tester,
@@ -205,5 +226,47 @@ void main() {
     expect(body, contains('name="subject"'));
     expect(body, contains('Engineering Physics'));
     expect(find.text('Assignment uploaded successfully'), findsOneWidget);
+  });
+
+  testWidgets('the file part is a real application/pdf with a .pdf filename', (
+    tester,
+  ) async {
+    final sent = <http.Request>[];
+    // Android's document picker can hand back a cached file whose name has no
+    // extension at all; the upload must still reach the backend as a PDF.
+    await pumpAssignmentsView(
+      tester,
+      sent,
+      openSheet: true,
+      pickedName: 'cache-7f3a2b19',
+    );
+
+    await tester.enterText(find.byType(TextField).first, 'Physics notes');
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Engineering Physics').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('CHOOSE PDF FILE'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('UPLOAD'));
+    await tester.pumpAndSettle();
+
+    expect(sent, hasLength(1));
+    final body = utf8
+        .decode(sent.single.bodyBytes, allowMalformed: true)
+        .toLowerCase();
+
+    // The whole MIME line, not a prefix: `application/pdf/pdf` (a slash in the
+    // primary type) must not pass as a PDF.
+    expect(
+      RegExp(r'content-type: application/pdf\r?\n').hasMatch(body),
+      isTrue,
+      reason: 'the part must declare exactly application/pdf',
+    );
+    expect(
+      body,
+      contains('filename="cache-7f3a2b19.pdf"'),
+      reason: 'the backend must receive a .pdf filename',
+    );
   });
 }
