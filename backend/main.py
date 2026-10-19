@@ -17,7 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pwdlib import PasswordHash
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -253,9 +253,10 @@ def register_student(student: StudentRegister, db: Session = Depends(get_db)):
             detail="Passwords do not match"
         )
 
-    # Check if email already exists in our system
+    # Check if email already exists in our system. Email is case-insensitive:
+    # rows created before lower-casing was enforced can still be mixed case.
     existing_email = db.query(models.Student).filter(
-        models.Student.email == student.email
+        func.lower(models.Student.email) == student.email.lower()
     ).first()
 
     if existing_email:
@@ -300,7 +301,8 @@ def register_student(student: StudentRegister, db: Session = Depends(get_db)):
     # Create new student with profile information from registry
     new_student = models.Student(
         name=registry_student["name"],
-        email=student.email,
+        # Store canonical lowercase so later lookups and duplicates agree.
+        email=student.email.lower(),
         roll_number=student.roll_number,
         branch=registry_student["course"],  # registry uses "course"
         year=registry_student["year"],
@@ -425,9 +427,11 @@ def login_student(student: StudentLogin, db: Session = Depends(get_db)):
 
     Returns 200 with token on success, 401 if credentials are invalid.
     """
-    # Find student by email
+    # Find student by email. The comparison is case-insensitive: existing rows
+    # may hold any casing (e.g. a mixed-case address saved before this rule),
+    # and users type their address however they like.
     existing_student = db.query(models.Student).filter(
-        models.Student.email == student.email
+        func.lower(models.Student.email) == student.email.lower()
     ).first()
 
     if not existing_student:
@@ -500,9 +504,9 @@ def login_teacher(teacher: TeacherLogin, db: Session = Depends(get_db)):
 
     Returns 200 with token on success, 401 if credentials are invalid.
     """
-    # Find teacher by email
+    # Find teacher by email, case-insensitively (see the student login above).
     existing_teacher = db.query(models.Teacher).filter(
-        models.Teacher.email == teacher.email
+        func.lower(models.Teacher.email) == teacher.email.lower()
     ).first()
 
     if not existing_teacher:
@@ -696,8 +700,10 @@ def create_teacher(
             detail="Role must be 'teacher' or 'admin'"
         )
 
-    # Check if email already exists
-    existing = db.query(models.Teacher).filter(models.Teacher.email == teacher_data.email).first()
+    # Check if email already exists, ignoring case.
+    existing = db.query(models.Teacher).filter(
+        func.lower(models.Teacher.email) == teacher_data.email.lower()
+    ).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -708,7 +714,8 @@ def create_teacher(
 
     new_teacher = models.Teacher(
         name=teacher_data.name,
-        email=teacher_data.email,
+        # Canonical lowercase, matching student registration.
+        email=teacher_data.email.lower(),
         password=hashed_password,
         # Kept so an admin can read the credential back out of the Admin panel;
         # it never appears in a teacher-facing response.
