@@ -62,6 +62,7 @@ from schemas import (
     ApprovalActionResponse,
     TimetableEntryOut,
     AssignmentOut,
+    NotificationOut,
     TokenResponse,
     TeacherPermissionsUpdate,
     TeacherAssignmentOut,
@@ -812,6 +813,79 @@ def get_my_assignments(
         query = query.filter(models.Assignment.batch == None)  # noqa: E711
 
     return query.order_by(models.Assignment.due_date).all()
+
+
+@app.get("/notifications", response_model=list[NotificationOut])
+def list_my_notifications(
+    student: models.Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """The caller's notifications, newest first.
+
+    Scoped by the authenticated student's id, never by a client-supplied one, so
+    one student can never read another's feed.
+    """
+    return (
+        db.query(models.Notification)
+        .filter(models.Notification.student_id == student.id)
+        .order_by(
+            models.Notification.created_at.desc(),
+            models.Notification.id.desc(),
+        )
+        .all()
+    )
+
+
+@app.put("/notifications/read-all")
+def mark_all_notifications_read(
+    student: models.Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Mark every unread notification of the caller as read (idempotent)."""
+    marked = (
+        db.query(models.Notification)
+        .filter(
+            models.Notification.student_id == student.id,
+            models.Notification.is_read.is_(False),
+        )
+        .update({models.Notification.is_read: True}, synchronize_session=False)
+    )
+    db.commit()
+    return {"message": "Notifications marked as read", "marked_read": marked}
+
+
+@app.put("/notifications/{notification_id}/read", response_model=NotificationOut)
+def mark_notification_read(
+    notification_id: int,
+    student: models.Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Mark one of the caller's notifications as read (idempotent).
+
+    A row belonging to somebody else answers 404, not 403: whether another
+    student has a notification with that id is not this caller's business.
+    """
+    row = (
+        db.query(models.Notification)
+        .filter(
+            models.Notification.id == notification_id,
+            models.Notification.student_id == student.id,
+        )
+        .first()
+    )
+
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found",
+        )
+
+    if not row.is_read:
+        row.is_read = True
+        db.commit()
+        db.refresh(row)
+
+    return row
 
 
 # ==================================================================
@@ -2067,6 +2141,52 @@ def _safe_display_name(filename: str | None) -> str:
     return name[:120] or "assignment.pdf"
 
 
+def _notify_students_of_assignment(db: Session, assignment: models.Assignment) -> int:
+    """Queue one notification per student who can see a new assignment.
+
+    Recipients follow exactly the same rule as ``GET /assignments``: the same
+    year and division, every approved student in the division for a
+    division-wide upload, and only the matching batch for a batch-specific one.
+    Pending and rejected accounts are skipped - they cannot sign in, so a
+    notification for them could never be read.
+
+    The rows are added to the caller's session but not committed here, so the
+    assignment and its notifications are saved in one transaction.
+    """
+    query = db.query(models.Student).filter(
+        models.Student.year == assignment.year,
+        models.Student.division == assignment.division,
+        models.Student.status == models.StudentStatus.approved,
+    )
+
+    batch = _normalise_batch(assignment.batch)
+    if batch:
+        query = query.filter(
+            or_(
+                models.Student.batch == batch,
+                models.Student.batch == batch.replace("-", ""),
+            )
+        )
+
+    created_at = datetime.utcnow()
+    title = "New assignment"
+    message = f"New assignment uploaded: {assignment.title}"
+
+    count = 0
+    for student in query.all():
+        db.add(
+            models.Notification(
+                student_id=student.id,
+                title=title,
+                message=message,
+                is_read=False,
+                created_at=created_at,
+            )
+        )
+        count += 1
+    return count
+
+
 @app.post(
     "/teacher/assignments/upload",
     response_model=AssignmentOut,
@@ -2200,6 +2320,12 @@ def upload_assignment(
 
     try:
         db.add(assignment)
+        # Flush so the assignment has an id before its notifications are queued;
+        # everything below is still committed as one transaction.
+        db.flush()
+
+        _notify_students_of_assignment(db, assignment)
+
         db.commit()
         db.refresh(assignment)
     except IntegrityError:

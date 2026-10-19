@@ -10,6 +10,10 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         tools:node="remove" />
+    <!-- Assignment alerts. Android 13+ asks the student at runtime the first
+         time one is raised; the in-app bell and Notifications screen work
+         whether or not this is granted. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="Stryve"
         android:name="${applicationName}"

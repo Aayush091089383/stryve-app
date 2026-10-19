@@ -230,6 +230,24 @@ class AssignmentOut(BaseModel):
         from_attributes = True
 
 
+class NotificationOut(BaseModel):
+    """One student-visible notification.
+
+    There is deliberately no recipient field: a student only ever receives
+    their own rows from ``GET /notifications``, so echoing somebody else's
+    ``student_id`` back is unnecessary surface.
+    """
+
+    id: int
+    title: str
+    message: str
+    is_read: bool
+    created_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
 # ======================================================================
 # Teacher account permissions / assignments
 # ======================================================================

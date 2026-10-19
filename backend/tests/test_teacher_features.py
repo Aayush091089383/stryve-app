@@ -1759,7 +1759,190 @@ check(
 )
 
 # ==========================================================================
-section("6. Faculty Finder / Lab Finder")
+section("6. Notifications for a new assignment")
+# ==========================================================================
+# Uploading an assignment notifies exactly the students who can see it: the
+# same year/division, every approved student for a division-wide upload, and
+# only the matching batch for a batch-specific one. Pending accounts are skipped.
+
+def notifications_for(message):
+    return conn.execute(
+        """
+        SELECT s.roll_number, n.is_read
+        FROM notifications n
+        JOIN students s ON s.id = n.student_id
+        WHERE n.message = ?
+        """,
+        (message,),
+    ).fetchall()
+
+
+division_probe = upload(
+    admin_token, payload={"title": "Notification probe", "subject": "Skills"}
+)
+check("the notification probe uploaded", division_probe.status_code == 201, division_probe.text[:200])
+division_message = "New assignment uploaded: Notification probe"
+division_rows = notifications_for(division_message)
+# Derived from the database, not a hard-coded list: earlier sections approve
+# some accounts, so "every approved student" is read from the same rows the
+# endpoint reads.
+approved_rolls = {
+    row[0]
+    for row in conn.execute(
+        "SELECT roll_number FROM students WHERE year=1 AND division='D' AND status='approved'"
+    )
+}
+check(
+    "a division-wide upload notifies every approved student in the class",
+    {row[0] for row in division_rows} == approved_rolls,
+    f"got={sorted(row[0] for row in division_rows)} expected={sorted(approved_rolls)}",
+)
+check(
+    "every notification starts unread",
+    all(row[1] == 0 for row in division_rows),
+    str(division_rows),
+)
+check(
+    "a pending account receives no notification",
+    conn.execute(
+        """
+        SELECT COUNT(*) FROM notifications n
+        JOIN students s ON s.id = n.student_id
+        WHERE s.roll_number = '903'
+        """
+    ).fetchone()[0]
+    == 0,
+)
+check(
+    "the never-approved student is the only class member left out",
+    {row[0] for row in division_rows}
+    == {
+        row[0]
+        for row in conn.execute(
+            "SELECT roll_number FROM students WHERE year=1 AND division='D' AND roll_number != '903'"
+        )
+    },
+    str(sorted(row[0] for row in division_rows)),
+)
+
+batch_probe = upload(
+    admin_token,
+    payload={"title": "Notification probe D-1", "subject": "Skills lab", "batch": "D-1"},
+)
+check("the batch notification probe uploaded", batch_probe.status_code == 201, batch_probe.text[:200])
+batch_rows = notifications_for("New assignment uploaded: Notification probe D-1")
+check(
+    "a batch upload notifies only that batch",
+    {row[0] for row in batch_rows}
+    == {
+        row[0]
+        for row in conn.execute(
+            "SELECT roll_number FROM students WHERE year=1 AND division='D' AND batch='D-1' AND status='approved'"
+        )
+    },
+    str(sorted(row[0] for row in batch_rows)),
+)
+
+feed_response = requests.get(f"{BASE}/notifications", headers=auth(TOKENS["1"]), timeout=10)
+check("a student can read their notifications", feed_response.status_code == 200, feed_response.text[:200])
+feed = feed_response.json()
+check("the feed is not empty", len(feed) > 0, str(feed)[:200])
+check(
+    "the newest notification comes first",
+    [n["id"] for n in feed] == sorted((n["id"] for n in feed), reverse=True),
+    str([n["id"] for n in feed]),
+)
+check(
+    "the feed carries no other student's id",
+    all("student_id" not in n for n in feed),
+    str(feed[0])[:200],
+)
+check(
+    "the feed contains the division-wide notification, unread",
+    any(n["message"] == division_message and n["is_read"] is False for n in feed),
+    str([n["message"] for n in feed])[:200],
+)
+member_only = requests.get(f"{BASE}/notifications", headers=auth(TOKENS["25"]), timeout=10).json()
+check(
+    "another batch does not receive the D-1 notification",
+    all(n["message"] != "New assignment uploaded: Notification probe D-1" for n in member_only),
+    str([n["message"] for n in member_only])[:200],
+)
+check(
+    "an unauthenticated notification read is refused",
+    requests.get(f"{BASE}/notifications", timeout=10).status_code == 401,
+)
+
+probe_notification = next(n for n in feed if n["message"] == division_message)
+foreign_read = requests.put(
+    f"{BASE}/notifications/{probe_notification['id']}/read",
+    headers=auth(TOKENS["25"]),
+    timeout=10,
+)
+check(
+    "a student cannot mark another student's notification read",
+    foreign_read.status_code == 404,
+    str(foreign_read.status_code),
+)
+check(
+    "and it is still unread",
+    conn.execute(
+        "SELECT is_read FROM notifications WHERE id=?", (probe_notification["id"],)
+    ).fetchone()[0]
+    == 0,
+)
+
+owned_read = requests.put(
+    f"{BASE}/notifications/{probe_notification['id']}/read",
+    headers=auth(TOKENS["1"]),
+    timeout=10,
+)
+check("the owner can mark it read", owned_read.status_code == 200, owned_read.text[:200])
+check("the response says it is read", owned_read.json().get("is_read") is True, owned_read.text[:200])
+check(
+    "marking it read twice is harmless",
+    requests.put(
+        f"{BASE}/notifications/{probe_notification['id']}/read",
+        headers=auth(TOKENS["1"]),
+        timeout=10,
+    ).status_code
+    == 200,
+)
+check(
+    "an unknown notification id returns 404",
+    requests.put(
+        f"{BASE}/notifications/999999/read", headers=auth(TOKENS["1"]), timeout=10
+    ).status_code
+    == 404,
+)
+
+read_all = requests.put(f"{BASE}/notifications/read-all", headers=auth(TOKENS["25"]), timeout=10)
+check("mark-all-as-read succeeds", read_all.status_code == 200, read_all.text[:200])
+check(
+    "it reports how many rows changed",
+    read_all.json().get("marked_read", 0) >= 1,
+    read_all.text[:200],
+)
+check(
+    "student 25 now has no unread notification",
+    not [n for n in requests.get(f"{BASE}/notifications", headers=auth(TOKENS["25"]), timeout=10).json() if not n["is_read"]],
+)
+check(
+    "a second mark-all is a no-op",
+    requests.put(f"{BASE}/notifications/read-all", headers=auth(TOKENS["25"]), timeout=10).json().get("marked_read")
+    == 0,
+)
+check(
+    "student 1's own read state is untouched by student 25's mark-all",
+    next(
+        n for n in requests.get(f"{BASE}/notifications", headers=auth(TOKENS["1"]), timeout=10).json()
+        if n["id"] == probe_notification["id"]
+    )["is_read"]
+    is True,
+)
+
+# ==========================================================================
+section("7. Faculty Finder / Lab Finder")
 # ==========================================================================
 faculty_all = requests.get(f"{BASE}/faculty", headers=auth(TOKENS["1"]), timeout=10)
 check("a student can read the faculty directory", faculty_all.status_code == 200, str(faculty_all.status_code))
@@ -1807,7 +1990,7 @@ check("the status lists what data is still missing", len(status["missing_data"])
 check("the missing list names the laboratory gap", any("aborator" in item for item in status["missing_data"]), str(status["missing_data"])[:200])
 
 # ==========================================================================
-section("7. Official data honesty")
+section("8. Official data honesty")
 # ==========================================================================
 check("only the coordinator has a full name in the source data", [
     f["short_code"] for f in official_data.FACULTY if f["full_name"]
@@ -2051,13 +2234,13 @@ db.close()
 conn.close()
 
 # ==========================================================================
-section("8. The real database was not touched")
+section("9. The real database was not touched")
 # ==========================================================================
 real_stamp = (REAL_DB.stat().st_size, REAL_DB.stat().st_mtime_ns) if REAL_DB.exists() else None
 check("real database size/mtime unchanged by this suite", real_stamp == REAL_DB_STAMP, f"before={REAL_DB_STAMP} after={real_stamp}")
 
 # ==========================================================================
-section("9. The seeder's dry run writes nothing")
+section("10. The seeder's dry run writes nothing")
 # ==========================================================================
 # A copy is used, and the new column is dropped from it first, so the dry run is
 # exercised on a database in the state the real one is in today (not migrated).
@@ -2169,7 +2352,7 @@ check(
 shutil.rmtree(dry_dir, ignore_errors=True)
 
 # ==========================================================================
-section("10. A database the additive migration has not reached fails LOUDLY")
+section("11. A database the additive migration has not reached fails LOUDLY")
 # ==========================================================================
 # The live database is in exactly this state today: the additive
 # ``timetable_entries.is_free_period`` column has not been added yet. The

@@ -118,10 +118,17 @@ void main() {
       final recorder = RecordingClient();
       await pumpHomeWith(tester, recorder);
 
+      // Home asks for its own timetable and the bell's notification feed; no
+      // other tab may talk to the backend before it is opened.
+      expect(
+        recorder.paths.toSet(),
+        {'/timetable', '/notifications'},
+        reason: 'only the visible tab (and Home\'s own bell) may load data',
+      );
       expect(
         recorder.paths,
-        ['/timetable'],
-        reason: 'only the visible tab may talk to the backend',
+        isNot(contains('/assignments')),
+        reason: 'the Assignments tab must not fetch before it is opened',
       );
       expect(find.byType(TasksPage), findsNothing);
       // The quick-access grid is five cards, no Tasks card.

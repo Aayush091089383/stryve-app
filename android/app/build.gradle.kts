@@ -24,6 +24,10 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // flutter_local_notifications relies on library desugaring for its
+        // Android 8+ notification APIs, even though this app only posts an
+        // immediate (never scheduled) alert.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -40,6 +44,9 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // The notifications plugin adds methods beyond the 64k limit on older
+        // API levels; multidex is the documented requirement for it.
+        multiDexEnabled = true
     }
 
     signingConfigs {
@@ -78,6 +85,10 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 flutter {

@@ -8,10 +8,13 @@ import 'assignments_page.dart';
 import 'config/environment.dart';
 import 'faculty_finder_page.dart';
 import 'lab_finder_page.dart';
+import 'notifications_page.dart';
 import 'role_selection_page.dart';
 import 'services/api_cache.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
 import 'student.dart';
+import 'student_notification.dart';
 import 'timetable.dart';
 import 'profile.dart';
 import 'utils/glass_container.dart';
@@ -25,6 +28,10 @@ class HomePage extends StatefulWidget {
   /// teacher panel and the finder screens). Null in the app.
   final http.Client? client;
 
+  /// Optional injection seam for the system-tray alert, for tests only. Null in
+  /// the app, where [LocalSystemNotifications] is used.
+  final SystemNotifications? systemNotifications;
+
   /// The floating glass navigation bar's footprint: the distance from the
   /// bottom of the screen to the top edge of the bar.
   ///
@@ -34,7 +41,12 @@ class HomePage extends StatefulWidget {
   /// where taps belong to the bar.
   static const double kGlassNavInset = 92;
 
-  const HomePage({super.key, required this.student, this.client});
+  const HomePage({
+    super.key,
+    required this.student,
+    this.client,
+    this.systemNotifications,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -52,12 +64,100 @@ class _HomePageState extends State<HomePage> {
   /// before, so switching back never refetches or resets scroll position.
   final List<Widget?> _pages = List<Widget?>.filled(3, null);
 
+  /// The student's notification feed, used for the bell badge. Empty until the
+  /// first fetch answers (or when the backend is unreachable, in which case the
+  /// badge simply stays hidden - the screen reports its own error).
+  List<StudentNotification> _notifications = const [];
+
+  http.Client? _ownedNotificationClient;
+  http.Client get _notificationClient =>
+      widget.client ?? (_ownedNotificationClient ??= http.Client());
+
+  SystemNotifications? _systemNotifications;
+  SystemNotifications get _notificationsPresenter =>
+      _systemNotifications ??=
+          widget.systemNotifications ?? LocalSystemNotifications();
+
+  /// Highest notification id already announced in the system tray. Starts at 0
+  /// per app launch, so the newest unread assignment is announced once and a
+  /// rebuild or a second fetch never repeats it.
+  int _lastAlertedId = 0;
+
+  /// True while the Notifications route is open, so a double tap cannot push it
+  /// twice.
+  bool _openingNotifications = false;
+
   static const List<String> _tabTitles = ['Stryve', 'Assignments', 'Profile'];
 
   @override
   void initState() {
     super.initState();
     _pages[0] = _buildPage(0);
+    _fetchNotifications();
+  }
+
+  @override
+  void dispose() {
+    _ownedNotificationClient?.close();
+    super.dispose();
+  }
+
+  /// Loads the feed and, when asked, raises a tray alert for the newest unread
+  /// row that has not been announced yet.
+  ///
+  /// Failures are silent on purpose: the bell is an enhancement, and the
+  /// timetable request already owns the app's "backend unreachable" state.
+  Future<void> _fetchNotifications({bool alert = true}) async {
+    try {
+      final response = await _notificationClient.get(
+        Uri.parse('${Environment.backendUrl}/notifications'),
+        headers: {'Authorization': 'Bearer ${widget.student.token}'},
+      );
+
+      if (!mounted || response.statusCode != 200) return;
+
+      final List<dynamic> raw = jsonDecode(response.body);
+      final loaded = raw
+          .map((n) => StudentNotification.fromJson(n as Map<String, dynamic>))
+          .toList();
+
+      if (!mounted) return;
+      setState(() => _notifications = loaded);
+
+      final unread = loaded.where((n) => !n.isRead).toList();
+      if (!alert || unread.isEmpty) return;
+
+      final newest = unread.reduce((a, b) => a.id >= b.id ? a : b);
+      if (newest.id <= _lastAlertedId) return;
+
+      _lastAlertedId = newest.id;
+      unawaited(
+        _notificationsPresenter.show(newest.title, newest.message),
+      );
+    } catch (_) {
+      // Leave the previous badge in place; nothing here may break Home.
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    if (_openingNotifications) return;
+    _openingNotifications = true;
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => NotificationsPage(
+            student: widget.student,
+            client: widget.client,
+          ),
+        ),
+      );
+    } finally {
+      _openingNotifications = false;
+    }
+
+    // The screen may have marked rows read; refresh the badge but do not raise
+    // a second tray alert for something the student just looked at.
+    await _fetchNotifications(alert: false);
   }
 
   Widget _buildPage(int index) {
@@ -115,8 +215,12 @@ class _HomePageState extends State<HomePage> {
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
+            key: const Key('home_bell'),
+            tooltip: 'Notifications',
+            icon: _NotificationBell(
+              unreadCount: unreadNotificationCount(_notifications),
+            ),
+            onPressed: _openNotifications,
           ),
         ],
       ),
@@ -132,6 +236,28 @@ class _HomePageState extends State<HomePage> {
         selectedIndex: selectedIndex,
         onDestinationSelected: _select,
       ),
+    );
+  }
+}
+
+/// The bell icon with its unread count.
+///
+/// A zero count hides the badge entirely, and three digits are capped at "99+"
+/// so the label never widens the app-bar action.
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell({required this.unreadCount});
+
+  final int unreadCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Badge(
+      key: const Key('home_bell_badge'),
+      isLabelVisible: unreadCount > 0,
+      backgroundColor: GlassColors.error,
+      textColor: Colors.white,
+      label: Text(unreadCount > 99 ? '99+' : '$unreadCount'),
+      child: const Icon(Icons.notifications_outlined),
     );
   }
 }

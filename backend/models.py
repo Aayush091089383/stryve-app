@@ -383,6 +383,31 @@ class AttendanceRecord(Base):
     )
 
 
+class Notification(Base):
+    """One in-app message for one student.
+
+    Rows are created by the backend when a teacher uploads an assignment, one
+    per student who can see that assignment. ``is_read`` is the only mutable
+    field: the message itself is a record of what was announced and is never
+    edited afterwards.
+    """
+
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
+
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+
+    is_read = Column(Boolean, default=False, nullable=False)
+
+    created_at = Column(DateTime, nullable=False)
+
+    student = relationship("Student", foreign_keys=[student_id])
+
+
 class FreePeriodClaim(Base):
     """A period a teacher has claimed as free (no class of their own in it)."""
 
