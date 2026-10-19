@@ -96,10 +96,10 @@ class AssignmentCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: GlassColors.heading,
+                              color: GlassColors.headingOf(context),
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -138,15 +138,15 @@ class AssignmentCard extends StatelessWidget {
                         Icon(
                           Icons.book_rounded,
                           size: 13,
-                          color: GlassColors.secondaryText,
+                          color: GlassColors.secondaryTextOf(context),
                         ),
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
                             subject,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
-                              color: GlassColors.secondaryText,
+                              color: GlassColors.secondaryTextOf(context),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -156,16 +156,16 @@ class AssignmentCard extends StatelessWidget {
                         Icon(
                           Icons.calendar_today_rounded,
                           size: 13,
-                          color: GlassColors.secondaryText,
+                          color: GlassColors.secondaryTextOf(context),
                         ),
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
                             'Due: $dueDate',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
-                              color: GlassColors.secondaryText,
+                              color: GlassColors.secondaryTextOf(context),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -177,9 +177,9 @@ class AssignmentCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
-                color: GlassColors.secondaryText,
+                color: GlassColors.secondaryTextOf(context),
                 size: 22,
               ),
             ],
@@ -190,10 +190,10 @@ class AssignmentCard extends StatelessWidget {
               description!,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 height: 1.35,
-                color: GlassColors.secondaryText,
+                color: GlassColors.secondaryTextOf(context),
               ),
             ),
           ],
@@ -210,9 +210,9 @@ class AssignmentCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     attachmentName ?? 'Attached PDF',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: GlassColors.secondaryText,
+                      color: GlassColors.secondaryTextOf(context),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

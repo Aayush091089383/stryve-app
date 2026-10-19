@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'utils/glass_container.dart';
 import 'utils/teacher_api.dart';
+import 'utils/theme_provider.dart';
 
 /// Profile tab of the Teacher Panel / Admin Panel.
 ///
@@ -68,19 +70,19 @@ class TeacherProfileView extends StatelessWidget {
                         children: [
                           Text(
                             name,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: GlassColors.heading,
+                              color: GlassColors.headingOf(context),
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 4),
                           Text(
                             email,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
-                              color: GlassColors.secondaryText,
+                              color: GlassColors.secondaryTextOf(context),
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -91,12 +93,12 @@ class TeacherProfileView extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Account',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: GlassColors.heading,
+                  color: GlassColors.headingOf(context),
                 ),
               ),
               const SizedBox(height: 12),
@@ -105,8 +107,13 @@ class TeacherProfileView extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    _buildRow('Role', isAdmin ? 'Administrator' : 'Teacher'),
                     _buildRow(
+                      context,
+                      'Role',
+                      isAdmin ? 'Administrator' : 'Teacher',
+                    ),
+                    _buildRow(
+                      context,
                       'Faculty code',
                       // Only shown when an administrator has linked one.
                       (shortCode == null || shortCode!.isEmpty)
@@ -114,6 +121,7 @@ class TeacherProfileView extends StatelessWidget {
                           : shortCode!,
                     ),
                     _buildRow(
+                      context,
                       'Registration approvals',
                       isAdmin
                           ? 'Allowed (administrator)'
@@ -124,6 +132,8 @@ class TeacherProfileView extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
+              _buildDarkModeCard(context),
               const SizedBox(height: 24),
               GlassButton(
                 onPressed: isLoggingOut ? null : onLogout,
@@ -146,9 +156,9 @@ class TeacherProfileView extends StatelessWidget {
                     : 'Logging out ends only this teacher session and returns to '
                           'the teacher login. A student session on this device '
                           'is untouched.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: GlassColors.secondaryText,
+                  color: GlassColors.secondaryTextOf(context),
                 ),
               ),
             ],
@@ -158,7 +168,61 @@ class TeacherProfileView extends StatelessWidget {
     );
   }
 
-  Widget _buildRow(String label, String value) {
+  /// The in-app theme switch, shared with the student Profile tab.
+  ///
+  /// Both switches drive the same [ThemeProvider], so the choice is one app
+  /// setting, not per-role state: turning it on as a teacher and signing in as
+  /// a student keeps dark mode on.
+  Widget _buildDarkModeCard(BuildContext context) {
+    final isDark = context.watch<ThemeProvider>().isDarkMode;
+
+    return GlassCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(
+            isDark ? Icons.dark_mode_rounded : Icons.dark_mode_outlined,
+            size: 24,
+            color: GlassColors.primaryBlue,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Dark Mode',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: GlassColors.headingOf(context),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isDark
+                      ? 'On - solid dark surfaces'
+                      : 'Off - light glass theme',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: GlassColors.secondaryTextOf(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: isDark,
+            onChanged: (value) =>
+                context.read<ThemeProvider>().setDarkMode(value),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRow(BuildContext context, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -168,19 +232,19 @@ class TeacherProfileView extends StatelessWidget {
             width: 150,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
-                color: GlassColors.secondaryText,
+                color: GlassColors.secondaryTextOf(context),
               ),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: GlassColors.heading,
+                color: GlassColors.headingOf(context),
               ),
             ),
           ),

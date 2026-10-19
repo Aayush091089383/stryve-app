@@ -101,9 +101,8 @@ class TimetableEntry {
 
   bool get isPractical => entryType == 'practical';
 
-  String get typeLabel => isFreePeriod
-      ? 'Free period'
-      : (isPractical ? 'Practical' : 'Lecture');
+  String get typeLabel =>
+      isFreePeriod ? 'Free period' : (isPractical ? 'Practical' : 'Lecture');
 
   /// Shown in 12-hour form; the sorting keys stay the raw 24-hour columns.
   String get time => '${formatClock(startTime)} - ${formatClock(endTime)}';
@@ -264,7 +263,7 @@ class _TimetablePageState extends State<TimetablePage> {
         // (a widget test may mount this page as the root).
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          color: GlassColors.heading,
+          color: GlassColors.headingOf(context),
           tooltip: 'Back',
           onPressed: () => Navigator.maybePop(context),
         ),
@@ -332,8 +331,8 @@ class _TimetablePageState extends State<TimetablePage> {
               Text(
                 errorMessage!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: GlassColors.secondaryText,
+                style: TextStyle(
+                  color: GlassColors.secondaryTextOf(context),
                   fontSize: 15,
                 ),
               ),
@@ -405,8 +404,8 @@ class _TimetablePageState extends State<TimetablePage> {
                             t,
                           ),
                           color: Color.lerp(
-                            GlassColors.secondaryText,
-                            GlassColors.heading,
+                            GlassColors.secondaryTextOf(context),
+                            GlassColors.headingOf(context),
                             t,
                           ),
                         ),
@@ -443,10 +442,10 @@ class _TimetablePageState extends State<TimetablePage> {
                     '${widget.student.course} \u2022 '
                     '${getYearText()} \u2022 '
                     '${widget.student.division}-${widget.student.batch}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: GlassColors.heading,
+                      color: GlassColors.headingOf(context),
                     ),
                   ),
                 ),
@@ -497,13 +496,13 @@ class _TimetablePageState extends State<TimetablePage> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: GlassColors.secondaryText),
+        Icon(icon, size: 12, color: GlassColors.secondaryTextOf(context)),
         const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            color: GlassColors.secondaryText,
+            color: GlassColors.secondaryTextOf(context),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -530,28 +529,28 @@ class _TimetablePageState extends State<TimetablePage> {
                 blurStrength: 15,
                 opacity: 0.6,
                 borderOpacity: 0.3,
-                child: const Icon(
+                child: Icon(
                   Icons.calendar_month_rounded,
                   size: 36,
-                  color: GlassColors.secondaryText,
+                  color: GlassColors.secondaryTextOf(context),
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'No classes scheduled',
                 style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w500,
-                  color: GlassColors.heading,
+                  color: GlassColors.headingOf(context),
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Your timetable for this day will appear here.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
-                  color: GlassColors.secondaryText,
+                  color: GlassColors.secondaryTextOf(context),
                 ),
               ),
             ],
@@ -591,18 +590,18 @@ class _TimetablePageState extends State<TimetablePage> {
                 children: [
                   Text(
                     entry.subject,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
-                      color: GlassColors.heading,
+                      color: GlassColors.headingOf(context),
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     entry.time,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color: GlassColors.secondaryText,
+                      color: GlassColors.secondaryTextOf(context),
                     ),
                   ),
                 ],
@@ -644,10 +643,10 @@ class _TimetablePageState extends State<TimetablePage> {
                     Expanded(
                       child: Text(
                         entry.subject,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
-                          color: GlassColors.heading,
+                          color: GlassColors.headingOf(context),
                         ),
                       ),
                     ),
@@ -702,9 +701,9 @@ class _TimetablePageState extends State<TimetablePage> {
                   '${entry.time}'
                   '${entry.faculty != null && entry.faculty!.isNotEmpty ? ' \u2022 ${entry.faculty}' : ''}'
                   '${entry.room != null ? ' \u2022 Room ${entry.room}' : ''}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                     decoration: TextDecoration.none,
                   ),
                 ),

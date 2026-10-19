@@ -90,9 +90,9 @@ class _TeacherApprovalsViewState extends State<TeacherApprovalsView> {
 
       if (response.statusCode == 200) {
         setState(() {
-          _pendingStudents = teacherJsonList(
-            response.body,
-          ).map(PendingStudent.fromJson).toList();
+          _pendingStudents = teacherJsonList(response.body)
+              .map(PendingStudent.fromJson)
+              .toList();
           _loadError = null;
         });
       } else if (response.statusCode == 401) {
@@ -387,13 +387,13 @@ class _TeacherApprovalsViewState extends State<TeacherApprovalsView> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Flexible(
+        Flexible(
           child: Text(
             'Pending Student Registrations',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -418,9 +418,9 @@ class _TeacherApprovalsViewState extends State<TeacherApprovalsView> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: GlassColors.surface,
+            color: GlassColors.surfaceOf(context),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: GlassColors.border),
+            border: Border.all(color: GlassColors.borderOf(context)),
           ),
           child: Text(
             '${_pendingStudents.length} pending',
@@ -454,10 +454,10 @@ class _TeacherApprovalsViewState extends State<TeacherApprovalsView> {
           Text(
             _loadError!,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
           const SizedBox(height: 16),
@@ -470,10 +470,10 @@ class _TeacherApprovalsViewState extends State<TeacherApprovalsView> {
               height: 44,
               borderRadius: 12,
               borderColor: _isRefreshing
-                  ? GlassColors.disabled
+                  ? GlassColors.disabledOf(context)
                   : GlassColors.primaryBlue,
               textColor: _isRefreshing
-                  ? GlassColors.disabled
+                  ? GlassColors.disabledOf(context)
                   : GlassColors.primaryBlue,
               child: _isRefreshing
                   ? const SizedBox(
@@ -502,22 +502,25 @@ class _TeacherApprovalsViewState extends State<TeacherApprovalsView> {
           Icon(
             Icons.assignment_turned_in_rounded,
             size: 48,
-            color: GlassColors.secondaryText.withValues(alpha: 0.5),
+            color: GlassColors.secondaryTextOf(context).withValues(alpha: 0.5),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'No Pending Registrations',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'All student registrations have been processed.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: GlassColors.secondaryText),
+            style: TextStyle(
+              fontSize: 14,
+              color: GlassColors.secondaryTextOf(context),
+            ),
           ),
         ],
       ),
@@ -542,10 +545,10 @@ class _TeacherApprovalsViewState extends State<TeacherApprovalsView> {
         children: [
           Text(
             student.name,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 18,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
           const SizedBox(height: 10),
@@ -559,19 +562,19 @@ class _TeacherApprovalsViewState extends State<TeacherApprovalsView> {
                     width: 96,
                     child: Text(
                       entry.key,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: GlassColors.secondaryText,
+                        color: GlassColors.secondaryTextOf(context),
                       ),
                     ),
                   ),
                   Expanded(
                     child: Text(
                       entry.value,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: GlassColors.heading,
+                        color: GlassColors.headingOf(context),
                       ),
                     ),
                   ),
@@ -601,7 +604,9 @@ class _TeacherApprovalsViewState extends State<TeacherApprovalsView> {
               const SizedBox(width: 12),
               Expanded(
                 child: GlassButton(
-                  onPressed: isProcessing ? null : () => _rejectStudent(student),
+                  onPressed: isProcessing
+                      ? null
+                      : () => _rejectStudent(student),
                   height: 46,
                   borderRadius: 12,
                   color: GlassColors.error,
@@ -643,9 +648,7 @@ class TeacherApprovalsPage extends StatelessWidget {
     final ownedClient = client == null ? http.Client() : null;
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(
-        title: Text('Student Registration Approvals'),
-      ),
+      appBar: const GlassAppBar(title: Text('Student Registration Approvals')),
       body: GlassBackground(
         child: SafeArea(
           child: TeacherApprovalsView(

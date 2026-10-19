@@ -40,8 +40,10 @@ class _AnimatedCountBadgeState extends State<AnimatedCountBadge>
     with SingleTickerProviderStateMixin {
   /// Unbounded: a spring is allowed to pass 1.0, which is exactly what makes
   /// the overshoot visible. A bounded controller would clamp it away.
-  late final AnimationController _controller =
-      AnimationController.unbounded(vsync: this, value: 1);
+  late final AnimationController _controller = AnimationController.unbounded(
+    vsync: this,
+    value: 1,
+  );
 
   bool _reducedMotion = false;
 
@@ -87,9 +89,7 @@ class _AnimatedCountBadgeState extends State<AnimatedCountBadge>
       return;
     }
     _controller.value = 0;
-    _controller.animateWith(
-      SpringSimulation(_spring, 0, 1, 0),
-    );
+    _controller.animateWith(SpringSimulation(_spring, 0, 1, 0));
   }
 
   @override
@@ -148,10 +148,10 @@ class _BadgePill extends StatelessWidget {
         decoration: BoxDecoration(
           color: GlassColors.primaryBlue,
           borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: GlassColors.surface, width: 1.5),
+          border: Border.all(color: GlassColors.surfaceOf(context), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: GlassColors.heading.withValues(alpha: 0.18),
+              color: GlassColors.headingOf(context).withValues(alpha: 0.18),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),

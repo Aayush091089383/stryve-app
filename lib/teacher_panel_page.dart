@@ -205,9 +205,9 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
 
       if (response.statusCode == 200) {
         setState(() {
-          _assignments = teacherJsonList(
-            response.body,
-          ).map(TeachingAssignment.fromJson).toList();
+          _assignments = teacherJsonList(response.body)
+              .map(TeachingAssignment.fromJson)
+              .toList();
         });
       } else if (response.statusCode == 401) {
         await _handleSessionExpired();
@@ -231,9 +231,9 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
 
       if (response.statusCode == 200) {
         setState(() {
-          _claims = teacherJsonList(
-            response.body,
-          ).map(FreePeriodClaim.fromJson).toList();
+          _claims = teacherJsonList(response.body)
+              .map(FreePeriodClaim.fromJson)
+              .toList();
         });
       } else if (response.statusCode == 401) {
         await _handleSessionExpired();
@@ -251,7 +251,9 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
     try {
       final pending = await _client
           .get(
-            Uri.parse('${Environment.backendUrl}/teacher/registrations/pending'),
+            Uri.parse(
+              '${Environment.backendUrl}/teacher/registrations/pending',
+            ),
             headers: teacherHeaders(token),
           )
           .timeout(kTeacherRequestTimeout);
@@ -276,7 +278,9 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
     try {
       final pending = await _client
           .get(
-            Uri.parse('${Environment.backendUrl}/teacher/registrations/pending'),
+            Uri.parse(
+              '${Environment.backendUrl}/teacher/registrations/pending',
+            ),
             headers: teacherHeaders(token),
           )
           .timeout(kTeacherRequestTimeout);
@@ -358,9 +362,8 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
 
   void _showSnackBar(String message, {Color? color}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
   void _openApprovals() {
@@ -610,19 +613,19 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                               children: [
                                 Text(
                                   assignment.subject,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
-                                    color: GlassColors.heading,
+                                    color: GlassColors.headingOf(context),
                                   ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   '${assignment.slotLabel} • '
                                   '${assignment.batchLabel}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13,
-                                    color: GlassColors.secondaryText,
+                                    color: GlassColors.secondaryTextOf(context),
                                   ),
                                 ),
                               ],
@@ -661,28 +664,30 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Your claimed periods',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: GlassColors.heading,
+                          color: GlassColors.headingOf(context),
                         ),
                       ),
                       const SizedBox(height: 8),
-                      ..._claims.take(4).map(
-                        (claim) => Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                            '${claim.claimDate} • ${claim.time} • '
-                            '${claim.batchLabel}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: GlassColors.secondaryText,
+                      ..._claims
+                          .take(4)
+                          .map(
+                            (claim) => Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(
+                                '${claim.claimDate} • ${claim.time} • '
+                                '${claim.batchLabel}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: GlassColors.secondaryTextOf(context),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -735,10 +740,10 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                               children: [
                                 Text(
                                   assignment.subject,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: GlassColors.heading,
+                                    color: GlassColors.headingOf(context),
                                   ),
                                 ),
                                 const SizedBox(height: 2),
@@ -746,9 +751,9 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                                   '${assignment.dayLabel} • '
                                   '${assignment.slotLabel} • '
                                   '${assignment.batchLabel}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
-                                    color: GlassColors.secondaryText,
+                                    color: GlassColors.secondaryTextOf(context),
                                   ),
                                 ),
                               ],
@@ -758,9 +763,9 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                             assignment.source == 'timetable'
                                 ? 'timetable'
                                 : 'admin',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: GlassColors.disabled,
+                              color: GlassColors.disabledOf(context),
                             ),
                           ),
                         ],
@@ -892,19 +897,19 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
               children: [
                 Text(
                   _teacher?.name ?? (isAdmin ? 'Administrator' : 'Teacher'),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   _teacher?.email ?? '',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -924,14 +929,12 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color:
-                  (isAdmin ? GlassColors.warning : GlassColors.primaryBlue)
-                      .withValues(alpha: 0.18),
+              color: (isAdmin ? GlassColors.warning : GlassColors.primaryBlue)
+                  .withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color:
-                    (isAdmin ? GlassColors.warning : GlassColors.primaryBlue)
-                        .withValues(alpha: 0.4),
+                color: (isAdmin ? GlassColors.warning : GlassColors.primaryBlue)
+                    .withValues(alpha: 0.4),
               ),
             ),
             child: Text(
@@ -939,9 +942,7 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isAdmin
-                    ? GlassColors.warning
-                    : GlassColors.primaryBlue,
+                color: isAdmin ? GlassColors.warning : GlassColors.primaryBlue,
               ),
             ),
           ),
@@ -983,26 +984,26 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                   ),
                 ),
               ],
             ),
           ),
-          const Icon(
+          Icon(
             Icons.chevron_right_rounded,
-            color: GlassColors.secondaryText,
+            color: GlassColors.secondaryTextOf(context),
           ),
         ],
       ),
@@ -1024,7 +1025,7 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 22, color: GlassColors.secondaryText),
+          Icon(icon, size: 22, color: GlassColors.secondaryTextOf(context)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1032,18 +1033,18 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   body,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                   ),
                 ),
               ],
@@ -1073,10 +1074,10 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: GlassColors.heading,
+                color: GlassColors.headingOf(context),
               ),
             ),
           ),
@@ -1103,18 +1104,18 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
           const SizedBox(height: 10),
           Text(
             value == null ? '—' : '$value',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: GlassColors.secondaryText,
+              color: GlassColors.secondaryTextOf(context),
             ),
           ),
         ],
@@ -1145,10 +1146,10 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.bold,
-        color: GlassColors.heading,
+        color: GlassColors.headingOf(context),
       ),
     );
   }

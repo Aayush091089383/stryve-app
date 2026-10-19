@@ -17,6 +17,27 @@ class GlassColors {
   static const Color error = Color(0xFFE74C3C);
   static const Color success = Color(0xFF10B981);
   static const Color warning = Color(0xFFF59E0B);
+
+  // Dark palette (solid tints; no backdrop blur in dark mode).
+  static const Color darkBackground = Color(0xFF121212);
+  static const Color darkSurface = Color(0xFF1E1E24);
+  static const Color darkBorder = Color(0xFF333333);
+  static const Color darkText = Color(0xFFE0E0E0);
+
+  static Color headingOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? darkText : heading;
+  static Color secondaryTextOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFFA9B7C6)
+      : secondaryText;
+  static Color disabledOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFF7A8794)
+      : disabled;
+  static Color surfaceOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? darkSurface : surface;
+  static Color borderOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? darkBorder : border;
 }
 
 /// Marks the content painted *on top of* a glass surface.
@@ -93,23 +114,37 @@ class GlassContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final effectiveBorderRadius =
         borderRadiusGeometry ?? BorderRadius.circular(borderRadius);
     final effectiveBorderColor =
-        borderColor ?? GlassColors.border.withValues(alpha: borderOpacity);
+        borderColor ??
+        (isDark
+            ? GlassColors.darkBorder.withValues(alpha: borderOpacity)
+            : GlassColors.border.withValues(alpha: borderOpacity));
     final effectiveShadowColor =
-        shadowColor ?? GlassColors.heading.withValues(alpha: 0.08);
+        shadowColor ??
+        (isDark
+            ? Colors.black.withValues(alpha: 0.35)
+            : GlassColors.heading.withValues(alpha: 0.08));
+
+    // Light mode keeps the translucent gradient. Dark mode paints one solid
+    // tint: a dark gradient at these alphas is visually indistinguishable from
+    // a flat colour, but it still costs a shader fill on every surface.
     final effectiveGradient =
         gradient ??
-        LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            GlassColors.surface.withValues(alpha: opacity + 0.1),
-            GlassColors.surface.withValues(alpha: opacity),
-            GlassColors.surface.withValues(alpha: opacity + 0.05),
-          ],
-        );
+        (isDark
+            ? null
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  GlassColors.surface.withValues(alpha: opacity + 0.1),
+                  GlassColors.surface.withValues(alpha: opacity),
+                  GlassColors.surface.withValues(alpha: opacity + 0.05),
+                ],
+              ));
+    final effectiveFill = isDark ? GlassColors.darkSurface : null;
 
     // Sibling glass surfaces - the cards of one scrolling list - can share a
     // single backdrop blur instead of each filtering the backdrop again. A
@@ -133,6 +168,7 @@ class GlassContainer extends StatelessWidget {
         margin: margin,
         decoration: BoxDecoration(
           borderRadius: effectiveBorderRadius,
+          color: effectiveFill,
           gradient: effectiveGradient,
           // A transparent border is not the same as no border: it still takes
           // 1px of the surface, insets the gradient by it and leaves a ring
@@ -155,7 +191,9 @@ class GlassContainer extends StatelessWidget {
                     spreadRadius: -2,
                   ),
                   BoxShadow(
-                    color: GlassColors.heading.withValues(alpha: 0.04),
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.25)
+                        : GlassColors.heading.withValues(alpha: 0.04),
                     blurRadius: 40,
                     offset: const Offset(0, 8),
                     spreadRadius: -4,
@@ -191,7 +229,10 @@ class GlassContainer extends StatelessWidget {
     //
     // `useBlur: false` takes the same shortcut for a different reason: the
     // page has asked for a flat tint, so there is no filter to run at all.
-    final glassWidget = isNested || !useBlur
+    // Dark mode never runs the backdrop filter: the surfaces are opaque solid
+    // tints, so filtering what is behind them would be invisible work on every
+    // frame - exactly the cost the dark theme exists to avoid.
+    final glassWidget = isNested || !useBlur || isDark
         ? surface
         : ClipRRect(
             clipBehavior: useSaveLayer
@@ -205,9 +246,7 @@ class GlassContainer extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: effectiveBorderRadius
                       .resolve(TextDirection.ltr)
-                      .add(
-                        const BorderRadius.all(Radius.circular(2.0)),
-                      ),
+                      .add(const BorderRadius.all(Radius.circular(2.0))),
                 ),
               ),
               child: BackdropFilter.grouped(filter: blur, child: surface),
@@ -339,6 +378,15 @@ class GlassBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Dark: one flat colour for the whole backdrop. The light gradient and the
+    // decorative pattern are both tuned for a white base and would only muddy
+    // a near-black one, so neither is painted.
+    if (isDark) {
+      return ColoredBox(color: GlassColors.darkBackground, child: child);
+    }
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -402,6 +450,7 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AppBar(
       title: title,
       leading: leading,
@@ -418,10 +467,14 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       // filter is gone; the bottom hairline and the bar's geometry stay.
       flexibleSpace: Container(
         decoration: BoxDecoration(
-          color: GlassColors.surface.withValues(alpha: 0.85),
+          color: isDark
+              ? GlassColors.darkSurface
+              : GlassColors.surface.withValues(alpha: 0.85),
           border: Border(
             bottom: BorderSide(
-              color: GlassColors.border.withValues(alpha: 0.5),
+              color: isDark
+                  ? GlassColors.darkBorder
+                  : GlassColors.border.withValues(alpha: 0.5),
               width: 1,
             ),
           ),
@@ -475,22 +528,22 @@ class GlassTextField extends StatelessWidget {
         obscureText: obscureText,
         textCapitalization: textCapitalization,
         onChanged: onChanged,
-        style: const TextStyle(color: GlassColors.heading, fontSize: 16),
+        style: TextStyle(color: GlassColors.headingOf(context), fontSize: 16),
         decoration: InputDecoration(
           labelText: labelText,
           hintText: hintText,
           prefixIcon: prefixIcon != null
               ? IconTheme(
-                  data: const IconThemeData(
-                    color: GlassColors.secondaryText,
+                  data: IconThemeData(
+                    color: GlassColors.secondaryTextOf(context),
                     size: 22,
                   ),
                   child: prefixIcon!,
                 )
               : null,
           suffixIcon: suffixIcon,
-          labelStyle: const TextStyle(color: GlassColors.secondaryText),
-          hintStyle: const TextStyle(color: GlassColors.disabled),
+          labelStyle: TextStyle(color: GlassColors.secondaryTextOf(context)),
+          hintStyle: TextStyle(color: GlassColors.disabledOf(context)),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,

@@ -1,29 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import 'role_selection_page.dart';
 import 'home_page.dart';
 import 'teacher_panel_page.dart';
 import 'services/auth_service.dart';
 import 'services/teacher_auth_service.dart';
+import 'utils/glass_container.dart';
+import 'utils/theme_provider.dart';
 
 export 'role_selection_page.dart';
 export 'home_page.dart';
 export 'teacher_panel_page.dart';
+
+// System bars stay edge-to-edge and transparent in both themes; only the
+// icon brightness flips. Declared once here and applied per theme below.
+const SystemUiOverlayStyle _lightOverlay = SystemUiOverlayStyle(
+  statusBarColor: Colors.transparent,
+  statusBarIconBrightness: Brightness.dark,
+  statusBarBrightness: Brightness.light,
+  systemNavigationBarColor: Colors.transparent,
+  systemNavigationBarIconBrightness: Brightness.dark,
+  systemNavigationBarDividerColor: Colors.transparent,
+);
+
+const SystemUiOverlayStyle _darkOverlay = SystemUiOverlayStyle(
+  statusBarColor: Colors.transparent,
+  statusBarIconBrightness: Brightness.light,
+  statusBarBrightness: Brightness.dark,
+  systemNavigationBarColor: Colors.transparent,
+  systemNavigationBarIconBrightness: Brightness.light,
+  systemNavigationBarDividerColor: Colors.transparent,
+);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Use edge-to-edge with light status/navigation bars matching glassmorphism design
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.dark,
-    statusBarBrightness: Brightness.light,
-    systemNavigationBarColor: Colors.transparent,
-    systemNavigationBarIconBrightness: Brightness.dark,
-    systemNavigationBarDividerColor: Colors.transparent,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(_lightOverlay);
 
   runApp(const StryveApp());
 }
@@ -31,19 +47,52 @@ void main() {
 class StryveApp extends StatelessWidget {
   const StryveApp({super.key});
 
+  /// One transition for every route, in both themes. Every screen is pushed
+  /// with MaterialPageRoute, so this changes the motion without touching a
+  /// single Navigator call site.
+  static const PageTransitionsTheme _pageTransitions = PageTransitionsTheme(
+    builders: <TargetPlatform, PageTransitionsBuilder>{
+      TargetPlatform.android: _FadeSlidePageTransitionsBuilder(),
+      TargetPlatform.iOS: _FadeSlidePageTransitionsBuilder(),
+      TargetPlatform.linux: _FadeSlidePageTransitionsBuilder(),
+      TargetPlatform.macOS: _FadeSlidePageTransitionsBuilder(),
+      TargetPlatform.windows: _FadeSlidePageTransitionsBuilder(),
+      TargetPlatform.fuchsia: _FadeSlidePageTransitionsBuilder(),
+    },
+  );
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Stryve',
+    return ChangeNotifierProvider<ThemeProvider>(
+      create: (_) => ThemeProvider(),
+      child: Consumer<ThemeProvider>(
+        builder: (context, theme, _) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: 'Stryve',
 
-      theme: _buildGlassmorphismTheme(),
+            theme: _buildGlassmorphismTheme(),
+            darkTheme: _buildDarkTheme(),
+            // In-app choice only: never follows the system setting, so the
+            // switch in the Profile tab is always the single source of truth.
+            themeMode: theme.isDarkMode ? ThemeMode.dark : ThemeMode.light,
 
-      scrollBehavior: const MaterialScrollBehavior().copyWith(
-        overscroll: false,
+            scrollBehavior: const MaterialScrollBehavior().copyWith(
+              overscroll: false,
+            ),
+
+            // The status/navigation icons painted dark at startup would be
+            // invisible on the dark backdrop, so every screen - including the
+            // ones without an AppBar - declares the right brightness here.
+            builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+              value: theme.isDarkMode ? _darkOverlay : _lightOverlay,
+              child: child ?? const SizedBox.shrink(),
+            ),
+
+            home: const AuthCheckPage(),
+          );
+        },
       ),
-
-      home: const AuthCheckPage(),
     );
   }
 
@@ -77,20 +126,7 @@ class StryveApp extends StatelessWidget {
         error: error,
         onError: Colors.white,
       ),
-      // One transition for every route. Every screen is pushed with
-      // MaterialPageRoute, so this changes the motion without touching a
-      // single Navigator call site: route history, back handling, deep links
-      // and the auth/role redirects all behave exactly as before.
-      pageTransitionsTheme: const PageTransitionsTheme(
-        builders: <TargetPlatform, PageTransitionsBuilder>{
-          TargetPlatform.android: _FadeSlidePageTransitionsBuilder(),
-          TargetPlatform.iOS: _FadeSlidePageTransitionsBuilder(),
-          TargetPlatform.linux: _FadeSlidePageTransitionsBuilder(),
-          TargetPlatform.macOS: _FadeSlidePageTransitionsBuilder(),
-          TargetPlatform.windows: _FadeSlidePageTransitionsBuilder(),
-          TargetPlatform.fuchsia: _FadeSlidePageTransitionsBuilder(),
-        },
-      ),
+      pageTransitionsTheme: _pageTransitions,
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
@@ -137,7 +173,10 @@ class StryveApp extends StatelessWidget {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: primaryBlue,
-          side: BorderSide(color: primaryBlue.withValues(alpha: 0.5), width: 1.5),
+          side: BorderSide(
+            color: primaryBlue.withValues(alpha: 0.5),
+            width: 1.5,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -238,10 +277,7 @@ class StryveApp extends StatelessWidget {
           fontSize: 20,
           fontWeight: FontWeight.bold,
         ),
-        contentTextStyle: TextStyle(
-          color: secondaryText,
-          fontSize: 16,
-        ),
+        contentTextStyle: TextStyle(color: secondaryText, fontSize: 16),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: surface.withValues(alpha: 0.95),
@@ -278,44 +314,287 @@ class StryveApp extends StatelessWidget {
           fontSize: 16,
           fontWeight: FontWeight.w500,
         ),
-        subtitleTextStyle: TextStyle(
-          color: secondaryText,
-          fontSize: 14,
-        ),
+        subtitleTextStyle: TextStyle(color: secondaryText, fontSize: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         tileColor: surface.withValues(alpha: 0.5),
         selectedTileColor: primaryBlue.withValues(alpha: 0.1),
       ),
       textTheme: TextTheme(
-        displayLarge: TextStyle(
-          color: heading,
-          fontWeight: FontWeight.bold,
-        ),
-        displayMedium: TextStyle(
-          color: heading,
-          fontWeight: FontWeight.bold,
-        ),
-        displaySmall: TextStyle(
-          color: heading,
-          fontWeight: FontWeight.bold,
-        ),
-        headlineLarge: TextStyle(
-          color: heading,
-          fontWeight: FontWeight.bold,
-        ),
-        headlineMedium: TextStyle(
-          color: heading,
-          fontWeight: FontWeight.bold,
-        ),
-        headlineSmall: TextStyle(
-          color: heading,
-          fontWeight: FontWeight.w600,
-        ),
+        displayLarge: TextStyle(color: heading, fontWeight: FontWeight.bold),
+        displayMedium: TextStyle(color: heading, fontWeight: FontWeight.bold),
+        displaySmall: TextStyle(color: heading, fontWeight: FontWeight.bold),
+        headlineLarge: TextStyle(color: heading, fontWeight: FontWeight.bold),
+        headlineMedium: TextStyle(color: heading, fontWeight: FontWeight.bold),
+        headlineSmall: TextStyle(color: heading, fontWeight: FontWeight.w600),
         titleLarge: TextStyle(color: heading, fontWeight: FontWeight.w600),
-        titleMedium: TextStyle(
-          color: heading,
+        titleMedium: TextStyle(color: heading, fontWeight: FontWeight.w500),
+        titleSmall: TextStyle(
+          color: secondaryText,
           fontWeight: FontWeight.w500,
         ),
+        bodyLarge: TextStyle(color: heading),
+        bodyMedium: TextStyle(color: secondaryText),
+        bodySmall: TextStyle(color: disabled),
+        labelLarge: TextStyle(color: heading, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  /// Dark counterpart of the glass theme.
+  ///
+  /// Surfaces are solid tints instead of translucent glass: a dark backdrop
+  /// blur is both expensive (a full-screen filter on every card) and barely
+  /// visible, so dark mode deliberately drops it and keeps the layout, radii
+  /// and elevation identical. Colours come from [GlassColors] so a screen that
+  /// reads its palette through the theme and a screen that hardcodes a
+  /// `GlassColors.*Of(context)` value cannot drift apart.
+  ThemeData _buildDarkTheme() {
+    const Color primaryBlue = GlassColors.primaryBlue;
+    const Color background = GlassColors.darkBackground;
+    const Color surface = GlassColors.darkSurface;
+    const Color border = GlassColors.darkBorder;
+    const Color heading = GlassColors.darkText;
+    const Color secondaryText = Color(0xFFA9B7C6);
+    const Color disabled = Color(0xFF7A8794);
+    const Color error = GlassColors.error;
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: background,
+      colorScheme: const ColorScheme.dark(
+        primary: primaryBlue,
+        secondary: Color(0xFF5B8DEF),
+        tertiary: heading,
+        surface: surface,
+        onPrimary: Colors.white,
+        onSecondary: Colors.white,
+        onSurface: heading,
+        outline: border,
+        outlineVariant: Color(0xFF262631),
+        shadow: Colors.black,
+        error: error,
+        onError: Colors.white,
+      ),
+      pageTransitionsTheme: _pageTransitions,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        titleTextStyle: TextStyle(
+          color: heading,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
+        iconTheme: IconThemeData(color: heading),
+        actionsIconTheme: IconThemeData(color: heading),
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness: Brightness.light,
+          systemNavigationBarDividerColor: Colors.transparent,
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shadowColor: Colors.black.withValues(alpha: 0.4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: border.withValues(alpha: 0.8), width: 1),
+        ),
+        margin: const EdgeInsets.all(8),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryBlue,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shadowColor: primaryBlue.withValues(alpha: 0.3),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: primaryBlue,
+          side: BorderSide(
+            color: primaryBlue.withValues(alpha: 0.7),
+            width: 1.5,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: const Color(0xFF7BA6F5),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: surface.withValues(alpha: 0.7),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
+        labelStyle: const TextStyle(color: secondaryText),
+        hintStyle: const TextStyle(color: disabled),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: border.withValues(alpha: 0.8)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: border.withValues(alpha: 0.8)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: primaryBlue, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: error, width: 1.5),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: border.withValues(alpha: 0.4)),
+        ),
+        prefixIconColor: secondaryText,
+        suffixIconColor: secondaryText,
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: surface.withValues(alpha: 0.95),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        height: 72,
+        labelTextStyle: WidgetStateProperty.resolveWith<TextStyle>(
+          (states) => TextStyle(
+            fontSize: 12,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w600
+                : FontWeight.w400,
+            color: states.contains(WidgetState.selected)
+                ? const Color(0xFF7BA6F5)
+                : secondaryText,
+          ),
+        ),
+        indicatorColor: primaryBlue.withValues(alpha: 0.28),
+        iconTheme: WidgetStateProperty.resolveWith<IconThemeData>(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? const Color(0xFF7BA6F5)
+                : secondaryText,
+            size: 24,
+          ),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith<Color>(
+          (states) => states.contains(WidgetState.selected)
+              ? Colors.white
+              : const Color(0xFF8A94A6),
+        ),
+        trackColor: WidgetStateProperty.resolveWith<Color>(
+          (states) => states.contains(WidgetState.selected)
+              ? primaryBlue
+              : const Color(0xFF3A3A44),
+        ),
+        trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: primaryBlue.withValues(alpha: 0.18),
+        disabledColor: primaryBlue.withValues(alpha: 0.08),
+        selectedColor: primaryBlue.withValues(alpha: 0.3),
+        secondarySelectedColor: primaryBlue.withValues(alpha: 0.35),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        labelStyle: const TextStyle(color: heading, fontSize: 12),
+        secondaryLabelStyle: const TextStyle(
+          color: secondaryText,
+          fontSize: 12,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: border.withValues(alpha: 0.8)),
+        ),
+        side: BorderSide(color: border.withValues(alpha: 0.6)),
+        brightness: Brightness.dark,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 24,
+        shadowColor: Colors.black.withValues(alpha: 0.5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: border.withValues(alpha: 0.9), width: 1),
+        ),
+        titleTextStyle: const TextStyle(
+          color: heading,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
+        contentTextStyle: const TextStyle(color: secondaryText, fontSize: 16),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 24,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        modalBackgroundColor: surface,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: const Color(0xFF2A2A33),
+        contentTextStyle: const TextStyle(color: heading, fontSize: 14),
+        actionTextColor: const Color(0xFF7BA6F5),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: border.withValues(alpha: 0.6)),
+        ),
+        elevation: 8,
+      ),
+      dividerTheme: DividerThemeData(
+        color: border.withValues(alpha: 0.6),
+        thickness: 1,
+        space: 1,
+      ),
+      listTileTheme: ListTileThemeData(
+        iconColor: const Color(0xFF7BA6F5),
+        textColor: heading,
+        titleTextStyle: const TextStyle(
+          color: heading,
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+        ),
+        subtitleTextStyle: const TextStyle(color: secondaryText, fontSize: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        tileColor: surface.withValues(alpha: 0.6),
+        selectedTileColor: primaryBlue.withValues(alpha: 0.2),
+      ),
+      textTheme: const TextTheme(
+        displayLarge: TextStyle(color: heading, fontWeight: FontWeight.bold),
+        displayMedium: TextStyle(color: heading, fontWeight: FontWeight.bold),
+        displaySmall: TextStyle(color: heading, fontWeight: FontWeight.bold),
+        headlineLarge: TextStyle(color: heading, fontWeight: FontWeight.bold),
+        headlineMedium: TextStyle(color: heading, fontWeight: FontWeight.bold),
+        headlineSmall: TextStyle(color: heading, fontWeight: FontWeight.w600),
+        titleLarge: TextStyle(color: heading, fontWeight: FontWeight.w600),
+        titleMedium: TextStyle(color: heading, fontWeight: FontWeight.w500),
         titleSmall: TextStyle(
           color: secondaryText,
           fontWeight: FontWeight.w500,
@@ -380,8 +659,12 @@ class _FadeSlidePageTransitionsBuilder extends PageTransitionsBuilder {
 }
 
 class AuthCheckPage extends StatefulWidget {
-  const AuthCheckPage({super.key, this.studentAuthService, this.teacherAuthService});
-  
+  const AuthCheckPage({
+    super.key,
+    this.studentAuthService,
+    this.teacherAuthService,
+  });
+
   final AuthService? studentAuthService;
   final TeacherAuthService? teacherAuthService;
 
@@ -426,7 +709,8 @@ class _AuthCheckPageState extends State<AuthCheckPage> {
     }
 
     // Check teacher/admin auth
-    final teacherAuthService = widget.teacherAuthService ?? TeacherAuthService();
+    final teacherAuthService =
+        widget.teacherAuthService ?? TeacherAuthService();
     final teacher = await teacherAuthService.getTeacher();
 
     if (!mounted) return;

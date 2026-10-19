@@ -102,8 +102,9 @@ class _TasksPageState extends State<TasksPage> {
       } else {
         final uri = Uri.parse('${Environment.backendUrl}/assignments');
         final headers = {'Authorization': 'Bearer ${widget.student.token}'};
-        final response = await (widget.client?.get(uri, headers: headers) ??
-            http.get(uri, headers: headers));
+        final response =
+            await (widget.client?.get(uri, headers: headers) ??
+                http.get(uri, headers: headers));
 
         if (response.statusCode == 401) {
           final authService = AuthService();
@@ -195,9 +196,7 @@ class _TasksContent extends StatelessWidget {
       child: isLoading
           ? const Center(
               key: ValueKey('tasks-loading'),
-              child: CircularProgressIndicator(
-                color: GlassColors.primaryBlue,
-              ),
+              child: CircularProgressIndicator(color: GlassColors.primaryBlue),
             )
           : errorMessage != null
           ? KeyedSubtree(
@@ -239,8 +238,8 @@ class _TasksContent extends StatelessWidget {
               Text(
                 errorMessage!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: GlassColors.secondaryText,
+                style: TextStyle(
+                  color: GlassColors.secondaryTextOf(context),
                   fontSize: 15,
                 ),
               ),
@@ -265,12 +264,12 @@ class _TasksContent extends StatelessWidget {
     final double bottomPadding = media.padding.bottom + 76 + 8;
 
     final pendingWidgets = <Widget>[
-      const Text(
+      Text(
         'Pending Tasks',
         style: TextStyle(
           fontSize: 22,
           fontWeight: FontWeight.bold,
-          color: GlassColors.heading,
+          color: GlassColors.headingOf(context),
         ),
       ),
       const SizedBox(height: 16),
@@ -279,6 +278,7 @@ class _TasksContent extends StatelessWidget {
     if (assignments.isEmpty) {
       pendingWidgets.add(
         _buildEmptyState(
+          context: context,
           icon: Icons.assignment_turned_in_rounded,
           title: 'No pending tasks',
           subtitle:
@@ -303,16 +303,17 @@ class _TasksContent extends StatelessWidget {
 
     pendingWidgets.addAll([
       const SizedBox(height: 28),
-      const Text(
+      Text(
         'Completed',
         style: TextStyle(
           fontSize: 22,
           fontWeight: FontWeight.bold,
-          color: GlassColors.heading,
+          color: GlassColors.headingOf(context),
         ),
       ),
       const SizedBox(height: 16),
       _buildEmptyState(
+        context: context,
         icon: Icons.check_circle_outline_rounded,
         title: 'No completed tasks',
         subtitle: 'Completed assignments will appear here.',
@@ -326,6 +327,7 @@ class _TasksContent extends StatelessWidget {
   }
 
   Widget _buildEmptyState({
+    required BuildContext context,
     required IconData icon,
     required String title,
     required String subtitle,
@@ -343,7 +345,11 @@ class _TasksContent extends StatelessWidget {
             blurStrength: 15,
             opacity: 0.6,
             borderOpacity: 0.3,
-            child: Icon(icon, size: 26, color: GlassColors.secondaryText),
+            child: Icon(
+              icon,
+              size: 26,
+              color: GlassColors.secondaryTextOf(context),
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -352,18 +358,18 @@ class _TasksContent extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                   ),
                 ),
               ],

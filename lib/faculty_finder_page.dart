@@ -214,9 +214,9 @@ class _FacultyFinderPageState extends State<FacultyFinderPage> {
                     decoration: InputDecoration(
                       border: InputBorder.none,
                       hintText: 'Search by name, code or subject',
-                      prefixIcon: const Icon(
+                      prefixIcon: Icon(
                         Icons.search_rounded,
-                        color: GlassColors.secondaryText,
+                        color: GlassColors.secondaryTextOf(context),
                       ),
                       suffixIcon: _query.isEmpty
                           ? null
@@ -265,9 +265,9 @@ class _FacultyFinderPageState extends State<FacultyFinderPage> {
                 Text(
                   _errorMessage!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -297,10 +297,10 @@ class _FacultyFinderPageState extends State<FacultyFinderPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.person_search_rounded,
                   size: 44,
-                  color: GlassColors.disabled,
+                  color: GlassColors.disabledOf(context),
                 ),
                 const SizedBox(height: 14),
                 Text(
@@ -308,20 +308,20 @@ class _FacultyFinderPageState extends State<FacultyFinderPage> {
                       ? 'No faculty records available yet'
                       : 'No faculty member matches "$_query"',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Only official records are shown. If the directory is empty, '
                   'the faculty source data still has to be provided.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                   ),
                 ),
               ],
@@ -369,18 +369,18 @@ class _FacultyFinderPageState extends State<FacultyFinderPage> {
                     children: [
                       Text(
                         record.displayName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: GlassColors.heading,
+                          color: GlassColors.headingOf(context),
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         record.roleNote ?? 'Faculty code ${record.shortCode}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: GlassColors.secondaryText,
+                          color: GlassColors.secondaryTextOf(context),
                         ),
                       ),
                     ],
@@ -402,12 +402,12 @@ class _FacultyFinderPageState extends State<FacultyFinderPage> {
             _buildRow('Phone', record.phone),
             if (record.subjects.isNotEmpty) ...[
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Subjects',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: GlassColors.heading,
+                  color: GlassColors.headingOf(context),
                 ),
               ),
               const SizedBox(height: 6),
@@ -425,17 +425,18 @@ class _FacultyFinderPageState extends State<FacultyFinderPage> {
                           color: GlassColors.primaryBlue.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: GlassColors.border.withValues(alpha: 0.6),
+                            color: GlassColors.borderOf(context)
+                                .withValues(alpha: 0.6),
                           ),
                         ),
                         child: Text(
                           subject.code == null
                               ? subject.shortName
                               : '${subject.shortName} · ${subject.code}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: GlassColors.heading,
+                            color: GlassColors.headingOf(context),
                           ),
                         ),
                       ),
@@ -462,9 +463,9 @@ class _FacultyFinderPageState extends State<FacultyFinderPage> {
             width: 96,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: GlassColors.secondaryText,
+                color: GlassColors.secondaryTextOf(context),
               ),
             ),
           ),
@@ -477,8 +478,8 @@ class _FacultyFinderPageState extends State<FacultyFinderPage> {
                     ? FontWeight.w400
                     : FontWeight.w600,
                 color: value == null || value.isEmpty
-                    ? GlassColors.disabled
-                    : GlassColors.heading,
+                    ? GlassColors.disabledOf(context)
+                    : GlassColors.headingOf(context),
               ),
             ),
           ),

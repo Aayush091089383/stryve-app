@@ -219,24 +219,24 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 24),
 
-                const Text(
+                Text(
                   'Welcome Back',
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                     letterSpacing: -0.5,
                   ),
                 ),
 
                 const SizedBox(height: 8),
 
-                const Text(
+                Text(
                   'Login to your Stryve account',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                     height: 1.5,
                   ),
                 ),
@@ -266,7 +266,7 @@ class _LoginPageState extends State<LoginPage> {
                       obscurePassword
                           ? Icons.visibility_rounded
                           : Icons.visibility_off_rounded,
-                      color: GlassColors.secondaryText,
+                      color: GlassColors.secondaryTextOf(context),
                     ),
                     onPressed: () {
                       setState(() {
@@ -449,7 +449,8 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
         // roll number is wrong.
         final data = jsonDecode(response.body);
         setState(() {
-          lookupError = data['detail'] ??
+          lookupError =
+              data['detail'] ??
               'Too many lookup attempts. Please wait a moment and try again.';
           isLookingUp = false;
         });
@@ -468,7 +469,8 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        lookupError = 'Could not connect to server. Please check your connection.';
+        lookupError =
+            'Could not connect to server. Please check your connection.';
         isLookingUp = false;
       });
     }
@@ -488,7 +490,10 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
     // BASIC VALIDATION
     // ----------------------------------------------------------
 
-    if (email.isEmpty || rollNumber.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
+    if (email.isEmpty ||
+        rollNumber.isEmpty ||
+        password.isEmpty ||
+        confirmPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in all required fields.')),
       );
@@ -498,7 +503,11 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
     // Check if roll number was looked up
     if (fetchedNameMasked == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your roll number and wait for lookup to complete.')),
+        const SnackBar(
+          content: Text(
+            'Please enter your roll number and wait for lookup to complete.',
+          ),
+        ),
       );
       return;
     }
@@ -520,15 +529,17 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
 
     if (password.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password must be at least 6 characters.')),
+        const SnackBar(
+          content: Text('Password must be at least 6 characters.'),
+        ),
       );
       return;
     }
 
     if (password != confirmPassword) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Passwords do not match.')));
       return;
     }
 
@@ -554,16 +565,20 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
 
       if (response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(data['message'] ?? 'Registration submitted for approval')),
+          SnackBar(
+            content: Text(
+              data['message'] ?? 'Registration submitted for approval',
+            ),
+          ),
         );
         if (mounted) {
           Navigator.pop(context);
         }
       } else {
-        final message = data['message'] ?? data['detail'] ?? 'Registration failed';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+        final message =
+            data['message'] ?? data['detail'] ?? 'Registration failed';
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (e) {
       if (!mounted) return;
@@ -621,12 +636,12 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
 
                 const SizedBox(height: 18),
 
-                const Text(
+                Text(
                   'Create Student Account',
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                     letterSpacing: -0.5,
                   ),
                 ),
@@ -651,7 +666,9 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
                       height: 24,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(GlassColors.primaryBlue),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          GlassColors.primaryBlue,
+                        ),
                       ),
                     ),
                   ),
@@ -683,12 +700,12 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Verified Student Details',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: GlassColors.secondaryText,
+                            color: GlassColors.secondaryTextOf(context),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -698,13 +715,13 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
                         _buildDetailRow('Division', fetchedDivision!),
                         _buildDetailRow('Batch', fetchedBatch!),
                         const SizedBox(height: 10),
-                        const Text(
+                        Text(
                           'Only the initials of your official name are shown here. '
                           'Your full name is visible to the staff who review this '
                           'request.',
                           style: TextStyle(
                             fontSize: 12,
-                            color: GlassColors.secondaryText,
+                            color: GlassColors.secondaryTextOf(context),
                           ),
                         ),
                       ],
@@ -712,7 +729,6 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
                   ),
 
                   const SizedBox(height: 20),
-
                 ],
 
                 // EMAIL
@@ -738,7 +754,7 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
                       obscurePassword
                           ? Icons.visibility_rounded
                           : Icons.visibility_off_rounded,
-                      color: GlassColors.secondaryText,
+                      color: GlassColors.secondaryTextOf(context),
                     ),
                     onPressed: () {
                       setState(() {
@@ -762,7 +778,7 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
                       obscureConfirmPassword
                           ? Icons.visibility_rounded
                           : Icons.visibility_off_rounded,
-                      color: GlassColors.secondaryText,
+                      color: GlassColors.secondaryTextOf(context),
                     ),
                     onPressed: () {
                       setState(() {
@@ -826,9 +842,9 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
             width: 100,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: GlassColors.secondaryText,
+                color: GlassColors.secondaryTextOf(context),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -836,9 +852,9 @@ class _StudentRegisterPageState extends State<StudentRegisterPage> {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: GlassColors.heading,
+                color: GlassColors.headingOf(context),
                 fontWeight: FontWeight.w600,
               ),
             ),

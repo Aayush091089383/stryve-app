@@ -102,17 +102,15 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
 
       if (response.statusCode == 200) {
         setState(() {
-          _teachers = teacherJsonList(
-            response.body,
-          ).map(TeacherAccount.fromJson).toList();
+          _teachers = teacherJsonList(response.body)
+              .map(TeacherAccount.fromJson)
+              .toList();
           _loadError = null;
         });
       } else if (response.statusCode == 401) {
         await _sessionLost();
       } else if (response.statusCode == 403) {
-        setState(
-          () => _loadError = teacherMessageFromBody(response),
-        );
+        setState(() => _loadError = teacherMessageFromBody(response));
       } else {
         setState(() => _loadError = teacherMessageFromBody(response));
       }
@@ -141,9 +139,8 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
 
   void _showSnackBar(String message, {Color? color}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
   Future<void> _openCreateTeacherDialog() async {
@@ -173,10 +170,7 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
   }
 
   /// Save the configurable permission and/or the official faculty code.
-  Future<void> _saveTeacher(
-    TeacherAccount account, {
-    bool? canApprove,
-  }) async {
+  Future<void> _saveTeacher(TeacherAccount account, {bool? canApprove}) async {
     if (_savingTeacherId != null) return;
 
     final token = await _authService.getToken();
@@ -310,13 +304,13 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
                   children: [
                     Row(
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             'Teacher Management (Admin Only)',
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: GlassColors.heading,
+                              color: GlassColors.headingOf(context),
                             ),
                           ),
                         ),
@@ -326,9 +320,11 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: GlassColors.surface,
+                            color: GlassColors.surfaceOf(context),
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: GlassColors.border),
+                            border: Border.all(
+                              color: GlassColors.borderOf(context),
+                            ),
                           ),
                           child: Text(
                             // Never report "0 accounts" when the list failed to
@@ -408,10 +404,10 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
           Text(
             _loadError!,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
           const SizedBox(height: 16),
@@ -437,23 +433,30 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
       blurStrength: 15,
       opacity: 0.6,
       borderOpacity: 0.3,
-      child: const Column(
+      child: Column(
         children: [
-          Icon(Icons.people_outline_rounded, size: 48, color: GlassColors.disabled),
+          Icon(
+            Icons.people_outline_rounded,
+            size: 48,
+            color: GlassColors.disabledOf(context),
+          ),
           SizedBox(height: 16),
           Text(
             'No Teacher Accounts',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
           SizedBox(height: 8),
           Text(
             'Accounts you create will appear here.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: GlassColors.secondaryText),
+            style: TextStyle(
+              fontSize: 13,
+              color: GlassColors.secondaryTextOf(context),
+            ),
           ),
         ],
       ),
@@ -487,10 +490,10 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
                     children: [
                       Text(
                         account.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: GlassColors.heading,
+                          color: GlassColors.headingOf(context),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -500,9 +503,9 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
                             child: Text(
                               account.email,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
-                                color: GlassColors.secondaryText,
+                                color: GlassColors.secondaryTextOf(context),
                               ),
                             ),
                           ),
@@ -534,21 +537,21 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
               onChanged: isSaving
                   ? null
                   : (value) => _setActive(account, value),
-              title: const Text(
+              title: Text(
                 'Account active',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: GlassColors.heading,
+                  color: GlassColors.headingOf(context),
                 ),
               ),
               subtitle: Text(
                 account.isActive
                     ? 'Can sign in to the teacher panel.'
                     : 'Cannot sign in until switched back on.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: GlassColors.secondaryText,
+                  color: GlassColors.secondaryTextOf(context),
                 ),
               ),
             ),
@@ -592,21 +595,21 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
               onChanged: isSaving
                   ? null
                   : (value) => _saveTeacher(account, canApprove: value),
-              title: const Text(
+              title: Text(
                 'May review student registrations',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: GlassColors.heading,
+                  color: GlassColors.headingOf(context),
                 ),
               ),
               subtitle: Text(
                 account.isAdmin
                     ? 'Administrators always may.'
                     : 'Granted explicitly to this teacher.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: GlassColors.secondaryText,
+                  color: GlassColors.secondaryTextOf(context),
                 ),
               ),
             ),
@@ -620,36 +623,35 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
   /// copyable without revealing it.
   Widget _buildPasswordRow(TeacherAccount account) {
     final password = account.plainPassword;
-    final revealed = password != null && _revealedPasswords.contains(account.id);
+    final revealed =
+        password != null && _revealedPasswords.contains(account.id);
 
     return Row(
       children: [
-        const Icon(
+        Icon(
           Icons.key_rounded,
           size: 16,
-          color: GlassColors.secondaryText,
+          color: GlassColors.secondaryTextOf(context),
         ),
         const SizedBox(width: 6),
         Expanded(
           child: password == null
-              ? const Text(
+              ? Text(
                   'No stored password for this account',
                   style: TextStyle(
                     fontSize: 13,
                     fontStyle: FontStyle.italic,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                   ),
                 )
               : Text(
-                  revealed
-                      ? 'Password: $password'
-                      : 'Password: \u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
+                  revealed ? 'Password: $password' : 'Password: \u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
                   key: ValueKey('password-${account.id}-$revealed'),
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     letterSpacing: revealed ? 0.4 : 2,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                   ),
                 ),
         ),

@@ -111,8 +111,7 @@ class _SlidingNavBarState extends State<SlidingNavBar> {
   @override
   Widget build(BuildContext context) {
     final pillColor =
-        widget.pillColor ??
-        GlassColors.primaryBlue.withValues(alpha: 0.2);
+        widget.pillColor ?? GlassColors.primaryBlue.withValues(alpha: 0.2);
 
     return SizedBox(
       height: widget.height,
@@ -129,8 +128,10 @@ class _SlidingNavBarState extends State<SlidingNavBar> {
           final duration = relaidOut ? Duration.zero : _slide;
           _slotWidth = slotWidth;
 
-          final pillWidth = (slotWidth - SlidingNavBar.pillInset * 2)
-              .clamp(0.0, slotWidth);
+          final pillWidth = (slotWidth - SlidingNavBar.pillInset * 2).clamp(
+            0.0,
+            slotWidth,
+          );
           final pillHeight = widget.height - SlidingNavBar.pillInset * 2;
 
           return Stack(
@@ -142,7 +143,8 @@ class _SlidingNavBarState extends State<SlidingNavBar> {
                 duration: duration,
                 curve: SlidingNavBar.slideCurve,
                 top: SlidingNavBar.pillInset,
-                left: widget.selectedIndex * slotWidth + SlidingNavBar.pillInset,
+                left:
+                    widget.selectedIndex * slotWidth + SlidingNavBar.pillInset,
                 width: pillWidth,
                 height: pillHeight,
                 child: DecoratedBox(
@@ -185,7 +187,7 @@ class _NavTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color target = selected
         ? GlassColors.primaryBlue
-        : GlassColors.heading.withValues(alpha: 0.6);
+        : GlassColors.headingOf(context).withValues(alpha: 0.6);
 
     return Expanded(
       child: Semantics(
@@ -207,7 +209,9 @@ class _NavTab extends StatelessWidget {
                 children: [
                   IconTheme.merge(
                     data: IconThemeData(size: 22, color: tint),
-                    child: selected ? destination.selectedIcon : destination.icon,
+                    child: selected
+                        ? destination.selectedIcon
+                        : destination.icon,
                   ),
                   const SizedBox(height: 2),
                   AnimatedDefaultTextStyle(

@@ -192,8 +192,7 @@ class _CreateTeacherDialogState extends State<_CreateTeacherDialog> {
     } catch (_) {
       if (!mounted) return;
       setState(
-        () => _errorMessage =
-            'Could not reach the Stryve server. Check your connection and try again.',
+        () => _errorMessage = 'Could not reach the Stryve server. Check your connection and try again.',
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -281,13 +280,13 @@ class _CreateTeacherDialogState extends State<_CreateTeacherDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      backgroundColor: GlassColors.surface,
-      title: const Text(
+      backgroundColor: GlassColors.surfaceOf(context),
+      title: Text(
         'Create Teacher Account',
         style: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.bold,
-          color: GlassColors.heading,
+          color: GlassColors.headingOf(context),
         ),
       ),
       content: SingleChildScrollView(
@@ -327,7 +326,7 @@ class _CreateTeacherDialogState extends State<_CreateTeacherDialog> {
                     _obscurePassword
                         ? Icons.visibility_rounded
                         : Icons.visibility_off_rounded,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                   ),
                   tooltip: _obscurePassword ? 'Show password' : 'Hide password',
                   onPressed: _isSubmitting
@@ -338,22 +337,22 @@ class _CreateTeacherDialogState extends State<_CreateTeacherDialog> {
                 ),
               ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Provide at least $kMinTeacherPasswordLength characters, '
                 'including a letter and a number. Share it with the teacher '
                 'securely - it cannot be viewed later.',
                 style: TextStyle(
                   fontSize: 12,
-                  color: GlassColors.secondaryText,
+                  color: GlassColors.secondaryTextOf(context),
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Role',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: GlassColors.heading,
+                  color: GlassColors.headingOf(context),
                 ),
               ),
               const SizedBox(height: 8),
@@ -442,16 +441,16 @@ class _CreateTeacherDialogState extends State<_CreateTeacherDialog> {
       keyboardType: keyboardType,
       textCapitalization: textCapitalization,
       validator: validator,
-      style: const TextStyle(color: GlassColors.heading, fontSize: 15),
+      style: TextStyle(color: GlassColors.headingOf(context), fontSize: 15),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: GlassColors.secondaryText),
+        prefixIcon: Icon(icon, color: GlassColors.secondaryTextOf(context)),
         suffixIcon: suffixIcon,
         border: const OutlineInputBorder(),
         focusedBorder: const OutlineInputBorder(
           borderSide: BorderSide(color: GlassColors.primaryBlue, width: 2),
         ),
-        labelStyle: const TextStyle(color: GlassColors.secondaryText),
+        labelStyle: TextStyle(color: GlassColors.secondaryTextOf(context)),
       ),
     );
   }

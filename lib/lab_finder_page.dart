@@ -176,9 +176,9 @@ class _LabFinderPageState extends State<LabFinderPage> {
                     decoration: InputDecoration(
                       border: InputBorder.none,
                       hintText: 'Search by laboratory or room code',
-                      prefixIcon: const Icon(
+                      prefixIcon: Icon(
                         Icons.search_rounded,
-                        color: GlassColors.secondaryText,
+                        color: GlassColors.secondaryTextOf(context),
                       ),
                       suffixIcon: _query.isEmpty
                           ? null
@@ -227,9 +227,9 @@ class _LabFinderPageState extends State<LabFinderPage> {
                 Text(
                   _errorMessage!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -259,10 +259,10 @@ class _LabFinderPageState extends State<LabFinderPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.science_outlined,
                   size: 44,
-                  color: GlassColors.disabled,
+                  color: GlassColors.disabledOf(context),
                 ),
                 const SizedBox(height: 14),
                 Text(
@@ -270,21 +270,21 @@ class _LabFinderPageState extends State<LabFinderPage> {
                       ? 'No laboratory locations recorded yet'
                       : 'No room matches "$_query"',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Room numbers, blocks and floors come from the department. '
                   'Until they are provided, Stryve shows nothing rather '
                   'than a guessed location.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                   ),
                 ),
               ],
@@ -335,18 +335,18 @@ class _LabFinderPageState extends State<LabFinderPage> {
                     children: [
                       Text(
                         room.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: GlassColors.heading,
+                          color: GlassColors.headingOf(context),
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         room.kind == 'laboratory' ? 'Laboratory' : 'Classroom',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: GlassColors.secondaryText,
+                          color: GlassColors.secondaryTextOf(context),
                         ),
                       ),
                     ],
@@ -383,9 +383,9 @@ class _LabFinderPageState extends State<LabFinderPage> {
             width: 96,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: GlassColors.secondaryText,
+                color: GlassColors.secondaryTextOf(context),
               ),
             ),
           ),
@@ -398,8 +398,8 @@ class _LabFinderPageState extends State<LabFinderPage> {
                     ? FontWeight.w400
                     : FontWeight.w600,
                 color: value == null || value.isEmpty
-                    ? GlassColors.disabled
-                    : GlassColors.heading,
+                    ? GlassColors.disabledOf(context)
+                    : GlassColors.headingOf(context),
               ),
             ),
           ),

@@ -24,11 +24,7 @@ import 'utils/teacher_api.dart';
 /// "Free period" and are offered, unclaimed, to any teacher whose account is
 /// verified against the timetable. They are never shown to students.
 class ClaimFreePeriodPage extends StatefulWidget {
-  const ClaimFreePeriodPage({
-    super.key,
-    this.authService,
-    this.client,
-  });
+  const ClaimFreePeriodPage({super.key, this.authService, this.client});
 
   final TeacherAuthService? authService;
   final http.Client? client;
@@ -80,9 +76,8 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
 
   void _showSnackBar(String message, {Color? color}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
   Future<void> _load({bool isRefresh = false}) async {
@@ -293,13 +288,13 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
       borderOpacity: 0.4,
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Text(
               'Periods for',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: GlassColors.heading,
+                color: GlassColors.headingOf(context),
               ),
             ),
           ),
@@ -352,10 +347,10 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
           Text(
             _loadError!,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
           const SizedBox(height: 16),
@@ -381,9 +376,9 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
 
     return [
       // The teacher's own classes being unknown is no longer a blocker (the
-    // department's free periods are claimable by any active teacher account), so
-    // this card is only for an account that genuinely cannot claim.
-    if (!availability.canClaimFreePeriods && availability.message != null)
+      // department's free periods are claimable by any active teacher account), so
+      // this card is only for an account that genuinely cannot claim.
+      if (!availability.canClaimFreePeriods && availability.message != null)
         Padding(
           padding: const EdgeInsets.only(bottom: 20),
           child: GlassContainer(
@@ -407,10 +402,10 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
                     Expanded(
                       child: Text(
                         'Free periods cannot be claimed from this account',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: GlassColors.heading,
+                          color: GlassColors.headingOf(context),
                         ),
                       ),
                     ),
@@ -419,9 +414,9 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
                 const SizedBox(height: 8),
                 Text(
                   availability.message!,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                   ),
                 ),
               ],
@@ -430,22 +425,22 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
         ),
       Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Text(
               'Available periods',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: GlassColors.heading,
+                color: GlassColors.headingOf(context),
               ),
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: GlassColors.surface,
+              color: GlassColors.surfaceOf(context),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: GlassColors.border),
+              border: Border.all(color: GlassColors.borderOf(context)),
             ),
             child: Text(
               '${eligible.length} available',
@@ -467,10 +462,13 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
           blurStrength: 15,
           opacity: 0.6,
           borderOpacity: 0.3,
-          child: const Text(
+          child: Text(
             'No free period is available for your classes on this date.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: GlassColors.secondaryText),
+            style: TextStyle(
+              fontSize: 14,
+              color: GlassColors.secondaryTextOf(context),
+            ),
           ),
         )
       else
@@ -496,10 +494,10 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
                           children: [
                             Text(
                               slot.time,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: GlassColors.heading,
+                                color: GlassColors.headingOf(context),
                               ),
                             ),
                             if (slot.isFreePeriod) ...[
@@ -511,9 +509,9 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
                         const SizedBox(height: 4),
                         Text(
                           '${slot.day} • ${slot.batchLabel}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: GlassColors.secondaryText,
+                            color: GlassColors.secondaryTextOf(context),
                           ),
                         ),
                       ],
@@ -547,8 +545,7 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
       _buildClaims(availability),
       const SizedBox(height: 20),
       GlassOutlinedButton(
-        onPressed: () =>
-            setState(() => _showUnavailable = !_showUnavailable),
+        onPressed: () => setState(() => _showUnavailable = !_showUnavailable),
         height: 44,
         borderRadius: 12,
         child: Text(
@@ -560,51 +557,53 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
       ),
       if (_showUnavailable) ...[
         const SizedBox(height: 12),
-        ...unavailable.take(40).map(
-          (slot) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: GlassCard(
-              margin: EdgeInsets.zero,
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 110,
-                    child: Text(
-                      slot.time,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: GlassColors.heading,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Row(
-                      children: [
-                        if (slot.isFreePeriod) ...[
-                          _slotBadge('Free period'),
-                          const SizedBox(width: 8),
-                        ],
-                        Expanded(
-                          child: Text(
-                            '${slot.batchLabel} • '
-                            '${slot.claimed ? 'Already claimed by you' : (slot.reason ?? 'Not available')}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: GlassColors.secondaryText,
-                            ),
+        ...unavailable
+            .take(40)
+            .map(
+              (slot) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: GlassCard(
+                  margin: EdgeInsets.zero,
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 110,
+                        child: Text(
+                          slot.time,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: GlassColors.headingOf(context),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            if (slot.isFreePeriod) ...[
+                              _slotBadge('Free period'),
+                              const SizedBox(width: 8),
+                            ],
+                            Expanded(
+                              child: Text(
+                                '${slot.batchLabel} • '
+                                '${slot.claimed ? 'Already claimed by you' : (slot.reason ?? 'Not available')}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: GlassColors.secondaryTextOf(context),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
       ],
     ];
   }
@@ -616,7 +615,9 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
       decoration: BoxDecoration(
         color: GlassColors.primaryBlue.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: GlassColors.border.withValues(alpha: 0.6)),
+        border: Border.all(
+          color: GlassColors.borderOf(context).withValues(alpha: 0.6),
+        ),
       ),
       child: Text(
         label,
@@ -633,12 +634,12 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'My claimed periods',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: GlassColors.heading,
+            color: GlassColors.headingOf(context),
           ),
         ),
         const SizedBox(height: 12),
@@ -650,9 +651,12 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
             blurStrength: 15,
             opacity: 0.6,
             borderOpacity: 0.3,
-            child: const Text(
+            child: Text(
               'You have not claimed any period on this date.',
-              style: TextStyle(fontSize: 14, color: GlassColors.secondaryText),
+              style: TextStyle(
+                fontSize: 14,
+                color: GlassColors.secondaryTextOf(context),
+              ),
             ),
           )
         else
@@ -670,18 +674,18 @@ class _ClaimFreePeriodPageState extends State<ClaimFreePeriodPage> {
                         children: [
                           Text(
                             '${claim.day} ${claim.time}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: GlassColors.heading,
+                              color: GlassColors.headingOf(context),
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             '${claim.claimDate} • ${claim.batchLabel}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: GlassColors.secondaryText,
+                              color: GlassColors.secondaryTextOf(context),
                             ),
                           ),
                         ],

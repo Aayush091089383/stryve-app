@@ -278,18 +278,22 @@ class _HomeTabState extends State<_HomeTab> {
       }
 
       final todayName = _dayNames[DateTime.now().weekday - 1];
-      final entries = (jsonDecode(responseBody) as List<dynamic>)
-          .map((entry) => TimetableEntry.fromJson(entry as Map<String, dynamic>))
-          // Breaks and the sheet's free periods ("RELM") are not classes, so
-          // today's schedule only ever lists real lectures and practicals.
-          .where(
-            (entry) =>
-                entry.day == todayName &&
-                !entry.isBreak &&
-                !entry.isFreePeriod,
-          )
-          .toList()
-        ..sort((a, b) => a.startTime.compareTo(b.startTime));
+      final entries =
+          (jsonDecode(responseBody) as List<dynamic>)
+              .map(
+                (entry) =>
+                    TimetableEntry.fromJson(entry as Map<String, dynamic>),
+              )
+              // Breaks and the sheet's free periods ("RELM") are not classes, so
+              // today's schedule only ever lists real lectures and practicals.
+              .where(
+                (entry) =>
+                    entry.day == todayName &&
+                    !entry.isBreak &&
+                    !entry.isFreePeriod,
+              )
+              .toList()
+            ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
       setState(() {
         _today = entries;
@@ -317,9 +321,7 @@ class _HomeTabState extends State<_HomeTab> {
     // this screen (the schedule rows, the quick-access cards, the update card)
     // instead of one blur per card. Glass nested *inside* a card keeps its own
     // blur, so nothing about the look changes - see [GlassContainer].
-    return BackdropGroup(
-      child: _buildHomeContent(context, greeting),
-    );
+    return BackdropGroup(child: _buildHomeContent(context, greeting));
   }
 
   /// "AAYUSH" -> "Ayush". The registry stores names upper case.
@@ -365,10 +367,10 @@ class _HomeTabState extends State<_HomeTab> {
             'Good $greeting $firstName',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
               letterSpacing: -0.5,
             ),
           ),
@@ -381,12 +383,12 @@ class _HomeTabState extends State<_HomeTab> {
 
           // Today's Schedule - the student's own Division D timetable, filtered
           // by the batch stored on their account (the server decides).
-          const Text(
+          Text(
             "Today's Schedule",
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
 
@@ -425,9 +427,9 @@ class _HomeTabState extends State<_HomeTab> {
                       children: [
                         Text(
                           _scheduleError!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
-                            color: GlassColors.secondaryText,
+                            color: GlassColors.secondaryTextOf(context),
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -470,12 +472,12 @@ class _HomeTabState extends State<_HomeTab> {
                           ),
                         ),
                         const SizedBox(width: 16),
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             'No classes scheduled for your batch today.',
                             style: TextStyle(
                               fontSize: 14,
-                              color: GlassColors.secondaryText,
+                              color: GlassColors.secondaryTextOf(context),
                             ),
                           ),
                         ),
@@ -485,85 +487,92 @@ class _HomeTabState extends State<_HomeTab> {
                 : Column(
                     key: const ValueKey('schedule-list'),
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: _today.map(
-                        (entry) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: GlassCard(
-                            padding: const EdgeInsets.all(16),
-                            margin: EdgeInsets.zero,
-                            borderRadius: 16,
-                            blurStrength: 8,
-                            child: Row(
-                              children: [
-                                GlassContainer(
-                                  width: 52,
-                                  height: 52,
-                                  borderRadius: 14,
-                                  padding: EdgeInsets.zero,
-                                  blurStrength: 15,
-                                  opacity: 0.7,
-                                  borderOpacity: 0.4,
-                                  child: Icon(
-                                    entry.entryType == 'practical'
-                                        ? Icons.science_rounded
-                                        : Icons.menu_book_rounded,
-                                    size: 26,
-                                    color: GlassColors.primaryBlue,
+                    children: _today
+                        .map(
+                          (entry) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: GlassCard(
+                              padding: const EdgeInsets.all(16),
+                              margin: EdgeInsets.zero,
+                              borderRadius: 16,
+                              blurStrength: 8,
+                              child: Row(
+                                children: [
+                                  GlassContainer(
+                                    width: 52,
+                                    height: 52,
+                                    borderRadius: 14,
+                                    padding: EdgeInsets.zero,
+                                    blurStrength: 15,
+                                    opacity: 0.7,
+                                    borderOpacity: 0.4,
+                                    child: Icon(
+                                      entry.entryType == 'practical'
+                                          ? Icons.science_rounded
+                                          : Icons.menu_book_rounded,
+                                      size: 26,
+                                      color: GlassColors.primaryBlue,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        entry.subject,
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: GlassColors.heading,
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          entry.subject,
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: GlassColors.headingOf(
+                                              context,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${entry.time}'
-                                        '${entry.faculty != null && entry.faculty!.isNotEmpty ? ' \u2022 ${entry.faculty}' : ''}',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color: GlassColors.secondaryText,
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '${entry.time}'
+                                          '${entry.faculty != null && entry.faculty!.isNotEmpty ? ' \u2022 ${entry.faculty}' : ''}',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: GlassColors.secondaryTextOf(
+                                              context,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        entry.entryType == 'practical'
-                                            ? 'Practical \u2022 ${entry.batch}'
-                                            : 'Lecture \u2022 whole division',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: GlassColors.primaryBlue,
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          entry.entryType == 'practical'
+                                              ? 'Practical \u2022 ${entry.batch}'
+                                              : 'Lecture \u2022 whole division',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: GlassColors.primaryBlue,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                    ).toList(),
-                ),
+                        )
+                        .toList(),
+                  ),
           ),
 
           const SizedBox(height: 28),
 
           // Quick Access
-          const Text(
+          Text(
             'Quick Access',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
 
@@ -646,12 +655,12 @@ class _HomeTabState extends State<_HomeTab> {
           const SizedBox(height: 28),
 
           // Latest Update
-          const Text(
+          Text(
             'Latest Update',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
 
@@ -683,20 +692,20 @@ class _HomeTabState extends State<_HomeTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'No Schedule Changes',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: GlassColors.heading,
+                          color: GlassColors.headingOf(context),
                         ),
                       ),
                       const SizedBox(height: 2),
-                      const Text(
+                      Text(
                         'There are no free-period changes for your batch.',
                         style: TextStyle(
                           fontSize: 13,
-                          color: GlassColors.secondaryText,
+                          color: GlassColors.secondaryTextOf(context),
                         ),
                       ),
                     ],
@@ -743,10 +752,10 @@ class _HomeTabState extends State<_HomeTab> {
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 14,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
         ],

@@ -84,7 +84,8 @@ class _TeacherLoginPageState extends State<TeacherLoginPage> {
         );
       } else {
         // LOGIN FAILED
-        final message = data['message'] ?? data['detail'] ?? 'Invalid email or password';
+        final message =
+            data['message'] ?? data['detail'] ?? 'Invalid email or password';
 
         if (!mounted) return;
 
@@ -164,24 +165,24 @@ class _TeacherLoginPageState extends State<TeacherLoginPage> {
 
                 const SizedBox(height: 24),
 
-                const Text(
+                Text(
                   'Teacher Portal',
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                     letterSpacing: -0.5,
                   ),
                 ),
 
                 const SizedBox(height: 8),
 
-                const Text(
+                Text(
                   'Sign in to manage student registrations',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                     height: 1.5,
                   ),
                 ),
@@ -211,7 +212,7 @@ class _TeacherLoginPageState extends State<TeacherLoginPage> {
                       obscurePassword
                           ? Icons.visibility_rounded
                           : Icons.visibility_off_rounded,
-                      color: GlassColors.secondaryText,
+                      color: GlassColors.secondaryTextOf(context),
                     ),
                     onPressed: () {
                       setState(() {

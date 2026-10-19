@@ -76,7 +76,8 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// Loads the PDF into memory for viewing. Deliberately does not save anything.
@@ -205,10 +206,10 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
         children: [
           Text(
             assignment.title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -228,9 +229,9 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
             const SizedBox(height: 8),
             Text(
               assignment.description!.trim(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
-                color: GlassColors.secondaryText,
+                color: GlassColors.secondaryTextOf(context),
               ),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
@@ -245,17 +246,13 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(
-          Icons.circle,
-          size: 5,
-          color: GlassColors.primaryBlue,
-        ),
+        const Icon(Icons.circle, size: 5, color: GlassColors.primaryBlue),
         const SizedBox(width: 5),
         Text(
           text,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            color: GlassColors.secondaryText,
+            color: GlassColors.secondaryTextOf(context),
           ),
         ),
       ],
@@ -267,12 +264,15 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
       return _centeredCard(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: const [
+          children: [
             CircularProgressIndicator(color: GlassColors.primaryBlue),
             SizedBox(height: 16),
             Text(
               'Preparing the PDF...',
-              style: TextStyle(fontSize: 13, color: GlassColors.secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: GlassColors.secondaryTextOf(context),
+              ),
             ),
           ],
         ),
@@ -376,9 +376,9 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
             Text(
               failure.message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14.5,
-                color: GlassColors.secondaryText,
+                color: GlassColors.secondaryTextOf(context),
               ),
             ),
             const SizedBox(height: 20),
@@ -410,20 +410,21 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
         children: [
           IconButton(
             tooltip: 'Previous page',
-            onPressed:
-                ready && page > 1 ? () => handle.goToPage(page - 1) : null,
+            onPressed: ready && page > 1
+                ? () => handle.goToPage(page - 1)
+                : null,
             icon: const Icon(Icons.chevron_left_rounded),
             color: GlassColors.primaryBlue,
-            disabledColor: GlassColors.disabled,
+            disabledColor: GlassColors.disabledOf(context),
           ),
           Expanded(
             child: Text(
               ready ? 'Page $page of $pageCount' : 'Loading pages...',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
-                color: GlassColors.secondaryText,
+                color: GlassColors.secondaryTextOf(context),
               ),
             ),
           ),
@@ -434,12 +435,12 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
                 : null,
             icon: const Icon(Icons.chevron_right_rounded),
             color: GlassColors.primaryBlue,
-            disabledColor: GlassColors.disabled,
+            disabledColor: GlassColors.disabledOf(context),
           ),
           Container(
             width: 1,
             height: 22,
-            color: GlassColors.border,
+            color: GlassColors.borderOf(context),
             margin: const EdgeInsets.symmetric(horizontal: 4),
           ),
           IconButton(
@@ -447,14 +448,14 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
             onPressed: ready ? handle.zoomOut : null,
             icon: const Icon(Icons.zoom_out_rounded),
             color: GlassColors.primaryBlue,
-            disabledColor: GlassColors.disabled,
+            disabledColor: GlassColors.disabledOf(context),
           ),
           IconButton(
             tooltip: 'Zoom in',
             onPressed: ready ? handle.zoomIn : null,
             icon: const Icon(Icons.zoom_in_rounded),
             color: GlassColors.primaryBlue,
-            disabledColor: GlassColors.disabled,
+            disabledColor: GlassColors.disabledOf(context),
           ),
         ],
       ),

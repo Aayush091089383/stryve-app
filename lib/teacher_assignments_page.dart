@@ -101,9 +101,9 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
 
       if (response.statusCode == 200) {
         setState(() {
-          _assignments = teacherJsonList(
-            response.body,
-          ).map(AssignmentRecord.fromJson).toList();
+          _assignments = teacherJsonList(response.body)
+              .map(AssignmentRecord.fromJson)
+              .toList();
           _loadError = null;
         });
       } else if (response.statusCode == 401) {
@@ -134,9 +134,8 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
 
   void _showSnackBar(String message, {Color? color}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
   Future<void> _startUpload() async {
@@ -293,13 +292,13 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
             children: [
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'My Assignments',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: GlassColors.heading,
+                        color: GlassColors.headingOf(context),
                       ),
                     ),
                   ),
@@ -327,9 +326,9 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: GlassColors.surface,
+                      color: GlassColors.surfaceOf(context),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: GlassColors.border),
+                      border: Border.all(color: GlassColors.borderOf(context)),
                     ),
                     child: Text(
                       '${_assignments.length} uploaded',
@@ -401,10 +400,10 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
           Text(
             _loadError!,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
           const SizedBox(height: 16),
@@ -430,12 +429,12 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
       blurStrength: 15,
       opacity: 0.6,
       borderOpacity: 0.3,
-      child: const Column(
+      child: Column(
         children: [
           Icon(
             Icons.upload_file_rounded,
             size: 48,
-            color: GlassColors.disabled,
+            color: GlassColors.disabledOf(context),
           ),
           SizedBox(height: 16),
           Text(
@@ -443,7 +442,7 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w600,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
           SizedBox(height: 8),
@@ -451,7 +450,10 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
             'Upload a PDF to share it with your class. Students only see the '
             'assignments for their own course, division and batch.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: GlassColors.secondaryText),
+            style: TextStyle(
+              fontSize: 13,
+              color: GlassColors.secondaryTextOf(context),
+            ),
           ),
         ],
       ),
@@ -478,10 +480,10 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
                 Expanded(
                   child: Text(
                     assignment.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.bold,
-                      color: GlassColors.heading,
+                      color: GlassColors.headingOf(context),
                     ),
                   ),
                 ),
@@ -497,18 +499,18 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
             Text(
               '${assignment.subject} • Year ${assignment.year} • '
               'Division ${assignment.division} • ${assignment.batchLabel}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: GlassColors.secondaryText,
+                color: GlassColors.secondaryTextOf(context),
               ),
             ),
             const SizedBox(height: 4),
             Text(
               'Due ${assignment.dueDate}'
               '${assignment.originalName != null ? ' • ${assignment.originalName}' : ''}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: GlassColors.secondaryText,
+                color: GlassColors.secondaryTextOf(context),
               ),
             ),
             if (assignment.description != null &&
@@ -516,9 +518,9 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
               const SizedBox(height: 8),
               Text(
                 assignment.description!,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: GlassColors.heading,
+                  color: GlassColors.headingOf(context),
                 ),
               ),
             ],
@@ -530,9 +532,11 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
                 height: 40,
                 borderRadius: 12,
                 borderColor: isDeleting
-                    ? GlassColors.disabled
+                    ? GlassColors.disabledOf(context)
                     : GlassColors.error,
-                textColor: isDeleting ? GlassColors.disabled : GlassColors.error,
+                textColor: isDeleting
+                    ? GlassColors.disabledOf(context)
+                    : GlassColors.error,
                 child: isDeleting
                     ? const SizedBox(
                         width: 16,
@@ -680,12 +684,12 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               'Upload Assignment',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: GlassColors.heading,
+                color: GlassColors.headingOf(context),
               ),
             ),
             const SizedBox(height: 16),
@@ -731,9 +735,7 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _batch,
-                    decoration: const InputDecoration(
-                      labelText: 'Batch',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Batch'),
                     items: _batches
                         .map(
                           (batch) => DropdownMenuItem<String>(
@@ -744,8 +746,7 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
                           ),
                         )
                         .toList(),
-                    onChanged: (value) =>
-                        setState(() => _batch = value ?? ''),
+                    onChanged: (value) => setState(() => _batch = value ?? ''),
                   ),
                 ),
               ],

@@ -29,6 +29,8 @@ import 'package:stryve/teacher_approvals_page.dart';
 import 'package:stryve/teacher_login_page.dart';
 import 'package:stryve/teacher_panel_page.dart';
 
+import 'support/theme_harness.dart';
+
 // ---------------------------------------------------------------------------
 // Fixtures and helpers
 // ---------------------------------------------------------------------------
@@ -217,7 +219,9 @@ Future<void> pumpPanel(
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
-  await tester.pumpWidget(MaterialApp(home: TeacherPanelPage(client: client)));
+  await tester.pumpWidget(
+    withThemeProvider(MaterialApp(home: TeacherPanelPage(client: client))),
+  );
 }
 
 /// Pumps the separate Student Registration Approvals section.

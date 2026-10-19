@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 
 import 'student.dart';
 import 'role_selection_page.dart';
 import 'services/auth_service.dart';
 import 'utils/glass_container.dart';
+import 'utils/theme_provider.dart';
 
 class ProfilePage extends StatelessWidget {
   final Student student;
@@ -113,10 +115,10 @@ class _ProfileContentState extends State<_ProfileContent> {
           children: [
             Text(
               'Profile Photo',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: GlassColors.heading,
+                color: GlassColors.headingOf(context),
               ),
             ),
             const SizedBox(height: 16),
@@ -140,9 +142,9 @@ class _ProfileContentState extends State<_ProfileContent> {
                 Icons.photo_library,
                 color: GlassColors.primaryBlue,
               ),
-              title: const Text(
+              title: Text(
                 'Choose from Gallery',
-                style: TextStyle(color: GlassColors.heading),
+                style: TextStyle(color: GlassColors.headingOf(context)),
               ),
               onTap: () {
                 Navigator.pop(ctx);
@@ -150,13 +152,13 @@ class _ProfileContentState extends State<_ProfileContent> {
               },
             ),
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.close,
-                color: GlassColors.secondaryText,
+                color: GlassColors.secondaryTextOf(context),
               ),
-              title: const Text(
+              title: Text(
                 'Cancel',
-                style: TextStyle(color: GlassColors.heading),
+                style: TextStyle(color: GlassColors.headingOf(context)),
               ),
               onTap: () => Navigator.pop(ctx),
             ),
@@ -237,10 +239,10 @@ class _ProfileContentState extends State<_ProfileContent> {
         Text(
           widget.student.name,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.bold,
-            color: GlassColors.heading,
+            color: GlassColors.headingOf(context),
             letterSpacing: -0.5,
           ),
         ),
@@ -250,9 +252,9 @@ class _ProfileContentState extends State<_ProfileContent> {
         Text(
           '${widget.student.course} \u2022 ${widget.student.division}',
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
-            color: GlassColors.secondaryText,
+            color: GlassColors.secondaryTextOf(context),
             fontWeight: FontWeight.w400,
           ),
         ),
@@ -295,6 +297,11 @@ class _ProfileContentState extends State<_ProfileContent> {
           value: widget.student.batch,
         ),
 
+        const SizedBox(height: 12),
+
+        // APPEARANCE
+        _darkModeCard(context),
+
         const SizedBox(height: 24),
 
         // LOG OUT BUTTON
@@ -331,6 +338,72 @@ class _ProfileContentState extends State<_ProfileContent> {
 
         const SizedBox(height: 20),
       ],
+    );
+  }
+
+  /// The in-app theme switch.
+  ///
+  /// It reads the same [ThemeProvider] that MaterialApp listens to, so the
+  /// whole tree (and every screen behind this tab) switches on the same frame
+  /// instead of only repainting the Profile page.
+  Widget _darkModeCard(BuildContext context) {
+    final isDark = context.watch<ThemeProvider>().isDarkMode;
+
+    return GlassCard(
+      useBlur: false,
+      opacity: 0.85,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      margin: EdgeInsets.zero,
+      borderRadius: 16,
+      child: Row(
+        children: [
+          GlassContainer(
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            padding: EdgeInsets.zero,
+            blurStrength: 15,
+            opacity: 0.7,
+            borderOpacity: 0.4,
+            child: Icon(
+              isDark ? Icons.dark_mode_rounded : Icons.dark_mode_outlined,
+              size: 22,
+              color: GlassColors.primaryBlue,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Dark Mode',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: GlassColors.headingOf(context),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isDark
+                      ? 'On - solid dark surfaces'
+                      : 'Off - light glass theme',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: GlassColors.secondaryTextOf(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: isDark,
+            onChanged: (value) =>
+                context.read<ThemeProvider>().setDarkMode(value),
+          ),
+        ],
+      ),
     );
   }
 
@@ -405,19 +478,19 @@ class _ProfileContentState extends State<_ProfileContent> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                   ),
                 ),
               ],

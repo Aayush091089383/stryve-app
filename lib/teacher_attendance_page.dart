@@ -52,11 +52,7 @@ class _ClassStudent {
 /// subject the caller is not assigned to teach, so this screen can never mark
 /// attendance beyond what the teacher actually teaches.
 class TeacherAttendancePage extends StatefulWidget {
-  const TeacherAttendancePage({
-    super.key,
-    this.authService,
-    this.client,
-  });
+  const TeacherAttendancePage({super.key, this.authService, this.client});
 
   final TeacherAuthService? authService;
   final http.Client? client;
@@ -110,9 +106,8 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
 
   void _showSnackBar(String message, {Color? color}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
   String get _dateIso =>
@@ -144,9 +139,9 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
       if (!mounted) return;
 
       if (response.statusCode == 200) {
-        final assignments = teacherJsonList(
-          response.body,
-        ).map(TeachingAssignment.fromJson).toList();
+        final assignments = teacherJsonList(response.body)
+            .map(TeachingAssignment.fromJson)
+            .toList();
         setState(() {
           _assignments = assignments;
           _subject = assignments.isEmpty
@@ -213,9 +208,9 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
       if (!mounted) return;
 
       if (response.statusCode == 200) {
-        final students = teacherJsonList(
-          response.body,
-        ).map(_ClassStudent.fromJson).toList();
+        final students = teacherJsonList(response.body)
+            .map(_ClassStudent.fromJson)
+            .toList();
         setState(() {
           _students = students;
           _marks
@@ -407,10 +402,10 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
           Text(
             _loadError!,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
           const SizedBox(height: 16),
@@ -437,7 +432,7 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
       blurStrength: 15,
       opacity: 0.7,
       borderOpacity: 0.4,
-      child: const Column(
+      child: Column(
         children: [
           Icon(
             Icons.assignment_ind_outlined,
@@ -450,7 +445,7 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w600,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
           SizedBox(height: 8),
@@ -460,7 +455,10 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
             'official Division D timetable (or add your assignments) and try '
             'again.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: GlassColors.secondaryText),
+            style: TextStyle(
+              fontSize: 13,
+              color: GlassColors.secondaryTextOf(context),
+            ),
           ),
         ],
       ),
@@ -484,12 +482,12 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Lecture',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.bold,
-              color: GlassColors.heading,
+              color: GlassColors.headingOf(context),
             ),
           ),
           const SizedBox(height: 12),
@@ -614,23 +612,30 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
         blurStrength: 15,
         opacity: 0.6,
         borderOpacity: 0.3,
-        child: const Column(
+        child: Column(
           children: [
-            Icon(Icons.groups_outlined, size: 44, color: GlassColors.disabled),
+            Icon(
+              Icons.groups_outlined,
+              size: 44,
+              color: GlassColors.disabledOf(context),
+            ),
             SizedBox(height: 12),
             Text(
               'No students in this class group',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
-                color: GlassColors.heading,
+                color: GlassColors.headingOf(context),
               ),
             ),
             SizedBox(height: 8),
             Text(
               'Only approved students of this division and batch are listed.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: GlassColors.secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: GlassColors.secondaryTextOf(context),
+              ),
             ),
           ],
         ),
@@ -640,12 +645,12 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Students',
           style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.bold,
-            color: GlassColors.heading,
+            color: GlassColors.headingOf(context),
           ),
         ),
         const SizedBox(height: 12),
@@ -664,19 +669,19 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
                       children: [
                         Text(
                           student.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
-                            color: GlassColors.heading,
+                            color: GlassColors.headingOf(context),
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Roll ${student.rollNumber}'
                           '${student.batch.isEmpty ? '' : ' • ${student.batch}'}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: GlassColors.secondaryText,
+                            color: GlassColors.secondaryTextOf(context),
                           ),
                         ),
                       ],
@@ -706,11 +711,14 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
     );
   }
 
-  Widget _markButton(int studentId, String value, String current, String label) {
+  Widget _markButton(
+    int studentId,
+    String value,
+    String current,
+    String label,
+  ) {
     final selected = current == value;
-    final color = value == 'present'
-        ? GlassColors.success
-        : GlassColors.error;
+    final color = value == 'present' ? GlassColors.success : GlassColors.error;
 
     return GlassButton(
       onPressed: _isSaving
@@ -719,7 +727,7 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
       width: 92,
       height: 38,
       borderRadius: 10,
-      color: selected ? color : GlassColors.disabled,
+      color: selected ? color : GlassColors.disabledOf(context),
       disabled: _isSaving,
       child: Text(
         label,

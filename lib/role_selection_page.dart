@@ -48,12 +48,12 @@ class RoleSelectionPage extends StatelessWidget {
 
                 const SizedBox(height: 28),
 
-                const Text(
+                Text(
                   'Stryve',
                   style: TextStyle(
                     fontSize: 38,
                     fontWeight: FontWeight.bold,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                     letterSpacing: -1,
                     height: 1.2,
                   ),
@@ -61,23 +61,23 @@ class RoleSelectionPage extends StatelessWidget {
 
                 const SizedBox(height: 10),
 
-                const Text(
+                Text(
                   'Your College. In One App.',
                   style: TextStyle(
                     fontSize: 17,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                     height: 1.5,
                   ),
                 ),
 
                 const SizedBox(height: 60),
 
-                const Text(
+                Text(
                   'Who are you?',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w600,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                   ),
                 ),
 

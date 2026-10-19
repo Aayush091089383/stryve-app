@@ -122,8 +122,9 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
       } else {
         final uri = Uri.parse('${Environment.backendUrl}/assignments');
         final headers = {'Authorization': 'Bearer ${widget.student.token}'};
-        final response = await (widget.client?.get(uri, headers: headers) ??
-            http.get(uri, headers: headers));
+        final response =
+            await (widget.client?.get(uri, headers: headers) ??
+                http.get(uri, headers: headers));
 
         if (response.statusCode == 401) {
           await AuthService().clearAuthData();
@@ -160,8 +161,7 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _errorMessage =
-            'Could not connect to Stryve server. Please check your internet connection and try again.';
+        _errorMessage = 'Could not connect to Stryve server. Please check your internet connection and try again.';
         _isLoading = false;
       });
     }
@@ -189,9 +189,7 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
       child: _isLoading
           ? const Center(
               key: ValueKey('assignments-loading'),
-              child: CircularProgressIndicator(
-                color: GlassColors.primaryBlue,
-              ),
+              child: CircularProgressIndicator(color: GlassColors.primaryBlue),
             )
           : _errorMessage != null
           ? KeyedSubtree(
@@ -233,8 +231,8 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
               Text(
                 _errorMessage!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: GlassColors.secondaryText,
+                style: TextStyle(
+                  color: GlassColors.secondaryTextOf(context),
                   fontSize: 15,
                 ),
               ),
@@ -267,18 +265,21 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
     return ListView(
       padding: EdgeInsets.fromLTRB(20, topInset, 20, 24 + widget.bottomInset),
       children: [
-        const Text(
+        Text(
           'All Assignments',
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
-            color: GlassColors.heading,
+            color: GlassColors.headingOf(context),
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Everything posted for your division and batch.',
-          style: TextStyle(fontSize: 13, color: GlassColors.secondaryText),
+          style: TextStyle(
+            fontSize: 13,
+            color: GlassColors.secondaryTextOf(context),
+          ),
         ),
         const SizedBox(height: 16),
         if (_assignments.isEmpty)
@@ -314,14 +315,14 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
             blurStrength: 15,
             opacity: 0.6,
             borderOpacity: 0.3,
-            child: const Icon(
+            child: Icon(
               Icons.assignment_outlined,
               size: 26,
-              color: GlassColors.secondaryText,
+              color: GlassColors.secondaryTextOf(context),
             ),
           ),
           const SizedBox(width: 16),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -330,7 +331,7 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: GlassColors.heading,
+                    color: GlassColors.headingOf(context),
                   ),
                 ),
                 SizedBox(height: 4),
@@ -339,7 +340,7 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
                   'batch, it will appear here.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: GlassColors.secondaryText,
+                    color: GlassColors.secondaryTextOf(context),
                   ),
                 ),
               ],
