@@ -1731,9 +1731,19 @@ check(
 deleted = requests.delete(f"{BASE}/teacher/assignments/{created_upload.json()['id']}", headers=auth(admin_token), timeout=10)
 check("a teacher can delete their own upload", deleted.status_code == 200, deleted.text[:160])
 check("the file is removed from disk", not (UPLOAD_DIR / stored[0]).exists())
+placeholder_delete = requests.delete(
+    f"{BASE}/teacher/assignments/1", headers=auth(admin_token), timeout=10
+)
 check(
-    "the pre-existing assignment record cannot be deleted through this endpoint",
-    requests.delete(f"{BASE}/teacher/assignments/1", headers=auth(admin_token), timeout=10).status_code == 404,
+    "a text-only placeholder cannot be deleted",
+    placeholder_delete.status_code == 400,
+    str(placeholder_delete.status_code),
+)
+check(
+    "the refusal says how to replace it",
+    placeholder_delete.json().get("detail")
+    == "Cannot delete a subject placeholder. Upload a file to replace it.",
+    placeholder_delete.text[:200],
 )
 check(
     "and it is still there afterwards",

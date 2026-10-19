@@ -2233,16 +2233,30 @@ def delete_uploaded_assignment(
     teacher: models.Teacher = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
-    """Remove one assignment the caller uploaded (admins may remove any).
+    """Remove one uploaded assignment (admins may remove any).
 
-    Only rows with an ``uploaded_by`` owner can be removed this way, so the
-    pre-existing (seeded) assignment records can never be deleted from here.
+    A text-only row is a subject placeholder, not an upload: it is what the
+    student's card falls back to, so it is never removable here. Uploading a
+    file for the subject replaces it instead. Only rows with an ``uploaded_by``
+    owner can be removed, so the seeded records can never be deleted from here.
     """
     assignment = db.query(models.Assignment).filter(
         models.Assignment.id == assignment_id
     ).first()
 
-    if not assignment or not assignment.uploaded_by:
+    if not assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No uploaded assignment with that id",
+        )
+
+    if assignment.stored_name is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete a subject placeholder. Upload a file to replace it.",
+        )
+
+    if not assignment.uploaded_by:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No uploaded assignment with that id",

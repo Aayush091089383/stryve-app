@@ -540,27 +540,51 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
               ),
             ],
             const SizedBox(height: 12),
-            SizedBox(
-              width: 140,
-              child: GlassOutlinedButton(
-                onPressed: isDeleting ? null : () => _delete(assignment),
-                height: 40,
-                borderRadius: 12,
-                borderColor: isDeleting
-                    ? GlassColors.disabledOf(context)
-                    : GlassColors.error,
-                textColor: isDeleting
-                    ? GlassColors.disabledOf(context)
-                    : GlassColors.error,
-                child: isDeleting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Remove', style: TextStyle(fontSize: 13)),
+            // Only a real upload can be removed. A text-only row is the subject
+            // placeholder the backend refuses to delete (400), so the button is
+            // not offered for it - it is replaced by uploading that subject.
+            if (assignment.hasAttachment)
+              SizedBox(
+                width: 140,
+                child: GlassOutlinedButton(
+                  onPressed: isDeleting ? null : () => _delete(assignment),
+                  height: 40,
+                  borderRadius: 12,
+                  borderColor: isDeleting
+                      ? GlassColors.disabledOf(context)
+                      : GlassColors.error,
+                  textColor: isDeleting
+                      ? GlassColors.disabledOf(context)
+                      : GlassColors.error,
+                  child: isDeleting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Remove', style: TextStyle(fontSize: 13)),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: GlassColors.surfaceOf(context),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: GlassColors.borderOf(context)),
+                ),
+                child: Text(
+                  'Placeholder - upload a PDF to replace it',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: GlassColors.secondaryTextOf(context),
+                  ),
+                ),
               ),
-            ),
           ],
         ),
       ),

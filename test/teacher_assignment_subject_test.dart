@@ -56,17 +56,19 @@ http.Response jsonResponse(Object body, int status) => http.Response(
   headers: {'content-type': 'application/json'},
 );
 
-Future<void> pumpUploadForm(
+Future<void> pumpAssignmentsView(
   WidgetTester tester,
-  List<http.Request> sent,
-) async {
+  List<http.Request> sent, {
+  List<Object> mine = const [],
+  bool openSheet = false,
+}) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
   final client = MockClient((request) async {
     if (request.url.path == '/teacher/assignments/mine') {
-      return jsonResponse(const <Object>[], 200);
+      return jsonResponse(mine, 200);
     }
     sent.add(request);
     return jsonResponse(uploadedJson('Engineering Physics'), 201);
@@ -86,9 +88,25 @@ Future<void> pumpUploadForm(
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(find.text('UPLOAD PDF ASSIGNMENT'));
-  await tester.pumpAndSettle();
+  if (openSheet) {
+    await tester.tap(find.text('UPLOAD PDF ASSIGNMENT'));
+    await tester.pumpAndSettle();
+  }
 }
+
+/// A record in the shape `GET /teacher/assignments/mine` returns.
+Map<String, dynamic> recordJson({
+  required int id,
+  required String subject,
+  required bool hasAttachment,
+  int? uploadedBy,
+}) => {
+  ...uploadedJson(subject),
+  'id': id,
+  'title': subject,
+  'has_attachment': hasAttachment,
+  'uploaded_by': uploadedBy,
+};
 
 void main() {
   setUp(() => FlutterSecureStorage.setMockInitialValues(teacherStorage()));
@@ -97,7 +115,7 @@ void main() {
   testWidgets('the subject is chosen from the seven-subject dropdown', (
     tester,
   ) async {
-    await pumpUploadForm(tester, []);
+    await pumpAssignmentsView(tester, [], openSheet: true);
 
     expect(find.text('Subject'), findsOneWidget);
     expect(
@@ -119,7 +137,7 @@ void main() {
   testWidgets('a subject must be chosen before the upload is submitted', (
     tester,
   ) async {
-    await pumpUploadForm(tester, []);
+    await pumpAssignmentsView(tester, [], openSheet: true);
 
     await tester.enterText(find.byType(TextField).first, 'Physics notes');
     await tester.tap(find.text('UPLOAD'));
@@ -128,11 +146,44 @@ void main() {
     expect(find.text('Please choose the subject.'), findsOneWidget);
   });
 
+  testWidgets('only an uploaded assignment offers Remove', (tester) async {
+    await pumpAssignmentsView(
+      tester,
+      [],
+      mine: [
+        recordJson(
+          id: 1,
+          subject: 'Engineering Mathematics-I',
+          hasAttachment: false,
+        ),
+        recordJson(
+          id: 2,
+          subject: 'Engineering Physics',
+          hasAttachment: true,
+          uploadedBy: 5,
+        ),
+      ],
+    );
+
+    expect(find.text('Engineering Mathematics-I'), findsOneWidget);
+    expect(find.text('Engineering Physics'), findsOneWidget);
+    expect(
+      find.text('Remove'),
+      findsOneWidget,
+      reason: 'the placeholder must not offer a Remove button',
+    );
+    expect(
+      find.textContaining('Placeholder'),
+      findsOneWidget,
+      reason: 'the placeholder is labelled instead',
+    );
+  });
+
   testWidgets('the chosen subject is sent as the multipart subject field', (
     tester,
   ) async {
     final sent = <http.Request>[];
-    await pumpUploadForm(tester, sent);
+    await pumpAssignmentsView(tester, sent, openSheet: true);
 
     await tester.enterText(find.byType(TextField).first, 'Physics notes');
 
