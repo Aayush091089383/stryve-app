@@ -23,6 +23,19 @@ class PickedAssignmentFile {
 /// OS file dialog; production uses the platform file chooser.
 typedef AssignmentFilePicker = Future<PickedAssignmentFile?> Function();
 
+/// The seven subjects of Division D's first-year timetable, in the wording the
+/// official sheet uses. The backend replaces a subject's text-only row with the
+/// upload, so the label a teacher picks is the label stored on the assignment.
+const List<String> kAssignmentSubjects = <String>[
+  'Engineering Mathematics-I',
+  'Engineering Physics',
+  'Basic Electrical Engineering',
+  'Engineering Graphics',
+  'Fundamentals of Programming Languages',
+  'Design Thinking & Idea Lab',
+  'Professional Communication Skills',
+];
+
 Future<PickedAssignmentFile?> defaultPickPdf() async {
   const typeGroup = XTypeGroup(
     label: 'PDF',
@@ -185,9 +198,11 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
         ),
       );
 
-      final streamed = await request.send().timeout(
-        const Duration(seconds: 60),
-      );
+      // Sent through the view's client (not request.send()) so widget tests can
+      // inspect the multipart body without a live backend.
+      final streamed = await widget.client
+          .send(request)
+          .timeout(const Duration(seconds: 60));
       final response = await http.Response.fromStream(streamed);
 
       if (!mounted) return;
@@ -587,13 +602,13 @@ class _AssignmentUploadSheet extends StatefulWidget {
 
 class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
   final _titleController = TextEditingController();
-  final _subjectController = TextEditingController();
   final _instructionsController = TextEditingController();
 
   static const List<String> _batches = ['', 'D-1', 'D-2', 'D-3'];
   static const List<int> _years = [1, 2, 3, 4];
 
   final String _division = 'D';
+  String? _subject;
   String _batch = '';
   int _year = 1;
   DateTime _dueDate = DateTime.now().add(const Duration(days: 7));
@@ -603,7 +618,6 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
   @override
   void dispose() {
     _titleController.dispose();
-    _subjectController.dispose();
     _instructionsController.dispose();
     super.dispose();
   }
@@ -640,14 +654,14 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
 
   void _submit() {
     final title = _titleController.text.trim();
-    final subject = _subjectController.text.trim();
+    final subject = _subject;
 
     if (title.isEmpty) {
       setState(() => _error = 'Please enter an assignment title.');
       return;
     }
-    if (subject.isEmpty) {
-      setState(() => _error = 'Please enter the subject.');
+    if (subject == null) {
+      setState(() => _error = 'Please choose the subject.');
       return;
     }
     if (_file == null) {
@@ -698,11 +712,23 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
               decoration: const InputDecoration(labelText: 'Assignment title'),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _subjectController,
-              decoration: const InputDecoration(
-                labelText: 'Subject (e.g. Engineering Physics)',
-              ),
+            DropdownButtonFormField<String>(
+              initialValue: _subject,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Subject'),
+              hint: const Text('Choose the subject'),
+              items: kAssignmentSubjects
+                  .map(
+                    (subject) => DropdownMenuItem<String>(
+                      value: subject,
+                      child: Text(subject, overflow: TextOverflow.ellipsis),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) => setState(() {
+                _subject = value;
+                _error = null;
+              }),
             ),
             const SizedBox(height: 12),
             TextField(

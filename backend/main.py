@@ -2089,6 +2089,10 @@ def upload_assignment(
     Validates the file type (PDF magic bytes, not just a header), the size, the
     metadata and the caller's authorization. The stored file name is generated
     server-side; the client's name is kept only for display.
+
+    Uploading the real PDF for a subject replaces that class group's text-only
+    rows for the same subject/year/division, so a student sees one card per
+    subject instead of a placeholder next to the file.
     """
     clean_title = title.strip()
     clean_subject = subject.strip()
@@ -2162,6 +2166,22 @@ def upload_assignment(
 
     stored_name = f"{uuid.uuid4().hex}.pdf"
     (upload_dir / stored_name).write_bytes(data)
+
+    # The text-only rows this upload supersedes: same subject, year and
+    # division, and no PDF. They are replaced, never edited, and only after the
+    # file was written successfully (the insert below rolls this back with it).
+    replaced_placeholders = (
+        db.query(models.Assignment)
+        .filter(
+            models.Assignment.subject == clean_subject,
+            models.Assignment.year == year,
+            models.Assignment.division == clean_division,
+            models.Assignment.stored_name.is_(None),
+        )
+        .all()
+    )
+    for row in replaced_placeholders:
+        db.delete(row)
 
     assignment = models.Assignment(
         subject=clean_subject,

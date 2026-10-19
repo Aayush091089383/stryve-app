@@ -1654,6 +1654,54 @@ check("the division-wide upload is visible to D-2", created_upload.json()["id"] 
 check("the D-1 upload is visible to D-1", batch_upload.json()["id"] in d1_ids_seen)
 check("the D-1 upload is NOT visible to D-2", batch_upload.json()["id"] not in d2_ids_seen)
 
+# --------------------------------------------------------------------------
+# Uploading a subject replaces that class group's text-only placeholder, so the
+# student sees one card per subject. Only the same subject/year/division - and
+# only rows without a PDF - may be removed.
+# --------------------------------------------------------------------------
+conn.execute(
+    "INSERT INTO assignments (subject, title, due_date, year, division, batch) VALUES (?, ?, ?, ?, ?, ?)",
+    ("Engineering Physics", "Physics placeholder", MONDAY_STR, 1, "D", None),
+)
+placeholder_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+conn.execute(
+    "INSERT INTO assignments (subject, title, due_date, year, division, batch) VALUES (?, ?, ?, ?, ?, ?)",
+    ("Engineering Physics", "Second year placeholder", MONDAY_STR, 2, "D", None),
+)
+other_year_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+replacing_upload = upload(admin_token, payload={"subject": "Engineering Physics", "title": "Physics notes"})
+check("uploading a subject is accepted", replacing_upload.status_code == 201, replacing_upload.text[:200])
+check(
+    "the subject's text-only placeholder is replaced",
+    conn.execute("SELECT COUNT(*) FROM assignments WHERE id=?", (placeholder_id,)).fetchone()[0] == 0,
+)
+phy_rows = conn.execute(
+    "SELECT id, stored_name FROM assignments WHERE subject='Engineering Physics' AND year=1 AND division='D'"
+).fetchall()
+check(
+    "exactly one card remains for the subject",
+    len(phy_rows) == 1 and phy_rows[0][1] is not None,
+    str(phy_rows),
+)
+check(
+    "a placeholder for another year is untouched",
+    conn.execute("SELECT COUNT(*) FROM assignments WHERE id=?", (other_year_id,)).fetchone()[0] == 1,
+)
+check(
+    "a placeholder for another subject is untouched",
+    conn.execute("SELECT COUNT(*) FROM assignments WHERE id=1").fetchone()[0] == 1,
+)
+phy_cards = [
+    a for a in requests.get(f"{BASE}/assignments", headers=auth(TOKENS["1"]), timeout=10).json()
+    if a["subject"] == "Engineering Physics"
+]
+check(
+    "the student sees one card for that subject, and it is the file",
+    len(phy_cards) == 1 and phy_cards[0]["has_attachment"] is True,
+    str(phy_cards)[:300],
+)
+
 mine = requests.get(f"{BASE}/teacher/assignments/mine", headers=auth(admin_token), timeout=10).json()
 check("a teacher sees the assignments they uploaded", {a["id"] for a in mine} >= {created_upload.json()["id"], batch_upload.json()["id"]})
 check("the list does not include other people's uploads", all(a["uploaded_by"] is not None for a in mine))
