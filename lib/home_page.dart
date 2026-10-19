@@ -148,7 +148,6 @@ class _HomePageState extends State<HomePage> {
           builder: (_) => NotificationsPage(
             student: widget.student,
             client: widget.client,
-            systemNotifications: widget.systemNotifications,
           ),
         ),
       );

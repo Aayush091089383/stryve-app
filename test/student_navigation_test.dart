@@ -375,15 +375,30 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      // A day that is not the default selection.
-      final before = chip(tester, 'Tuesday').opacity;
+      // The page opens on today's day, so the "not selected yet" chip must be
+      // a different weekday. Hard-coding Tuesday made this test fail every
+      // Tuesday, when Tuesday *is* the default selection.
+      const week = [
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+      ];
+      final defaultIndex = DateTime.now().weekday == DateTime.sunday
+          ? 0
+          : DateTime.now().weekday - 1;
+      final otherDay = week[(defaultIndex + 1) % week.length];
+
+      final before = chip(tester, otherDay).opacity;
       expect(before, 0.5);
 
-      await tester.tap(find.text('Tuesday'));
+      await tester.tap(find.text(otherDay));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 90));
 
-      final mid = chip(tester, 'Tuesday').opacity;
+      final mid = chip(tester, otherDay).opacity;
       expect(
         mid,
         greaterThan(0.5),
@@ -392,7 +407,7 @@ void main() {
       expect(mid, lessThan(0.8));
 
       await tester.pumpAndSettle();
-      expect(chip(tester, 'Tuesday').opacity, 0.8);
+      expect(chip(tester, otherDay).opacity, 0.8);
     });
 
     testWidgets('an unrelated rebuild does not restart the pill tween', (

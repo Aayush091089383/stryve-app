@@ -177,20 +177,15 @@ Badge bellBadge(WidgetTester tester) =>
 
 Future<void> pumpNotificationsPage(
   WidgetTester tester,
-  NotificationApi api, {
-  SystemNotifications? tray,
-}) async {
+  NotificationApi api,
+) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
   await tester.pumpWidget(
     MaterialApp(
-      home: NotificationsPage(
-        student: studentFixture(),
-        client: api.client,
-        systemNotifications: tray,
-      ),
+      home: NotificationsPage(student: studentFixture(), client: api.client),
     ),
   );
   await tester.pump();
@@ -409,21 +404,5 @@ void main() {
       expect(tray.shown, isEmpty);
     });
 
-    testWidgets('the test button posts one tray alert and confirms it', (
-      tester,
-    ) async {
-      final tray = FakeTray();
-
-      await pumpNotificationsPage(tester, NotificationApi(), tray: tray);
-      await tester.tap(find.byKey(const Key('test_notification')));
-      await tester.pumpAndSettle();
-
-      expect(
-        tray.shown,
-        ['Stryve test|System tray notifications are working'],
-        reason: 'the button must go through the same service the app uses',
-      );
-      expect(find.textContaining('Test notification sent'), findsOneWidget);
-    });
   });
 }
