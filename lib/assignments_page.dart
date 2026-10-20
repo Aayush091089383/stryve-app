@@ -81,13 +81,12 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
   /// the same document twice.
   bool _openingViewer = false;
 
-  /// Subjects whose section the student has folded away.
+  /// Subjects the student has opened.
   ///
-  /// Deliberately empty at first: a freshly uploaded PDF has to be visible
-  /// without hunting for it behind a folded folder, which is exactly the
-  /// complaint that led to grouping. Folding is a reading preference for this
-  /// visit only, so it is not stored anywhere.
-  final Set<String> _collapsedSubjects = <String>{};
+  /// Empty means every folder starts closed, which is the point of grouping:
+  /// seven open folders is the flat list with extra headers. Opening is a
+  /// reading preference for this visit only, so it is not stored anywhere.
+  final Set<String> _expandedSubjects = <String>{};
 
   @override
   void initState() {
@@ -251,8 +250,8 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
 
   void _toggleSubject(String subject) {
     setState(() {
-      if (!_collapsedSubjects.remove(subject)) {
-        _collapsedSubjects.add(subject);
+      if (!_expandedSubjects.remove(subject)) {
+        _expandedSubjects.add(subject);
       }
     });
   }
@@ -419,7 +418,7 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
             _assignments.isEmpty
                 ? 'Everything posted for your division and batch.'
                 : 'Everything posted for your division and batch, grouped '
-                      'by subject. Tap a subject to fold it.',
+                      'by subject. Tap a subject to open it.',
             style: TextStyle(
               fontSize: 13,
               color: GlassColors.secondaryTextOf(context),
@@ -433,7 +432,7 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
               (group) => _SubjectSection(
                 key: ValueKey('subject-${group.subject}'),
                 data: group,
-                expanded: !_collapsedSubjects.contains(group.subject),
+                expanded: _expandedSubjects.contains(group.subject),
                 onToggle: () => _toggleSubject(group.subject),
                 onOpen: (assignment) => _openAssignment(
                   assignment,
@@ -497,6 +496,19 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
   }
 }
 
+/// The description the backend seeds on a subject's "nothing uploaded" row.
+/// Such a row is a placeholder, not coursework: it carries no file, its title
+/// is just the subject name and its due date is the end of the academic year.
+const String _kPlaceholderDescription = 'No assignment posted yet.';
+
+bool _isPlaceholder(Assignment assignment, String subject) {
+  if (assignment.hasAttachment) return false;
+  final title = assignment.title.trim().toLowerCase();
+  final description = assignment.description?.trim() ?? '';
+  return title == subject.trim().toLowerCase() ||
+      description == _kPlaceholderDescription;
+}
+
 /// One subject's rows, before any widget is built.
 ///
 /// The backend keeps assignments flat (one row per upload, `subject` is just a
@@ -509,11 +521,31 @@ class _SubjectSectionData {
   /// Sorted by [AssignmentsPage]: soonest deadline first, then newest id.
   final List<Assignment> rows;
 
-  /// "2 files · due 21 Oct 2026" - the header has to say something useful
-  /// while the section is folded, or folding would hide the deadlines too.
+  /// Rows a student can actually open. Only these count as "files": a
+  /// placeholder row is not coursework, so it must never be counted as one.
+  List<Assignment> get files =>
+      rows.where((row) => row.hasAttachment).toList();
+
+  /// Rows without a file - the seeded placeholders, and any older text-only
+  /// assignment a teacher posted before uploads existed.
+  List<Assignment> get filelessRows =>
+      rows.where((row) => !row.hasAttachment).toList();
+
+  /// What the folder shows when opened.
+  ///
+  /// A single placeholder under a folder that already holds real PDFs is pure
+  /// noise ("No assignment posted yet" next to two files), so it is dropped as
+  /// soon as the folder has anything real in it. A folder with nothing real
+  /// still explains itself instead of looking broken.
+  List<Assignment> get visibleRows =>
+      files.isNotEmpty ? files : filelessRows;
+
+  /// "2 files · due 21 Oct 2026", "No files yet" - the header has to say
+  /// something useful while the folder is closed.
   String get summary {
-    final count = rows.length == 1 ? '1 file' : '${rows.length} files';
-    return '$count · due ${formatAssignmentDueDate(rows.first.dueDate)}';
+    if (files.isEmpty) return 'No files yet';
+    final count = files.length == 1 ? '1 file' : '${files.length} files';
+    return '$count · due ${formatAssignmentDueDate(files.first.dueDate)}';
   }
 }
 
@@ -613,13 +645,15 @@ class _SubjectSection extends StatelessWidget {
           child: expanded
               ? Column(
                   children: [
-                    for (final assignment in data.rows)
+                    for (final assignment in data.visibleRows)
                       Padding(
                         padding: const EdgeInsets.only(left: 10),
-                        child: _AssignmentFileRow(
-                          assignment: assignment,
-                          onOpen: () => onOpen(assignment),
-                        ),
+                        child: _isPlaceholder(assignment, data.subject)
+                            ? const _NoAssignmentRow()
+                            : _AssignmentFileRow(
+                                assignment: assignment,
+                                onOpen: () => onOpen(assignment),
+                              ),
                       ),
                   ],
                 )
@@ -792,6 +826,44 @@ class _AssignmentFileRow extends StatelessWidget {
               ],
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The "nothing here yet" row of a folder with no files.
+///
+/// Deliberately not an [_AssignmentFileRow]: the placeholder carries the
+/// subject's name as its title and the academic year's end as its due date, so
+/// rendering it as a card would repeat the folder's own name and invent a
+/// deadline. One muted line says the same thing without either.
+class _NoAssignmentRow extends StatelessWidget {
+  const _NoAssignmentRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = GlassColors.secondaryTextOf(context);
+
+    return GlassCard(
+      useBlur: false,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      borderRadius: 14,
+      child: Row(
+        children: [
+          Icon(Icons.info_outline_rounded, size: 18, color: secondary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'No assignment posted yet.',
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.3,
+                color: secondary,
+              ),
+            ),
+          ),
         ],
       ),
     );

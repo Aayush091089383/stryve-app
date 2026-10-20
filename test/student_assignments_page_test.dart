@@ -81,6 +81,15 @@ Future<void> pumpAssignments(
   await tester.pump(const Duration(milliseconds: 50));
 }
 
+/// Folders start closed, so any test that asserts a folder's contents opens it
+/// first. The assertions themselves are unchanged - they just follow the one
+/// tap a student now has to make instead of assuming the old "all open"
+/// default.
+Future<void> openFolder(WidgetTester tester, String subject) async {
+  await tester.tap(find.text(subject));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUp(ApiCache.clear);
 
@@ -108,6 +117,14 @@ void main() {
     await pumpAssignments(tester, client);
 
     expect(find.text('All Assignments'), findsOneWidget);
+
+    // Every folder is closed on arrival: only the subject headers are there.
+    expect(find.text('Problem Set 4'), findsNothing);
+    expect(find.text('Lab Report'), findsNothing);
+
+    await openFolder(tester, 'MATH');
+    await openFolder(tester, 'PHY');
+
     expect(find.text('Problem Set 4'), findsOneWidget);
     expect(find.text('Lab Report'), findsOneWidget);
     expect(find.text('MATH'), findsOneWidget);
@@ -160,6 +177,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(calls, 2, reason: 'the retry must hit the backend again');
+    await openFolder(tester, 'MATH');
     expect(find.text('Problem Set 4'), findsOneWidget);
   });
 
@@ -184,6 +202,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
+    await openFolder(tester, 'MATH');
     expect(find.text('Problem Set 4'), findsOneWidget);
   });
 }
