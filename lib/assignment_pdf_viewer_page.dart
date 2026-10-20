@@ -5,6 +5,17 @@
 /// the one and only path that saves a copy, and it does so in the phone's normal
 /// Downloads location (or through the system Save dialog, whichever the device
 /// supports).
+///
+/// The reader is built for actually reading a document on a phone:
+///
+/// * **Full screen** hides the app bar, the details card and every control, so
+///   the page fills the whole display. It is entered from the expand button on
+///   the page and left with the close button or the system back gesture.
+/// * **Previous / Next** move between the assignments that have a PDF, without
+///   going back to the list first. They follow the order of the list the viewer
+///   was opened from and are disabled at either end.
+/// * The controls sit in their own bottom [SafeArea], so the download button and
+///   the page/next buttons never sit under the Android navigation bar.
 library;
 
 import 'dart:typed_data';
@@ -25,6 +36,8 @@ class AssignmentPdfViewerPage extends StatefulWidget {
     super.key,
     required this.assignment,
     required this.token,
+    this.assignments = const [],
+    this.initialIndex = 0,
     this.client,
     this.load,
     this.savePdf,
@@ -32,6 +45,17 @@ class AssignmentPdfViewerPage extends StatefulWidget {
   });
 
   final Assignment assignment;
+
+  /// Every assignment the list showed, in its display order.
+  ///
+  /// Used for Previous/Next. Empty (the default) means "just this document",
+  /// which is what a caller that only has one assignment wants.
+  final List<Assignment> assignments;
+
+  /// Where [assignment] sat in [assignments]. Only a fallback - the document is
+  /// matched by id first, so a list that changed shape cannot open the wrong
+  /// file.
+  final int initialIndex;
 
   /// The student's bearer token; the backend decides what it may read.
   final String token;
@@ -48,17 +72,37 @@ class AssignmentPdfViewerPage extends StatefulWidget {
 }
 
 class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
-  late final PdfSurface _surface;
+  late PdfSurface _surface;
+
+  /// The assignments that actually have a PDF to show, in list order.
+  ///
+  /// A row without an attachment ("No assignment posted yet") is not readable,
+  /// so Previous/Next skip it instead of opening a document that does not exist.
+  late final List<Assignment> _readable;
+
+  /// Index into [_readable] of the document on screen.
+  int _index = 0;
 
   Uint8List? _bytes;
   AssignmentPdfResult? _failure;
   bool _loading = true;
   bool _saving = false;
+  bool _isFullScreen = false;
+
+  /// The assignment on screen. Everything shown or saved reads from here, so
+  /// stepping to the next document cannot leave the previous title or filename
+  /// behind.
+  Assignment get _current => _readable[_index];
+
+  bool get _hasPrevious => _index > 0;
+  bool get _hasNext => _index < _readable.length - 1;
 
   @override
   void initState() {
     super.initState();
-    _surface = (widget.surfaceFactory ?? createPdfrxSurface)();
+    _readable = _readableFrom(widget.assignments, widget.assignment);
+    _index = _indexOfCurrent();
+    _surface = _createSurface();
     _surface.handle.addListener(_onSurfaceChanged);
     _loadPdf();
   }
@@ -69,6 +113,36 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
     _surface.handle.dispose();
     super.dispose();
   }
+
+  /// The readable documents around [current], always containing [current].
+  static List<Assignment> _readableFrom(
+    List<Assignment> assignments,
+    Assignment current,
+  ) {
+    final readable = [
+      for (final assignment in assignments)
+        if (assignment.hasAttachment) assignment,
+    ];
+
+    if (readable.isEmpty) return [current];
+    if (readable.any((assignment) => assignment.id == current.id)) {
+      return readable;
+    }
+    // A caller that opened a document outside the list it passed: keep it
+    // readable and put the list after it.
+    return [current, ...readable];
+  }
+
+  int _indexOfCurrent() {
+    final byId = _readable.indexWhere(
+      (assignment) => assignment.id == widget.assignment.id,
+    );
+    if (byId >= 0) return byId;
+    return widget.initialIndex.clamp(0, _readable.length - 1);
+  }
+
+  PdfSurface _createSurface() =>
+      (widget.surfaceFactory ?? createPdfrxSurface)();
 
   void _onSurfaceChanged() {
     if (mounted) setState(() {});
@@ -94,7 +168,7 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
 
     final AssignmentPdfResult result;
     try {
-      result = await loader(widget.assignment.id);
+      result = await loader(_current.id);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -127,6 +201,8 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
     if (result.isUnauthorized) await _signOut();
   }
 
+  /// An expired session is handled exactly like every other screen: the
+  /// credentials are cleared and the app returns to role selection.
   Future<void> _signOut() async {
     await AuthService().clearAuthData();
     if (!mounted) return;
@@ -137,6 +213,30 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
     );
   }
 
+  /// Shows the document at [target] in [_readable].
+  ///
+  /// A rendered PDF is a separate native document, so the surface is rebuilt
+  /// for the new file instead of being handed new bytes; the zoom/scroll state
+  /// of the previous document is deliberately not carried over.
+  Future<void> _step(int delta) async {
+    final target = _index + delta;
+    if (target < 0 || target >= _readable.length) return;
+    if (_loading) return;
+
+    final previous = _surface;
+    previous.handle.removeListener(_onSurfaceChanged);
+    previous.handle.dispose();
+
+    setState(() {
+      _index = target;
+      _saving = false;
+      _surface = _createSurface();
+    });
+    _surface.handle.addListener(_onSurfaceChanged);
+
+    await _loadPdf();
+  }
+
   /// The explicit Download: the only thing in this screen that writes a file.
   Future<void> _download() async {
     final bytes = _bytes;
@@ -145,9 +245,9 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
     setState(() => _saving = true);
 
     final fileName = buildAssignmentPdfFileName(
-      title: widget.assignment.title,
-      subject: widget.assignment.subject,
-      assignmentId: widget.assignment.id,
+      title: _current.title,
+      subject: _current.subject,
+      assignmentId: _current.id,
     );
     final save = widget.savePdf ?? saveAssignmentPdf;
 
@@ -172,32 +272,79 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
     }
   }
 
+  void _toggleFullScreen() {
+    setState(() => _isFullScreen = !_isFullScreen);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(title: Text('Assignment')),
-      body: GlassBackground(
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, kToolbarHeight + 12, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildDetails(),
-                const SizedBox(height: 12),
-                Expanded(child: _buildBody()),
-              ],
-            ),
+    // Back leaves full screen first; a second back leaves the reader. Without
+    // this, the system gesture would close the document while the student is
+    // just trying to get the controls back.
+    return PopScope(
+      canPop: !_isFullScreen,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _isFullScreen) {
+          setState(() => _isFullScreen = false);
+        }
+      },
+      child: Scaffold(
+        extendBodyBehindAppBar: !_isFullScreen,
+        appBar: _isFullScreen
+            ? null
+            : const GlassAppBar(title: Text('Assignment')),
+        body: GlassBackground(
+          child: SafeArea(
+            // In full screen the document runs to the very top edge; the exit
+            // button carries its own top SafeArea. The bottom inset belongs to
+            // the controls bar (see [_buildBottomBar]), never to the page.
+            top: !_isFullScreen,
+            bottom: false,
+            child: _isFullScreen ? _buildFullScreen() : _buildReadingLayout(),
           ),
         ),
       ),
     );
   }
 
+  /// The normal layout: details on top, then the page with its controls.
+  Widget _buildReadingLayout() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, kToolbarHeight + 12, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildDetails(),
+          const SizedBox(height: 12),
+          Expanded(child: _buildBody()),
+        ],
+      ),
+    );
+  }
+
+  /// The immersive layout: page only, plus a way back out.
+  Widget _buildFullScreen() {
+    return Stack(
+      children: [
+        Positioned.fill(child: _buildReader(inFullScreen: true)),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: SafeArea(
+            child: _overlayButton(
+              icon: Icons.close_fullscreen_rounded,
+              tooltip: 'Exit full screen',
+              onPressed: _toggleFullScreen,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   /// Title, subject, deadline and instructions stay visible while reading.
   Widget _buildDetails() {
-    final assignment = widget.assignment;
+    final assignment = _current;
     return GlassCard(
       margin: EdgeInsets.zero,
       padding: const EdgeInsets.all(14),
@@ -260,6 +407,29 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
   }
 
   Widget _buildBody() {
+    // Controls (pages, Previous/Next, Download) only exist once there is a
+    // document to act on: an error state offers Retry instead of a save button
+    // that cannot work.
+    final hasDocument =
+        !_loading &&
+        _failure == null &&
+        _bytes != null &&
+        !_surface.handle.hasFailed;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: _buildReader(inFullScreen: false)),
+        if (hasDocument) ...[
+          const SizedBox(height: 12),
+          _buildBottomBar(),
+        ],
+      ],
+    );
+  }
+
+  /// The page itself, in either layout.
+  Widget _buildReader({required bool inFullScreen}) {
     if (_loading) {
       return _centeredCard(
         child: Column(
@@ -301,32 +471,88 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    // pdfrx already renders inside a scrollable, pinch-zoomable, pannable view
+    // (PDFium's own gesture handling). Wrapping it in an InteractiveViewer
+    // would fight it for every gesture, so the page is handed to the user
+    // as-is and only the surrounding chrome changes between layouts.
+    final page = _surface.build(
+      context,
+      bytes,
+      // Never the token or any account detail: just a stable, non-identifying
+      // source name.
+      'assignment-${_current.id}.pdf',
+    );
+
+    return Stack(
       children: [
-        Expanded(
+        Positioned.fill(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(inFullScreen ? 0 : 14),
             child: GlassContainer(
               padding: EdgeInsets.zero,
-              borderRadius: 14,
+              borderRadius: inFullScreen ? 0 : 14,
               opacity: 0.45,
-              borderOpacity: 0.35,
-              child: _surface.build(
-                context,
-                bytes,
-                // Never the token or any account detail: just a stable,
-                // non-identifying source name.
-                'assignment-${widget.assignment.id}.pdf',
-              ),
+              borderOpacity: inFullScreen ? 0 : 0.35,
+              borderColor: inFullScreen ? Colors.transparent : null,
+              child: page,
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        _buildControls(),
-        const SizedBox(height: 12),
-        _buildDownloadButton(),
+        if (!inFullScreen)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: _overlayButton(
+              icon: Icons.fullscreen_rounded,
+              tooltip: 'Full screen',
+              onPressed: _toggleFullScreen,
+            ),
+          ),
       ],
+    );
+  }
+
+  /// A small glass circle for actions that float over the page.
+  Widget _overlayButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return GlassContainer(
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      padding: EdgeInsets.zero,
+      margin: EdgeInsets.zero,
+      opacity: 0.85,
+      borderOpacity: 0.4,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(icon, size: 20, color: GlassColors.primaryBlue),
+      ),
+    );
+  }
+
+  /// Page controls, Previous/Next document and Download.
+  ///
+  /// This is the column that used to run into the Android navigation bar, so it
+  /// owns the bottom [SafeArea]: the inset is applied once, here, and the page
+  /// above simply takes the remaining height.
+  Widget _buildBottomBar() {
+    return SafeArea(
+      top: false,
+      minimum: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildControls(),
+          const SizedBox(height: 10),
+          _buildAssignmentNav(),
+          const SizedBox(height: 12),
+          _buildDownloadButton(),
+        ],
+      ),
     );
   }
 
@@ -456,6 +682,67 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
             icon: const Icon(Icons.zoom_in_rounded),
             color: GlassColors.primaryBlue,
             disabledColor: GlassColors.disabledOf(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Previous / Next document, in the order the list showed them.
+  Widget _buildAssignmentNav() {
+    final enabled = !_loading;
+    return Row(
+      children: [
+        Expanded(
+          child: _navButton(
+            label: 'Previous',
+            icon: Icons.skip_previous_rounded,
+            enabled: enabled && _hasPrevious,
+            onPressed: () => _step(-1),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _navButton(
+            label: 'Next',
+            icon: Icons.skip_next_rounded,
+            enabled: enabled && _hasNext,
+            onPressed: () => _step(1),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _navButton({
+    required String label,
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onPressed,
+  }) {
+    // A grey label and border while disabled say "there is no next document"
+    // without pretending to be tappable; the tap target is inert too.
+    final color = enabled
+        ? GlassColors.primaryBlue
+        : GlassColors.disabledOf(context);
+    return GlassOutlinedButton(
+      onPressed: enabled ? onPressed : null,
+      height: 44,
+      borderRadius: 12,
+      borderColor: color,
+      textColor: color,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
           ),
         ],
       ),

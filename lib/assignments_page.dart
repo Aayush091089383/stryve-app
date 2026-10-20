@@ -91,6 +91,13 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
         MaterialPageRoute(
           builder: (context) => AssignmentPdfViewerPage(
             assignment: assignment,
+            // The whole list, so the reader's Previous/Next can walk it
+            // without popping back to this screen. The viewer skips the rows
+            // without a PDF and finds the tapped one by id.
+            assignments: _assignments,
+            initialIndex: _assignments.indexWhere(
+              (row) => row.id == assignment.id,
+            ),
             token: widget.student.token,
             client: widget.client,
             load: widget.loadPdf,
