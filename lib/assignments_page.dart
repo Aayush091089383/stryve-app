@@ -81,27 +81,37 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
   /// the same document twice.
   bool _openingViewer = false;
 
+  /// Subjects whose section the student has folded away.
+  ///
+  /// Deliberately empty at first: a freshly uploaded PDF has to be visible
+  /// without hunting for it behind a folded folder, which is exactly the
+  /// complaint that led to grouping. Folding is a reading preference for this
+  /// visit only, so it is not stored anywhere.
+  final Set<String> _collapsedSubjects = <String>{};
+
   @override
   void initState() {
     super.initState();
     _fetchAssignments();
   }
 
-  Future<void> _openAssignment(Assignment assignment) async {
+  Future<void> _openAssignment(
+    Assignment assignment, {
+    List<Assignment>? siblings,
+  }) async {
     if (_openingViewer) return;
     _openingViewer = true;
     try {
+      // The rows of the same subject, so the reader's Previous/Next walks the
+      // folder that was opened rather than jumping to a different subject.
+      // The viewer skips the rows without a PDF and finds the tapped one by id.
+      final group = siblings ?? _assignments;
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => AssignmentPdfViewerPage(
             assignment: assignment,
-            // The whole list, so the reader's Previous/Next can walk it
-            // without popping back to this screen. The viewer skips the rows
-            // without a PDF and finds the tapped one by id.
-            assignments: _assignments,
-            initialIndex: _assignments.indexWhere(
-              (row) => row.id == assignment.id,
-            ),
+            assignments: group,
+            initialIndex: group.indexWhere((row) => row.id == assignment.id),
             token: widget.student.token,
             client: widget.client,
             load: widget.loadPdf,
@@ -208,6 +218,43 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// The fetched rows grouped by subject, alphabetically by subject name.
+  ///
+  /// Several uploads for one subject stay inside that subject's section
+  /// instead of becoming several look-alike top-level cards. Within a section
+  /// the soonest deadline comes first and same-day uploads fall back to the
+  /// newest id, so the PDF that was just posted is the one at the top.
+  List<_SubjectSectionData> _groupedAssignments() {
+    final bySubject = <String, List<Assignment>>{};
+    for (final assignment in _assignments) {
+      // A blank subject is still one group, never a key that disappears.
+      final subject = assignment.subject.trim().isEmpty
+          ? 'General'
+          : assignment.subject.trim();
+      bySubject.putIfAbsent(subject, () => <Assignment>[]).add(assignment);
+    }
+
+    final subjects = bySubject.keys.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    return subjects.map((subject) {
+      final rows = bySubject[subject]!
+        ..sort((a, b) {
+          final byDue = a.dueDate.compareTo(b.dueDate);
+          return byDue != 0 ? byDue : b.id.compareTo(a.id);
+        });
+      return _SubjectSectionData(subject: subject, rows: rows);
+    }).toList();
+  }
+
+  void _toggleSubject(String subject) {
+    setState(() {
+      if (!_collapsedSubjects.remove(subject)) {
+        _collapsedSubjects.add(subject);
+      }
+    });
   }
 
   /// Pull-to-refresh and the header button both come through here.
@@ -320,6 +367,8 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
         ? MediaQuery.paddingOf(context).top + 8
         : 16.0;
 
+    final groups = _groupedAssignments();
+
     return RefreshIndicator(
       // Pull down to fetch again - through the network, never the cache.
       onRefresh: _refresh,
@@ -367,7 +416,10 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Everything posted for your division and batch.',
+            _assignments.isEmpty
+                ? 'Everything posted for your division and batch.'
+                : 'Everything posted for your division and batch, grouped '
+                      'by subject. Tap a subject to fold it.',
             style: TextStyle(
               fontSize: 13,
               color: GlassColors.secondaryTextOf(context),
@@ -377,16 +429,16 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
           if (_assignments.isEmpty)
             _buildEmptyState()
           else
-            ..._assignments.map(
-              (assignment) => AssignmentCard(
-                title: assignment.title,
-                subject: assignment.subject,
-                dueDate: formatAssignmentDueDate(assignment.dueDate),
-                batch: assignment.batch,
-                description: assignment.description,
-                hasAttachment: assignment.hasAttachment,
-                attachmentName: assignment.attachmentName,
-                onOpen: () => _openAssignment(assignment),
+            ...groups.map(
+              (group) => _SubjectSection(
+                key: ValueKey('subject-${group.subject}'),
+                data: group,
+                expanded: !_collapsedSubjects.contains(group.subject),
+                onToggle: () => _toggleSubject(group.subject),
+                onOpen: (assignment) => _openAssignment(
+                  assignment,
+                  siblings: group.rows,
+                ),
               ),
             ),
         ],
@@ -439,6 +491,307 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One subject's rows, before any widget is built.
+///
+/// The backend keeps assignments flat (one row per upload, `subject` is just a
+/// text column); the folder the student sees is created here, on the client.
+class _SubjectSectionData {
+  const _SubjectSectionData({required this.subject, required this.rows});
+
+  final String subject;
+
+  /// Sorted by [AssignmentsPage]: soonest deadline first, then newest id.
+  final List<Assignment> rows;
+
+  /// "2 files · due 21 Oct 2026" - the header has to say something useful
+  /// while the section is folded, or folding would hide the deadlines too.
+  String get summary {
+    final count = rows.length == 1 ? '1 file' : '${rows.length} files';
+    return '$count · due ${formatAssignmentDueDate(rows.first.dueDate)}';
+  }
+}
+
+/// One subject, foldable. The accordion itself is not [ExpansionTile]: that
+/// widget brings its own Material chrome (dividers, list-tile padding, a
+/// full-width ink background) that would sit on top of the glass treatment,
+/// and it cannot collapse *animatedly* without `maintainState` quirks. This is
+/// the same interaction - tap the header, the children slide open or shut.
+class _SubjectSection extends StatelessWidget {
+  const _SubjectSection({
+    super.key,
+    required this.data,
+    required this.expanded,
+    required this.onToggle,
+    required this.onOpen,
+  });
+
+  final _SubjectSectionData data;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final void Function(Assignment assignment) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = GlassColors.secondaryTextOf(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GlassCard(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          onTap: onToggle,
+          child: Row(
+            children: [
+              GlassContainer(
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                padding: EdgeInsets.zero,
+                blurStrength: 15,
+                opacity: 0.7,
+                borderOpacity: 0.4,
+                child: Icon(
+                  expanded
+                      ? Icons.folder_open_rounded
+                      : Icons.folder_rounded,
+                  size: 22,
+                  color: GlassColors.primaryBlue,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      data.subject,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: GlassColors.headingOf(context),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      data.summary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: secondary),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              AnimatedRotation(
+                turns: expanded ? 0.5 : 0,
+                duration: motionDuration(context, kMotionStandard),
+                curve: Curves.easeOut,
+                child: Icon(
+                  Icons.expand_more_rounded,
+                  size: 24,
+                  color: secondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        AnimatedSize(
+          duration: motionDuration(context, kMotionStandard),
+          curve: Curves.easeOut,
+          alignment: Alignment.topCenter,
+          // Collapsed renders nothing at all, so a folded folder never leaves
+          // its cards in the tree (nor in a screen reader's order).
+          child: expanded
+              ? Column(
+                  children: [
+                    for (final assignment in data.rows)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 10),
+                        child: _AssignmentFileRow(
+                          assignment: assignment,
+                          onOpen: () => onOpen(assignment),
+                        ),
+                      ),
+                  ],
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
+    );
+  }
+}
+
+/// One PDF inside a subject folder.
+///
+/// Deliberately lighter than [AssignmentCard]: the subject is already the
+/// header this row sits under, so repeating it would be noise, and a nested
+/// row must not compete with the folder that owns it.
+class _AssignmentFileRow extends StatelessWidget {
+  const _AssignmentFileRow({required this.assignment, required this.onOpen});
+
+  final Assignment assignment;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = GlassColors.secondaryTextOf(context);
+    final description = assignment.description?.trim() ?? '';
+    final hasFile = assignment.hasAttachment;
+
+    return GlassCard(
+      // A flat tint: this sits on the page's already-blurred background and a
+      // filter per row would cost a full blur pass for nothing visible.
+      useBlur: false,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      borderRadius: 14,
+      onTap: hasFile ? onOpen : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GlassContainer(
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                padding: EdgeInsets.zero,
+                blurStrength: 12,
+                opacity: 0.65,
+                borderOpacity: 0.35,
+                child: Icon(
+                  hasFile
+                      ? Icons.picture_as_pdf_rounded
+                      : Icons.assignment_outlined,
+                  size: 20,
+                  color: hasFile ? GlassColors.primaryBlue : secondary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      assignment.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: GlassColors.headingOf(context),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.calendar_today_rounded,
+                              size: 12,
+                              color: secondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Due: ${formatAssignmentDueDate(assignment.dueDate)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: secondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (assignment.batch != null)
+                          GlassContainer(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            borderRadius: 7,
+                            blurStrength: 10,
+                            opacity: 0.6,
+                            borderOpacity: 0.3,
+                            child: Text(
+                              assignment.batch!,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: GlassColors.primaryBlue,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (hasFile) ...[
+                const SizedBox(width: 8),
+                Icon(Icons.chevron_right_rounded, size: 20, color: secondary),
+              ],
+            ],
+          ),
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                color: secondary,
+              ),
+            ),
+          ],
+          if (hasFile) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    assignment.attachmentName ?? 'Attached PDF',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: secondary),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 118,
+                  child: GlassButton(
+                    onPressed: onOpen,
+                    color: GlassColors.primaryBlue,
+                    height: 34,
+                    borderRadius: 9,
+                    child: const Text(
+                      'READ PDF',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
