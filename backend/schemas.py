@@ -512,3 +512,81 @@ class DeviceTokenOut(BaseModel):
     """Whether this device is now registered for push, for the caller."""
 
     registered: bool
+
+
+# ======================================================================
+# Announcements (teacher posts a notice, students read the feed)
+# ======================================================================
+class AnnouncementCreate(BaseModel):
+    """What a teacher or admin posts.
+
+    `year` and `division` are optional and independent: leaving both out posts
+    to every student, leaving one out keeps the other restriction. Length and
+    wording are validated here so a bad body gets the usual 422 shape instead of
+    reaching the database.
+    """
+
+    title: str
+    message: str
+
+    # NULL/omitted = not restricted to one year or one division.
+    year: int | None = None
+    division: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def title_is_usable(cls, v: str) -> str:
+        cleaned = (v or "").strip()
+        if not cleaned:
+            raise ValueError("Title is required")
+        if len(cleaned) > 200:
+            raise ValueError("Title must be at most 200 characters")
+        return cleaned
+
+    @field_validator("message")
+    @classmethod
+    def message_is_usable(cls, v: str) -> str:
+        cleaned = (v or "").strip()
+        if not cleaned:
+            raise ValueError("Message is required")
+        if len(cleaned) > 5000:
+            raise ValueError("Message must be at most 5000 characters")
+        return cleaned
+
+    @field_validator("year")
+    @classmethod
+    def year_is_sane(cls, v: int | None) -> int | None:
+        if v is not None and not 1 <= v <= 5:
+            raise ValueError("Year must be between 1 and 5, or omitted")
+        return v
+
+    @field_validator("division")
+    @classmethod
+    def division_is_sane(cls, v: str | None) -> str | None:
+        cleaned = (v or "").strip().upper()
+        if not cleaned:
+            return None
+        if len(cleaned) > 8:
+            raise ValueError("Division must be at most 8 characters, or omitted")
+        return cleaned
+
+
+class AnnouncementOut(BaseModel):
+    """One announcement as the feed (and the poster's confirmation) sees it."""
+
+    id: int
+    title: str
+    message: str
+
+    author_id: int
+    # Resolved server-side from author_id; the client never supplies it.
+    author_name: str
+
+    created_at: datetime
+
+    # NULL = not restricted to one year / one division.
+    year: int | None = None
+    division: str | None = None
+
+    class Config:
+        from_attributes = True

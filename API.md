@@ -252,3 +252,23 @@ permission is decided by the backend from the authenticated account.
 | GET | `/directory/status` | any signed-in account | record counts plus the list of source data still missing |
 
 Error shape is unchanged: `{"detail": ..., "code": ...}`.
+
+## Announcements added 2026-10-20
+
+| Method | Path | Who | Notes |
+| --- | --- | --- | --- |
+| POST | `/teacher/announcements` | teacher/admin | body `{title, message, year?, division?}`; `201` with the created row |
+| GET | `/announcements` | student | the caller's feed, newest first |
+
+* `title` 1-200 chars, `message` 1-5000, `year` 1-5 or omitted, `division` up to
+  8 chars (upper-cased) or omitted. Refusals are **422** with the usual
+  `{"detail": ...}` shape.
+* The author is the authenticated account (`author_id`/`author_name` in the
+  response); the client can never supply it.
+* `year` and `division` are independent restrictions, and a NULL on either
+  means "no restriction on that field" - omit both to post to every student. A
+  student whose own year/division is missing in the database sees only the
+  unrestricted rows.
+* A student token on the teacher route is **403**; a teacher token on
+  `/announcements` is **401** (the feed is student-only).
+* Announcements are append-only: there is no edit or delete endpoint.

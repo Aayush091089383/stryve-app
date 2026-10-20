@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import 'announcements_page.dart';
 import 'assignments_page.dart';
 import 'config/environment.dart';
 import 'faculty_finder_page.dart';
@@ -931,6 +932,17 @@ class _HomeTabState extends State<_HomeTab> {
                 child: _glassQuickCard(
                   icon: Icons.campaign_rounded,
                   title: 'Announcements',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AnnouncementsPage(
+                          student: student,
+                          client: widget.client,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],

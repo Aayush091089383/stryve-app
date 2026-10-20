@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pwdlib import PasswordHash
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 
 import models
@@ -66,6 +66,8 @@ from schemas import (
     TimetableEntryOut,
     AssignmentOut,
     NotificationOut,
+    AnnouncementCreate,
+    AnnouncementOut,
     DeviceTokenRegister,
     DeviceTokenOut,
     TokenResponse,
@@ -960,6 +962,78 @@ def mark_notification_read(
         db.refresh(row)
 
     return row
+
+
+# ==================================================================
+# Announcements - a teacher posts, the whole class group (or everyone) reads.
+# ==================================================================
+@app.post(
+    "/teacher/announcements",
+    response_model=AnnouncementOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_announcement(
+    payload: AnnouncementCreate,
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Post an announcement to the student feed.
+
+    Any active teacher or admin account may post - this is a normal part of
+    teaching here, so there is no separate permission to grant. The author is
+    the authenticated account, never a client-supplied id.
+
+    ``year``/``division`` are optional restrictions: leaving both out posts to
+    every student, leaving one out keeps the other.
+    """
+    announcement = models.Announcement(
+        title=payload.title,
+        message=payload.message,
+        author_id=teacher.id,
+        created_at=datetime.utcnow(),
+        year=payload.year,
+        division=payload.division,
+    )
+
+    db.add(announcement)
+    db.commit()
+    db.refresh(announcement)
+    return announcement
+
+
+@app.get("/announcements", response_model=list[AnnouncementOut])
+def list_my_announcements(
+    student: models.Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """The announcements this student may read, newest first.
+
+    A NULL ``year`` or ``division`` means "no restriction on that field", so a
+    college-wide post is read by everyone while a class-group post stays in
+    that group. The filter is built from the authenticated student - a client
+    can never ask for another year's or division's feed. A student whose own
+    year/division is missing only ever sees the unrestricted rows.
+    """
+    year_filter = or_(
+        models.Announcement.year.is_(None),
+        models.Announcement.year == student.year,
+    )
+    division_filter = or_(
+        models.Announcement.division.is_(None),
+        func.upper(models.Announcement.division)
+        == (student.division or "").upper(),
+    )
+
+    return (
+        db.query(models.Announcement)
+        .options(joinedload(models.Announcement.author))
+        .filter(year_filter, division_filter)
+        .order_by(
+            models.Announcement.created_at.desc(),
+            models.Announcement.id.desc(),
+        )
+        .all()
+    )
 
 
 # ==================================================================

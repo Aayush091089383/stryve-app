@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'claim_free_period_page.dart';
 import 'config/environment.dart';
 import 'services/teacher_auth_service.dart';
+import 'teacher_announcements_page.dart';
 import 'teacher_approvals_page.dart';
 import 'teacher_assignments_page.dart';
 import 'teacher_attendance_page.dart';
@@ -403,6 +404,28 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
     );
   }
 
+  /// Opens the compose screen. It pops `true` once the backend accepted the
+  /// post, which is when the confirmation belongs on the panel rather than on a
+  /// screen that is already closing.
+  Future<void> _openAnnouncements() async {
+    final posted = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TeacherAnnouncementsPage(
+          authService: _authService,
+          client: widget.client,
+        ),
+      ),
+    );
+
+    if (posted != true || !mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(content: Text('Announcement posted')),
+      );
+  }
+
   void _openTeacherManagement() {
     Navigator.push(
       context,
@@ -656,6 +679,14 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                     : '${_claims.length} period(s) already claimed.',
                 onTap: _openClaimFreePeriod,
               ),
+              const SizedBox(height: 12),
+              _buildActionCard(
+                icon: Icons.campaign_rounded,
+                title: 'Post Announcement',
+                subtitle:
+                    'Send a notice to your class group or to every student.',
+                onTap: _openAnnouncements,
+              ),
               if (_claims.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 GlassCard(
@@ -843,6 +874,14 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                     'Create teacher accounts, link official faculty codes and '
                     'grant the registration-approval permission.',
                 onTap: _openTeacherManagement,
+              ),
+              const SizedBox(height: 12),
+              _buildActionCard(
+                icon: Icons.campaign_rounded,
+                title: 'Post Announcement',
+                subtitle:
+                    'Send a notice to one class group or to every student.',
+                onTap: _openAnnouncements,
               ),
               const SizedBox(height: 24),
               _buildInfoCard(

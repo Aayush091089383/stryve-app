@@ -250,3 +250,29 @@ backend/venv/Scripts/python.exe backend/seed_official_data.py --apply    # apply
 Neither command deletes a row, touches students/registrations, or rewrites a
 password hash. Uploaded PDFs live under `backend/uploads/assignments/` with
 server-generated names and are never served statically.
+
+## 8. Announcements (2026-10-20)
+
+`announcements` - created additively; no existing table or row was rewritten.
+
+| column | type | notes |
+| --- | --- | --- |
+| `id` | INTEGER PK | |
+| `title` | VARCHAR NOT NULL | 1-200 chars, validated server-side |
+| `message` | TEXT NOT NULL | 1-5000 chars |
+| `author_id` | INTEGER NOT NULL | FK -> `teachers.id`; always the posting account |
+| `created_at` | DATETIME NOT NULL | UTC |
+| `year` | INTEGER NULL | NULL = every year |
+| `division` | VARCHAR NULL | NULL = every division; both NULL = college-wide |
+
+The table was created through the sanctioned additive path (never a hand-written
+`CREATE TABLE`), after a manual backup of the live file:
+
+```bash
+cp backend/campussync.db backend/campussync.db.backup_announcements_$(date +%s)
+backend/venv/Scripts/python.exe backend/seed_official_data.py --schema-only          # dry run
+backend/venv/Scripts/python.exe backend/seed_official_data.py --schema-only --apply  # creates it
+```
+
+That command creates missing tables only and writes no data, so the table starts
+empty; existing students/teachers/assignments are untouched.

@@ -476,7 +476,42 @@ class FreePeriodClaim(Base):
             "division",
             "batch",
             "claim_date",
-            "start_time",
-            name="uq_claim_class_slot",
+            "start_time",            name="uq_claim_class_slot",
         ),
     )
+
+
+class Announcement(Base):
+    """One announcement a teacher or admin posted to the student feed.
+
+    ``year`` and ``division`` are both optional: a NULL means "no restriction on
+    this field", so a row with neither set is read by every student. That is
+    how a college-wide notice is posted - there is no special "everyone" value,
+    just an unrestricted row.
+
+    Rows are append-only: nothing edits or deletes an announcement, so what a
+    student read yesterday is still what the feed says today. ``author_id``
+    points at the teacher account that posted it and is never taken from the
+    client.
+    """
+
+    __tablename__ = "announcements"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+
+    author_id = Column(Integer, ForeignKey("teachers.id"), nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False)
+
+    # NULL = not restricted to one year / one division.
+    year = Column(Integer, nullable=True, index=True)
+    division = Column(String, nullable=True)
+
+    author = relationship("Teacher", foreign_keys=[author_id])
+
+    @property
+    def author_name(self) -> str:
+        """The poster's name, or a neutral fallback if the account is gone."""
+        return self.author.name if self.author is not None else "CampusSync"
