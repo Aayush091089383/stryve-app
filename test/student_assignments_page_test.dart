@@ -19,9 +19,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:stryve/assignment_pdf_viewer_page.dart';
 import 'package:stryve/assignments_page.dart';
 import 'package:stryve/services/api_cache.dart';
 import 'package:stryve/student.dart';
+import 'package:stryve/utils/video_surface.dart';
+import 'package:stryve/video_player_page.dart';
 
 const String kToken = 'assignments-page-token';
 
@@ -179,6 +182,82 @@ void main() {
     expect(calls, 2, reason: 'the retry must hit the backend again');
     await openFolder(tester, 'MATH');
     expect(find.text('Problem Set 4'), findsOneWidget);
+  });
+
+  testWidgets('a video attachment says PLAY VIDEO, a PDF keeps READ PDF', (
+    tester,
+  ) async {
+    final client = MockClient(
+      (request) async => ok([
+        assignmentJson(
+          id: 1,
+          subject: 'MATH',
+          title: 'Recorded lecture',
+          originalName: 'lecture.mp4',
+        ),
+        assignmentJson(
+          id: 2,
+          subject: 'PHY',
+          title: 'Lab notes',
+          originalName: 'notes.pdf',
+        ),
+      ]),
+    );
+
+    await pumpAssignments(tester, client);
+    await openFolder(tester, 'MATH');
+    await openFolder(tester, 'PHY');
+
+    expect(find.text('PLAY VIDEO'), findsOneWidget);
+    expect(find.text('READ PDF'), findsOneWidget);
+  });
+
+  testWidgets('tapping a video opens the player, never the PDF reader', (
+    tester,
+  ) async {
+    final client = MockClient(
+      (request) async => ok([
+        assignmentJson(
+          id: 7,
+          subject: 'MATH',
+          title: 'Recorded lecture',
+          originalName: 'lecture.mp4',
+        ),
+      ]),
+    );
+
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    VideoSource? asked;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AssignmentsPage(
+          student: studentFixture(),
+          client: client,
+          // The player's own surface is injected: starting the native player in
+          // a widget test is exactly what this avoids.
+          videoSurfaceFactory: (source) {
+            asked = source;
+            return const Center(child: Text('FAKE PLAYER'));
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await openFolder(tester, 'MATH');
+    await tester.tap(find.text('PLAY VIDEO'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(VideoPlayerPage), findsOneWidget);
+    expect(find.byType(AssignmentPdfViewerPage), findsNothing);
+    expect(find.text('FAKE PLAYER'), findsOneWidget);
+    // The player asks for the same authorized endpoint the PDF reader uses.
+    expect(asked?.url.endsWith('/assignments/7/file'), isTrue, reason: asked?.url);
+    expect(asked?.token, kToken);
   });
 
   testWidgets('a pending request shows the loading state', (tester) async {

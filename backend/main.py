@@ -2272,14 +2272,62 @@ def release_free_period(
 
 
 # ==================================================================
-# Assignments: PDF upload / download
+# Assignments: PDF / video upload + download
 # ============================================================
-_ALLOWED_UPLOAD_TYPES = {
+# An assignment attachment is either a PDF or a video. The content type the
+# client claims is only a hint: the bytes decide (see _sniff_media_kind), so a
+# video renamed to .pdf - or the reverse - is refused rather than stored and
+# served as the wrong kind of file.
+_ALLOWED_PDF_TYPES = {
     "application/pdf",
     "application/x-pdf",
-    "application/octet-stream",
-    "binary/octet-stream",
 }
+_ALLOWED_VIDEO_TYPES = {
+    "video/mp4",
+    "video/quicktime",
+    "video/x-matroska",
+    "video/x-m4v",
+}
+# Browsers and the file_picker plugin often send this for a local file whose
+# type they do not know; the magic bytes below are the real check.
+_GENERIC_BINARY_TYPES = {"application/octet-stream", "binary/octet-stream"}
+
+_ALLOWED_UPLOAD_TYPES = (
+    _ALLOWED_PDF_TYPES | _ALLOWED_VIDEO_TYPES | _GENERIC_BINARY_TYPES
+)
+
+# kind -> stored file extension, and the type the download endpoint serves.
+_MEDIA_EXTENSIONS = {
+    "pdf": ".pdf",
+    "mp4": ".mp4",
+    "mov": ".mov",
+    "mkv": ".mkv",
+}
+_MEDIA_CONTENT_TYPES = {
+    ".pdf": "application/pdf",
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".mkv": "video/x-matroska",
+}
+
+
+def _sniff_media_kind(data: bytes) -> str | None:
+    """The real kind of an attachment, read from its first bytes.
+
+    ISO base media files (MP4/MOV/M4V) carry a ``ftyp`` box at offset 4; the
+    brand says which member of the family it is. Matroska/WebM starts with the
+    EBML header. Anything else is not something this endpoint stores.
+    """
+    if data.startswith(b"%PDF-"):
+        return "pdf"
+    if len(data) >= 12 and data[4:8] == b"ftyp":
+        brand = data[8:12]
+        if brand == b"qt  ":
+            return "mov"
+        return "mp4"
+    if data.startswith(b"\x1aE\xdf\xa3"):
+        return "mkv"
+    return None
 
 
 def _safe_display_name(filename: str | None) -> str:
@@ -2417,11 +2465,12 @@ def upload_assignment(
     teacher: models.Teacher = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
-    """Upload a PDF assignment for a class group.
+    """Upload a PDF or video assignment for a class group.
 
-    Validates the file type (PDF magic bytes, not just a header), the size, the
-    metadata and the caller's authorization. The stored file name is generated
-    server-side; the client's name is kept only for display.
+    Validates the file type (magic bytes, not just a header), the size, the
+    metadata and the caller's authorization. PDFs and MP4/MOV/MKV video are
+    accepted; the stored extension follows what the bytes are, and the client's
+    name is kept only for display.
 
     Uploading the real PDF for a subject replaces that class group's text-only
     rows for the same subject/year/division, so a student sees one card per
@@ -2471,7 +2520,7 @@ def upload_assignment(
     if content_type and content_type not in _ALLOWED_UPLOAD_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="Only PDF files can be uploaded",
+            detail="Only PDF and video files can be uploaded",
         )
 
     max_bytes = max(1, settings.MAX_ASSIGNMENT_FILE_MB) * 1024 * 1024
@@ -2485,19 +2534,33 @@ def upload_assignment(
     if len(data) > max_bytes:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"PDF must be at most {settings.MAX_ASSIGNMENT_FILE_MB} MB",
+            detail=(
+                "The file must be at most "
+                f"{settings.MAX_ASSIGNMENT_FILE_MB} MB"
+            ),
         )
 
-    if not data.startswith(b"%PDF-"):
+    # The bytes decide what this is. A PDF that claims to be a video (or the
+    # other way round) is a mislabelled upload, not a file to store.
+    media_kind = _sniff_media_kind(data)
+    if media_kind is None:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="The uploaded file is not a valid PDF",
+            detail="The uploaded file is not a valid PDF or video",
         )
+
+    if content_type and content_type not in _GENERIC_BINARY_TYPES:
+        claimed_video = content_type in _ALLOWED_VIDEO_TYPES
+        if (media_kind == "pdf") == claimed_video:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail="The file type does not match its contents",
+            )
 
     upload_dir = settings.upload_path
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    stored_name = f"{uuid.uuid4().hex}.pdf"
+    stored_name = f"{uuid.uuid4().hex}{_MEDIA_EXTENSIONS[media_kind]}"
     (upload_dir / stored_name).write_bytes(data)
 
     # The text-only rows this upload supersedes: same subject, year and
@@ -2692,8 +2755,13 @@ def download_assignment_file(
 
     return FileResponse(
         path,
-        media_type="application/pdf",
-        filename=assignment.original_name or f"assignment-{assignment.id}.pdf",
+        # The stored extension is what the upload actually was; serving every
+        # attachment as application/pdf would make a video unplayable.
+        media_type=_MEDIA_CONTENT_TYPES.get(
+            path.suffix.lower(), "application/octet-stream"
+        ),
+        filename=assignment.original_name
+        or f"assignment-{assignment.id}{path.suffix.lower() or '.pdf'}",
     )
 
 

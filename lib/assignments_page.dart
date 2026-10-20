@@ -15,6 +15,8 @@ import 'utils/assignment_card.dart';
 import 'utils/glass_container.dart';
 import 'utils/motion.dart';
 import 'utils/pdf_surface.dart';
+import 'utils/video_surface.dart';
+import 'video_player_page.dart';
 
 /// The student's Assignments screen: every assignment the existing
 /// `GET /assignments` endpoint returns for their class group.
@@ -36,6 +38,7 @@ class AssignmentsPage extends StatefulWidget {
   final AssignmentPdfLoad? loadPdf;
   final AssignmentPdfSave? savePdf;
   final PdfSurfaceFactory? surfaceFactory;
+  final VideoSurfaceFactory? videoSurfaceFactory;
 
   /// When true this page renders only its content, for use as a tab body.
   ///
@@ -60,6 +63,7 @@ class AssignmentsPage extends StatefulWidget {
     this.loadPdf,
     this.savePdf,
     this.surfaceFactory,
+    this.videoSurfaceFactory,
     this.embedded = false,
     this.bottomInset = 0,
   });
@@ -107,16 +111,31 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
       final group = siblings ?? _assignments;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => AssignmentPdfViewerPage(
-            assignment: assignment,
-            assignments: group,
-            initialIndex: group.indexWhere((row) => row.id == assignment.id),
-            token: widget.student.token,
-            client: widget.client,
-            load: widget.loadPdf,
-            savePdf: widget.savePdf,
-            surfaceFactory: widget.surfaceFactory,
-          ),
+          // The file decides the screen: a video streams in the player, a PDF
+          // renders in the reader. Both go through the same authorized
+          // endpoint, so the backend still decides who may open what.
+          builder: (context) => assignment.isVideo
+              ? VideoPlayerPage(
+                  assignment: assignment,
+                  assignments: group,
+                  initialIndex: group.indexWhere(
+                    (row) => row.id == assignment.id,
+                  ),
+                  token: widget.student.token,
+                  surfaceFactory: widget.videoSurfaceFactory,
+                )
+              : AssignmentPdfViewerPage(
+                  assignment: assignment,
+                  assignments: group,
+                  initialIndex: group.indexWhere(
+                    (row) => row.id == assignment.id,
+                  ),
+                  token: widget.student.token,
+                  client: widget.client,
+                  load: widget.loadPdf,
+                  savePdf: widget.savePdf,
+                  surfaceFactory: widget.surfaceFactory,
+                ),
         ),
       );
     } finally {
@@ -704,9 +723,11 @@ class _AssignmentFileRow extends StatelessWidget {
                 opacity: 0.65,
                 borderOpacity: 0.35,
                 child: Icon(
-                  hasFile
-                      ? Icons.picture_as_pdf_rounded
-                      : Icons.assignment_outlined,
+                  !hasFile
+                      ? Icons.assignment_outlined
+                      : assignment.isVideo
+                      ? Icons.play_circle_fill_rounded
+                      : Icons.picture_as_pdf_rounded,
                   size: 20,
                   color: hasFile ? GlassColors.primaryBlue : secondary,
                 ),
@@ -814,9 +835,9 @@ class _AssignmentFileRow extends StatelessWidget {
                     color: GlassColors.primaryBlue,
                     height: 34,
                     borderRadius: 9,
-                    child: const Text(
-                      'READ PDF',
-                      style: TextStyle(
+                    child: Text(
+                      assignment.isVideo ? 'PLAY VIDEO' : 'READ PDF',
+                      style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),

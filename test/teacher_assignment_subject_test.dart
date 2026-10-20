@@ -90,7 +90,9 @@ Future<void> pumpAssignmentsView(
   await tester.pumpAndSettle();
 
   if (openSheet) {
-    await tester.tap(find.text('UPLOAD PDF ASSIGNMENT'));
+    // The call to action no longer says "PDF": the same sheet now takes a PDF
+    // or a video. Everything this helper does afterwards is unchanged.
+    await tester.tap(find.text('UPLOAD ASSIGNMENT'));
     await tester.pumpAndSettle();
   }
 }
@@ -213,7 +215,9 @@ void main() {
     await tester.tap(find.text('Engineering Physics').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('CHOOSE PDF FILE'));
+    // The picker offers PDFs and videos now, so the button no longer says
+    // "PDF FILE"; the file it supplies below is still a PDF.
+    await tester.tap(find.text('CHOOSE PDF OR VIDEO'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('UPLOAD'));
@@ -246,7 +250,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Engineering Physics').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('CHOOSE PDF FILE'));
+    // The picker offers PDFs and videos now, so the button no longer says
+    // "PDF FILE"; the file it supplies below is still a PDF.
+    await tester.tap(find.text('CHOOSE PDF OR VIDEO'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('UPLOAD'));
     await tester.pumpAndSettle();

@@ -36,24 +36,55 @@ const List<String> kAssignmentSubjects = <String>[
   'Professional Communication Skills',
 ];
 
+/// The attachment kinds a teacher may pick, and the type sent for each.
+///
+/// The backend sniffs the bytes and is the authority; this only makes the
+/// multipart part honest about what it carries, so a phone video is not
+/// announced as `application/pdf`.
+const Map<String, String> kAssignmentFileTypes = <String, String>{
+  'pdf': 'application/pdf',
+  'mp4': 'video/mp4',
+  'mov': 'video/quicktime',
+  'mkv': 'video/x-matroska',
+};
+
+/// The content type for a picked file, from its extension.
+String assignmentContentType(String name) {
+  final dot = name.lastIndexOf('.');
+  if (dot < 0) return 'application/octet-stream';
+  return kAssignmentFileTypes[name.substring(dot + 1).toLowerCase()] ??
+      'application/octet-stream';
+}
+
 /// The filename the upload actually carries.
 ///
 /// The picked name is used, never a path: `file_selector` returns a display
 /// name, and the basename is taken defensively anyway. Android's document
 /// picker can also hand back a cached copy whose name has no extension at all,
-/// so `.pdf` is appended when it is missing - the file itself is still a PDF,
-/// and the backend must not receive a name that looks like a bad upload.
+/// so `.pdf` is appended when it is missing - a name without an extension would
+/// make the upload look like the wrong kind of file, and the backend decides by
+/// the bytes anyway.
 String uploadFileName(String pickedName) {
   final base = pickedName.split(RegExp(r'[\\/]')).last.trim();
   if (base.isEmpty) return 'assignment.pdf';
-  return base.toLowerCase().endsWith('.pdf') ? base : '$base.pdf';
+  final dot = base.lastIndexOf('.');
+  final extension = dot < 0 ? '' : base.substring(dot + 1).toLowerCase();
+  return kAssignmentFileTypes.containsKey(extension)
+      ? base
+      : '$base.pdf';
 }
 
-Future<PickedAssignmentFile?> defaultPickPdf() async {
-  const typeGroup = XTypeGroup(
-    label: 'PDF',
-    extensions: <String>['pdf'],
-    mimeTypes: <String>['application/pdf'],
+/// Pick a PDF or a video (MP4/MOV/MKV) from the device.
+Future<PickedAssignmentFile?> defaultPickAssignmentFile() async {
+  final typeGroup = XTypeGroup(
+    label: 'PDF or video',
+    extensions: kAssignmentFileTypes.keys.toList(),
+    mimeTypes: <String>[
+      'application/pdf',
+      'video/mp4',
+      'video/quicktime',
+      'video/x-matroska',
+    ],
   );
   final file = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
   if (file == null) return null;
@@ -61,7 +92,12 @@ Future<PickedAssignmentFile?> defaultPickPdf() async {
   return PickedAssignmentFile(name: file.name, bytes: bytes);
 }
 
-/// Assignments tab: upload a PDF assignment and manage the ones you uploaded.
+/// Backwards-compatible name for the picker: a PDF is still one of the kinds
+/// it offers, and existing callers keep working.
+Future<PickedAssignmentFile?> defaultPickPdf() => defaultPickAssignmentFile();
+
+/// Assignments tab: upload a PDF or video assignment and manage the ones you
+/// uploaded.
 ///
 /// The backend decides what may be uploaded (`POST
 /// /teacher/assignments/upload` validates the file type, the size, the metadata
@@ -211,7 +247,13 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
           // 'application/pdf' as the first argument produced
           // "application/pdf/pdf", which the backend rightly rejects with
           // "Only PDF files can be uploaded" for a perfectly valid PDF.
-          contentType: MediaType('application', 'pdf'),
+          // The type follows the name actually being sent, not the raw pick:
+          // Android's picker can hand back a cache name with no extension,
+          // which `uploadFileName` fixes to .pdf. A video announced as a PDF
+          // would be refused by the backend's content check.
+          contentType: MediaType.parse(
+            assignmentContentType(uploadFileName(payload.file.name)),
+          ),
         ),
       );
 
@@ -381,7 +423,7 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
                 isLoading: _isUploading,
                 disabled: _isUploading,
                 child: Text(
-                  _isUploading ? 'UPLOADING...' : 'UPLOAD PDF ASSIGNMENT',
+                  _isUploading ? 'UPLOADING...' : 'UPLOAD ASSIGNMENT',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -479,8 +521,8 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
           ),
           SizedBox(height: 8),
           Text(
-            'Upload a PDF to share it with your class. Students only see the '
-            'assignments for their own course, division and batch.',
+            'Upload a PDF or a video to share it with your class. Students only '
+            'see the assignments for their own course, division and batch.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
@@ -520,8 +562,14 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
                   ),
                 ),
                 if (assignment.hasAttachment)
-                  const Icon(
-                    Icons.picture_as_pdf_rounded,
+                  Icon(
+                    // Same rule as the student screen: the file's extension
+                    // decides whether this is a document or a video.
+                    (assignment.originalName ?? '').toLowerCase().endsWith(
+                          '.pdf',
+                        )
+                        ? Icons.picture_as_pdf_rounded
+                        : Icons.videocam_rounded,
                     size: 20,
                     color: GlassColors.primaryBlue,
                   ),
@@ -594,7 +642,7 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
                   border: Border.all(color: GlassColors.borderOf(context)),
                 ),
                 child: Text(
-                  'Placeholder - upload a PDF to replace it',
+                  'Placeholder - upload a file to replace it',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -706,7 +754,7 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
       return;
     }
     if (_file == null) {
-      setState(() => _error = 'Please choose a PDF file to upload.');
+      setState(() => _error = 'Please choose a PDF or video file to upload.');
       return;
     }
 
@@ -849,7 +897,7 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
               borderRadius: 14,
               child: Text(
                 _file == null
-                    ? 'CHOOSE PDF FILE'
+                    ? 'CHOOSE PDF OR VIDEO'
                     : '${_file!.name} (${(_file!.sizeBytes / 1024).toStringAsFixed(0)} KB)',
                 style: const TextStyle(fontSize: 13),
               ),

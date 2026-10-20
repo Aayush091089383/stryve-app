@@ -43,6 +43,7 @@ class AssignmentCard extends StatelessWidget {
     this.description,
     this.hasAttachment = false,
     this.attachmentName,
+    this.isVideo = false,
     this.onOpen,
   });
 
@@ -55,6 +56,12 @@ class AssignmentCard extends StatelessWidget {
   final String? description;
   final bool hasAttachment;
   final String? attachmentName;
+
+  /// True when the attachment is a video, so the card offers the right action
+  /// instead of telling a student to "READ" a recording. Defaults to false:
+  /// every caller that predates video uploads keeps its exact wording.
+  final bool isVideo;
+
   final VoidCallback? onOpen;
 
   @override
@@ -79,8 +86,10 @@ class AssignmentCard extends StatelessWidget {
                 blurStrength: 15,
                 opacity: 0.7,
                 borderOpacity: 0.4,
-                child: const Icon(
-                  Icons.assignment_rounded,
+                child: Icon(
+                  isVideo
+                      ? Icons.play_circle_fill_rounded
+                      : Icons.assignment_rounded,
                   size: 24,
                   color: GlassColors.primaryBlue,
                 ),
@@ -225,9 +234,9 @@ class AssignmentCard extends StatelessWidget {
                     color: GlassColors.primaryBlue,
                     height: 36,
                     borderRadius: 10,
-                    child: const Text(
-                      'READ PDF',
-                      style: TextStyle(
+                    child: Text(
+                      isVideo ? 'PLAY VIDEO' : 'READ PDF',
+                      style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),

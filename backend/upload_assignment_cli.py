@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upload an assignment PDF from a laptop, without the mobile app.
+"""Upload an assignment PDF or video from a laptop, without the mobile app.
 
 How to run it (from the repository root, on the machine running the backend):
 
@@ -16,7 +16,7 @@ round-tripping through ngrok. Point it somewhere else with ``--base-url``:
     ... --base-url https://your-host
 
 What it does: signs in through ``POST /teacher/login`` (JSON body - that is
-what the endpoint accepts), then sends the PDF to
+what the endpoint accepts), then sends the PDF or video to
 ``POST /teacher/assignments/upload`` as multipart form-data, exactly like the
 teacher view in the app does. Authorization is the backend's decision: a
 student account, a deactivated account or a non-PDF file is refused there, and
@@ -64,7 +64,17 @@ DEFAULT_DUE_DATE = "2026-12-31"
 # Mirrors settings.MAX_ASSIGNMENT_FILE_MB on the backend. Checked here only so
 # a huge file fails before it is read; the backend re-checks and is the
 # authority.
-MAX_FILE_MB = 10
+MAX_FILE_MB = 100
+
+# The attachment kinds the backend accepts, extension -> the multipart content
+# type it expects. The backend still sniffs the bytes; this only makes the
+# request honest about what it is sending.
+MEDIA_CONTENT_TYPES = {
+    ".pdf": "application/pdf",
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".mkv": "video/x-matroska",
+}
 
 # requests' connect/read timeouts (seconds): a hung backend must not hang the
 # terminal forever, and an upload of a few MB needs more than the default.
@@ -260,7 +270,15 @@ def _upload(
                 url,
                 headers={"Authorization": f"Bearer {token}"},
                 data=fields,
-                files={"file": (pdf_path.name, handle, "application/pdf")},
+                files={
+                    "file": (
+                        pdf_path.name,
+                        handle,
+                        MEDIA_CONTENT_TYPES.get(
+                            pdf_path.suffix.lower(), "application/octet-stream"
+                        ),
+                    )
+                },
                 timeout=TIMEOUT,
             )
     except CONNECTION_ERRORS as error:
@@ -425,10 +443,19 @@ def _ask_due_date() -> str:
         return parsed.isoformat()
 
 
+def _looks_like_media(head: bytes) -> bool:
+    """The same three signatures the backend accepts, checked on the first bytes."""
+    if head.startswith(b"%PDF-"):
+        return True
+    if len(head) >= 12 and head[4:8] == b"ftyp":
+        return True
+    return head.startswith(b"\x1aE\xdf\xa3")
+
+
 def _ask_file() -> Path:
-    """The PDF, accepting a dragged-and-dropped path (quotes and all)."""
+    """The PDF or video, accepting a dragged-and-dropped path (quotes and all)."""
     while True:
-        raw = _ask("Path to the PDF (drag and drop the file here)")
+        raw = _ask("Path to the PDF or video (drag and drop the file here)")
         if not raw.strip():
             print("    A file path is required.")
             continue
@@ -440,10 +467,11 @@ def _ask_file() -> Path:
             print(f"    No such file: {path}")
             continue
         if path.is_dir():
-            print(f"    That is a folder, not a PDF: {path}")
+            print(f"    That is a folder, not a file: {path}")
             continue
-        if path.suffix.lower() != ".pdf":
-            print("    The file must be a .pdf.")
+        if path.suffix.lower() not in MEDIA_CONTENT_TYPES:
+            allowed = ", ".join(sorted(MEDIA_CONTENT_TYPES))
+            print(f"    The file must be one of: {allowed}.")
             continue
         try:
             size = path.stat().st_size
@@ -458,14 +486,17 @@ def _ask_file() -> Path:
             continue
         try:
             with path.open("rb") as handle:
-                head = handle.read(5)
+                head = handle.read(16)
         except OSError as error:
             print(f"    Could not read the file: {error}")
             continue
-        if head != b"%PDF-":
+        if not _looks_like_media(head):
             # The backend refuses this too; catching it here saves a round trip
             # and explains it while the path is still on screen.
-            print("    That file is not a PDF (it does not start with %PDF-).")
+            print(
+                "    That file is not a PDF or a video (no %PDF- header, no "
+                "MP4/MOV ftyp box, no Matroska header)."
+            )
             continue
         return path
 

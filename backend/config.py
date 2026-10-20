@@ -63,13 +63,17 @@ class Settings(BaseSettings):
     # Token Settings
     TOKEN_EXPIRATION_DAYS: int = 7
 
-    # Assignment PDF uploads.
+    # Assignment uploads (PDF, or an MP4/MOV/MKV video).
     # Files are written to this directory (relative paths are anchored to
     # backend/, like the database) under a server-generated name; the client's
     # filename is never used on disk. Nothing in this directory is served
-    # statically - downloads go through the authorized endpoint.
+    # statically - downloads go through the authorized endpoint, which is also
+    # what lets the app stream a video with the caller's bearer token.
     UPLOAD_DIR: str = "uploads/assignments"
-    MAX_ASSIGNMENT_FILE_MB: int = 10
+    # 100 MB: a 10-minute phone video is routinely larger than the old 10 MB
+    # PDF limit, and a teacher should not have to compress it to hand in a
+    # recording.
+    MAX_ASSIGNMENT_FILE_MB: int = 100
 
     # Firebase Cloud Messaging (push notifications).
     # The service-account JSON is a server credential: it is gitignored and is

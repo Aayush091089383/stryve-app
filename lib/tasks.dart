@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'assignment.dart';
 import 'assignment_pdf_viewer_page.dart';
+import 'video_player_page.dart';
 import 'role_selection_page.dart';
 import 'student.dart';
 import 'config/environment.dart';
@@ -15,6 +16,7 @@ import 'utils/assignment_card.dart';
 import 'utils/glass_container.dart';
 import 'utils/motion.dart';
 import 'utils/pdf_surface.dart';
+import 'utils/video_surface.dart';
 
 // Assignment has moved to assignment.dart (the viewer needs the same model);
 // re-exported so existing importers of this file keep working.
@@ -30,6 +32,10 @@ class TasksPage extends StatefulWidget {
   final AssignmentPdfSave? savePdf;
   final PdfSurfaceFactory? surfaceFactory;
 
+  /// Injection seam for the video player, so widget tests never start a native
+  /// player. Production leaves it null and streams through Chewie.
+  final VideoSurfaceFactory? videoSurfaceFactory;
+
   const TasksPage({
     super.key,
     required this.student,
@@ -37,6 +43,7 @@ class TasksPage extends StatefulWidget {
     this.loadPdf,
     this.savePdf,
     this.surfaceFactory,
+    this.videoSurfaceFactory,
   });
 
   @override
@@ -65,14 +72,22 @@ class _TasksPageState extends State<TasksPage> {
     try {
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => AssignmentPdfViewerPage(
-            assignment: assignment,
-            token: widget.student.token,
-            client: widget.client,
-            load: widget.loadPdf,
-            savePdf: widget.savePdf,
-            surfaceFactory: widget.surfaceFactory,
-          ),
+          // Same rule as the Assignments tab: a video streams in the player, a
+          // PDF renders in the reader. Tasks can hold either.
+          builder: (context) => assignment.isVideo
+              ? VideoPlayerPage(
+                  assignment: assignment,
+                  token: widget.student.token,
+                  surfaceFactory: widget.videoSurfaceFactory,
+                )
+              : AssignmentPdfViewerPage(
+                  assignment: assignment,
+                  token: widget.student.token,
+                  client: widget.client,
+                  load: widget.loadPdf,
+                  savePdf: widget.savePdf,
+                  surfaceFactory: widget.surfaceFactory,
+                ),
         ),
       );
     } finally {
@@ -295,6 +310,7 @@ class _TasksContent extends StatelessWidget {
             batch: a.batch,
             hasAttachment: a.hasAttachment,
             attachmentName: a.attachmentName,
+            isVideo: a.isVideo,
             onOpen: () => onOpen(a),
           ),
         ),
