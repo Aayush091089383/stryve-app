@@ -44,6 +44,10 @@ class HomePage extends StatefulWidget {
   /// bottom padding + 60 bar height + 8 top padding. A tab body that scrolls
   /// uses this so its last card clears the bar instead of sitting behind it,
   /// where taps belong to the bar.
+  ///
+  /// The bar is wrapped in a bottom [SafeArea], so the system gesture inset is
+  /// added *below* this footprint rather than counted in it: the bar's top edge
+  /// sits `inset + 92` above the bottom of the screen.
   static const double kGlassNavInset = 92;
 
   const HomePage({
@@ -301,47 +305,58 @@ class _GlassBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassContainer(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      borderRadius: 24,
-      blurStrength: 25,
-      // The one surface that pays for the extra save layer: its edge floats
-      // over scrolling content and the seam there reads as a border. The cards
-      // keep the cheaper exact clip.
-      useSaveLayer: true,
-      opacity: 0.8,
-      borderOpacity: 0.5,
-      // No outline around the white navigation container. A transparent 1px
-      // border keeps the exact same inner geometry as before.
-      borderColor: Colors.transparent,
-      // Flat surface: no drop shadow (read as an outline).
-      shadowColor: Colors.transparent,
-      // One pill slides between the three equal slots instead of each tab
-      // flashing its own indicator on. Height stays 60 so
-      // [HomePage.kGlassNavInset] keeps describing the bar's footprint.
-      child: SlidingNavBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: onDestinationSelected,
-        height: 60,
-        destinations: const [
-          SlidingNavDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
-          ),
-          SlidingNavDestination(
-            key: Key('nav_assignments'),
-            icon: Icon(Icons.assignment_outlined),
-            selectedIcon: Icon(Icons.assignment_rounded),
-            label: 'Assignments',
-          ),
-          SlidingNavDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person_rounded),
-            label: 'Profile',
-          ),
-        ],
+    // The Scaffold has `extendBody: true`, so `bottomNavigationBar` is laid out
+    // flush with the physical bottom edge - behind the Android gesture pill or
+    // the three-button bar. A 16px margin is measured from that edge, not from
+    // the system inset, so the bar's bottom edge sat on top of the gesture
+    // area. SafeArea pushes it clear by exactly the inset the system reports
+    // (and only at the bottom: the app bar keeps its own layout).
+    return SafeArea(
+      top: false,
+      bottom: true,
+      child: GlassContainer(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        borderRadius: 24,
+        blurStrength: 25,
+        // The one surface that pays for the extra save layer: its edge floats
+        // over scrolling content and the seam there reads as a border. The
+        // cards keep the cheaper exact clip.
+        useSaveLayer: true,
+        opacity: 0.8,
+        borderOpacity: 0.5,
+        // No outline around the white navigation container. A transparent 1px
+        // border keeps the exact same inner geometry as before.
+        borderColor: Colors.transparent,
+        // Flat surface: no drop shadow (read as an outline).
+        shadowColor: Colors.transparent,
+        // One pill slides between the three equal slots instead of each tab
+        // flashing its own indicator on. Height stays 60, so the bar's own
+        // body is still the 92px described by [HomePage.kGlassNavInset];
+        // SafeArea adds the gesture inset above it.
+        child: SlidingNavBar(
+          selectedIndex: selectedIndex,
+          onDestinationSelected: onDestinationSelected,
+          height: 60,
+          destinations: const [
+            SlidingNavDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home_rounded),
+              label: 'Home',
+            ),
+            SlidingNavDestination(
+              key: Key('nav_assignments'),
+              icon: Icon(Icons.assignment_outlined),
+              selectedIcon: Icon(Icons.assignment_rounded),
+              label: 'Assignments',
+            ),
+            SlidingNavDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person_rounded),
+              label: 'Profile',
+            ),
+          ],
+        ),
       ),
     );
   }
