@@ -95,9 +95,14 @@ Future<void> pumpHomeWith(
   WidgetTester tester,
   RecordingClient recorder, {
   Size size = const Size(1080, 2400),
+  double bottomInset = 0,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
+  // The system navigation inset (gesture pill or three-button bar). Physical
+  // pixels; at dpr 1 they are also the logical inset the app reads.
+  tester.view.padding = FakeViewPadding(bottom: bottomInset);
+  tester.view.viewPadding = FakeViewPadding(bottom: bottomInset);
   addTearDown(tester.view.reset);
   ApiCache.clear();
 
@@ -142,9 +147,12 @@ void main() {
         find.byType(SingleChildScrollView),
       );
       final homePadding = homeScroll.padding! as EdgeInsets;
+      final navInset = HomePage.navInsetOf(
+        tester.element(find.byType(HomePage)),
+      );
       expect(
         homePadding.bottom,
-        greaterThanOrEqualTo(HomePage.kGlassNavInset),
+        greaterThanOrEqualTo(navInset),
         reason: 'the Latest Update card must clear the nav bar',
       );
       expect(
@@ -162,6 +170,44 @@ void main() {
       );
       expect(homePadding.left, 20);
       expect(homePadding.right, 20);
+    });
+
+    testWidgets('a tall system inset raises the clearance on Home and Assignments', (
+      tester,
+    ) async {
+      // Three-button navigation reserves ~48dp. The floating bar's SafeArea
+      // lifts it by that amount, so both tab bodies have to reserve the same
+      // extra space or the last card hides behind the bar at full scroll.
+      const double inset = 48;
+      final recorder = RecordingClient();
+      await pumpHomeWith(tester, recorder, bottomInset: inset);
+
+      final barHeight = HomePage.kGlassNavBarHeight;
+      final homeScroll = tester.widget<SingleChildScrollView>(
+        find.byType(SingleChildScrollView),
+      );
+      expect(
+        (homeScroll.padding! as EdgeInsets).bottom,
+        100 + barHeight + inset,
+        reason: 'Home reserves the bar plus the system inset',
+      );
+
+      // The bar itself is lifted clear of the reserved system area.
+      expect(
+        tester.getRect(find.byType(SlidingNavBar)).bottom,
+        lessThanOrEqualTo(2400 - inset),
+        reason: 'the bar must not sit inside the gesture area',
+      );
+
+      await tester.tap(find.byKey(const Key('nav_assignments')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(
+        tester.widget<AssignmentsPage>(find.byType(AssignmentsPage)).bottomInset,
+        barHeight + inset,
+        reason: 'the Assignments list clears the lifted bar too',
+      );
     });
 
     testWidgets('opening Assignments fetches once and switching back does not refetch', (
@@ -221,13 +267,16 @@ void main() {
         reason: 'the tab body adds no second Scaffold',
       );
       // The tab body must clear HomePage's floating glass navigation bar.
+      final navInset = HomePage.navInsetOf(
+        tester.element(find.byType(HomePage)),
+      );
       expect(
         tester.widget<AssignmentsPage>(find.byType(AssignmentsPage)).bottomInset,
-        HomePage.kGlassNavInset,
+        navInset,
         reason: 'the embedded list leaves room for the nav bar',
       );
       expect(
-        HomePage.kGlassNavInset,
+        navInset,
         greaterThan(0),
         reason: 'a zero inset would put the last card behind the bar',
       );

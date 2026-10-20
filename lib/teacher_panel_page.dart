@@ -1168,22 +1168,31 @@ class _GlassBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassContainer(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      borderRadius: 24,
-      blurStrength: 25,
-      opacity: 0.8,
-      borderOpacity: 0.5,
-      // No outline around the white navigation container. A transparent 1px
-      // border keeps the exact same inner geometry as before.
-      borderColor: Colors.transparent,
-      // Same sliding pill as the student bar, so both glass navs behave alike.
-      child: SlidingNavBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: onDestinationSelected,
-        height: 60,
-        destinations: destinations,
+    // Same as the student bar: the Scaffold uses `extendBody: true`, so this
+    // slot is laid out flush with the physical bottom edge and its 16px margin
+    // is measured from that edge, not from the system inset. Without the
+    // SafeArea the bar sat on top of the gesture pill / three-button bar.
+    return SafeArea(
+      top: false,
+      bottom: true,
+      child: GlassContainer(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        borderRadius: 24,
+        blurStrength: 25,
+        opacity: 0.8,
+        borderOpacity: 0.5,
+        // No outline around the white navigation container. A transparent 1px
+        // border keeps the exact same inner geometry as before.
+        borderColor: Colors.transparent,
+        // Same sliding pill as the student bar, so both glass navs behave
+        // alike.
+        child: SlidingNavBar(
+          selectedIndex: selectedIndex,
+          onDestinationSelected: onDestinationSelected,
+          height: 60,
+          destinations: destinations,
+        ),
       ),
     );
   }

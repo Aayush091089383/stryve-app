@@ -37,18 +37,31 @@ class HomePage extends StatefulWidget {
   /// app, where a real [PushNotificationService] registers this phone.
   final PushNotificationService? pushNotifications;
 
-  /// The floating glass navigation bar's footprint: the distance from the
-  /// bottom of the screen to the top edge of the bar.
+  /// The glass bar's own footprint: 16 floating margin + 8 bottom padding +
+  /// 60 bar height + 8 top padding.
   ///
-  /// Derived from [_GlassBottomNav]'s own geometry - 16 bottom margin + 8
-  /// bottom padding + 60 bar height + 8 top padding. A tab body that scrolls
-  /// uses this so its last card clears the bar instead of sitting behind it,
-  /// where taps belong to the bar.
+  /// This is only the bar itself. The bar is wrapped in a bottom [SafeArea], so
+  /// the system gesture inset is added *below* it - [navInsetOf] is what a
+  /// scrolling tab must clear.
+  static const double kGlassNavBarHeight = 92;
+
+  /// How far above the bottom of the screen the bar's top edge sits.
   ///
-  /// The bar is wrapped in a bottom [SafeArea], so the system gesture inset is
-  /// added *below* this footprint rather than counted in it: the bar's top edge
-  /// sits `inset + 92` above the bottom of the screen.
-  static const double kGlassNavInset = 92;
+  /// The bar's own height plus the system gesture inset its [SafeArea]
+  /// consumes.
+  ///
+  /// Must be read from a context ABOVE the `Scaffold` - i.e. a `HomePage`
+  /// element, never one of the tab bodies. A `Scaffold` with a
+  /// `bottomNavigationBar` strips the bottom inset from its body's
+  /// `MediaQuery` (`padding` *and* `viewPadding`), so inside a tab everything
+  /// reports zero; that is why the value is computed here and passed down to
+  /// the tabs instead of being looked up in their own `build`.
+  ///
+  /// It is a method rather than a constant because the inset differs by device
+  /// and by navigation mode (24dp for the gesture pill, ~48dp for the
+  /// three-button bar) and can change while the app runs.
+  static double navInsetOf(BuildContext context) =>
+      kGlassNavBarHeight + MediaQuery.paddingOf(context).bottom;
 
   const HomePage({
     super.key,
@@ -64,6 +77,13 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int selectedIndex = 0;
+
+  /// Cached [HomePage.navInsetOf] value, refreshed in [didChangeDependencies].
+  ///
+  /// The Assignments tab bakes the inset into its list padding when it is
+  /// built, so the value has to be known outside a build pass (a tab is also
+  /// created from the navigation callback).
+  double _navInset = HomePage.kGlassNavBarHeight;
 
   /// A slot stays null until its tab is first shown.
   ///
@@ -106,6 +126,25 @@ class _HomePageState extends State<HomePage> {
   bool _openingNotifications = false;
 
   static const List<String> _tabTitles = ['Stryve', 'Assignments', 'Profile'];
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final inset = HomePage.navInsetOf(context);
+    if (inset == _navInset) return;
+    _navInset = inset;
+
+    // Already-built tabs carry the old inset (page 0 is built in initState,
+    // before this runs). Recreate the widgets - their State, data and scroll
+    // position are kept, only the padding changes - so a tab opened across a
+    // navigation-mode change still clears the bar.
+    for (final index in const [0, 1]) {
+      if (_pages[index] != null) {
+        _pages[index] = _buildPage(index);
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -202,12 +241,16 @@ class _HomePageState extends State<HomePage> {
           student: widget.student,
           client: widget.client,
           embedded: true,
-          bottomInset: HomePage.kGlassNavInset,
+          bottomInset: _navInset,
         );
       case 2:
         return ProfilePage(student: widget.student);
       default:
-        return _HomeTab(student: widget.student, client: widget.client);
+        return _HomeTab(
+          student: widget.student,
+          client: widget.client,
+          bottomInset: _navInset,
+        );
     }
   }
 
@@ -332,8 +375,8 @@ class _GlassBottomNav extends StatelessWidget {
         shadowColor: Colors.transparent,
         // One pill slides between the three equal slots instead of each tab
         // flashing its own indicator on. Height stays 60, so the bar's own
-        // body is still the 92px described by [HomePage.kGlassNavInset];
-        // SafeArea adds the gesture inset above it.
+        // body is still the 92px of [HomePage.kGlassNavBarHeight]; SafeArea
+        // adds the gesture inset above it.
         child: SlidingNavBar(
           selectedIndex: selectedIndex,
           onDestinationSelected: onDestinationSelected,
@@ -363,12 +406,17 @@ class _GlassBottomNav extends StatelessWidget {
 }
 
 class _HomeTab extends StatefulWidget {
-  const _HomeTab({required this.student, this.client});
+  const _HomeTab({required this.student, this.client, this.bottomInset = 0});
 
   final Student student;
 
   /// Optional injected HTTP client, for tests only.
   final http.Client? client;
+
+  /// Room the floating nav bar (plus the system inset it is lifted by) needs
+  /// under the content. Passed in because the body's `MediaQuery` has the
+  /// bottom inset removed - see [HomePage.navInsetOf].
+  final double bottomInset;
 
   @override
   State<_HomeTab> createState() => _HomeTabState();
@@ -609,7 +657,7 @@ class _HomeTabState extends State<_HomeTab> {
         20,
         topInset,
         20,
-        100 + HomePage.kGlassNavInset,
+        100 + widget.bottomInset,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
