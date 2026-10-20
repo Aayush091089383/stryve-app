@@ -73,6 +73,10 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
   String? _errorMessage;
   List<Assignment> _assignments = const [];
 
+  /// True while a pull-to-refresh (or the header's refresh button) is in
+  /// flight, so a second gesture or tap cannot start a parallel request.
+  bool _isRefreshing = false;
+
   /// True while the viewer route is being pushed, so a second tap cannot open
   /// the same document twice.
   bool _openingViewer = false;
@@ -111,11 +115,19 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
     }
   }
 
-  Future<void> _fetchAssignments({bool forceRefresh = false}) async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  Future<void> _fetchAssignments({
+    bool forceRefresh = false,
+    bool showLoading = true,
+  }) async {
+    // A refresh keeps the list on screen: flipping `_isLoading` would replace
+    // the content with the full-screen spinner mid-gesture, which reads as a
+    // reload rather than a refresh.
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     try {
       // The same key the Tasks tab uses: whichever screen opens first fetches,
@@ -144,11 +156,10 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
         }
 
         if (response.statusCode != 200) {
-          setState(() {
-            _errorMessage =
-                'Could not load assignments (${response.statusCode})';
-            _isLoading = false;
-          });
+          _handleFetchFailure(
+            'Could not load assignments (${response.statusCode})',
+            showLoading: showLoading,
+          );
           return;
         }
 
@@ -166,11 +177,51 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
         _isLoading = false;
       });
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = 'Could not connect to Stryve server. Please check your internet connection and try again.';
-        _isLoading = false;
-      });
+      _handleFetchFailure(
+        'Could not connect to Stryve server. Please check your internet connection and try again.',
+        showLoading: showLoading,
+      );
+    }
+  }
+
+  /// Reports a failed fetch without throwing away a list the student is already
+  /// reading.
+  ///
+  /// A first load (or a pull on an empty list) shows the error state with its
+  /// Try Again button; a failed *refresh* of existing content keeps the
+  /// assignments on screen and only says so in a snackbar. An error is never
+  /// rendered as an empty list.
+  void _handleFetchFailure(String message, {required bool showLoading}) {
+    if (!mounted) return;
+    if (!showLoading && _assignments.isNotEmpty) {
+      _showSnackBar('Could not refresh assignments. Pull down to try again.');
+      return;
+    }
+    setState(() {
+      _errorMessage = message;
+      _isLoading = false;
+    });
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Pull-to-refresh and the header button both come through here.
+  ///
+  /// `forceRefresh` matters: without it the fetch would answer from
+  /// [ApiCache] and the student would pull, see the indicator spin, and still
+  /// get yesterday's list - which is exactly the bug this screen had.
+  Future<void> _refresh() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    try {
+      await _fetchAssignments(forceRefresh: true, showLoading: false);
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
     }
   }
 
@@ -269,42 +320,77 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
         ? MediaQuery.paddingOf(context).top + 8
         : 16.0;
 
-    return ListView(
-      padding: EdgeInsets.fromLTRB(20, topInset, 20, 24 + widget.bottomInset),
-      children: [
-        Text(
-          'All Assignments',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: GlassColors.headingOf(context),
-          ),
+    return RefreshIndicator(
+      // Pull down to fetch again - through the network, never the cache.
+      onRefresh: _refresh,
+      color: GlassColors.primaryBlue,
+      backgroundColor: GlassColors.surface,
+      child: ListView(
+        // Always scrollable: a short list, and the empty state, would otherwise
+        // have nothing to drag and the pull gesture would be unavailable
+        // exactly when the student most needs it.
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          topInset,
+          20,
+          24 + widget.bottomInset,
         ),
-        const SizedBox(height: 6),
-        Text(
-          'Everything posted for your division and batch.',
-          style: TextStyle(
-            fontSize: 13,
-            color: GlassColors.secondaryTextOf(context),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'All Assignments',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: GlassColors.headingOf(context),
+                  ),
+                ),
+              ),
+              // A visible fallback for anyone who does not think to pull: same
+              // action, same handler, disabled while a refresh is running.
+              IconButton(
+                onPressed: _isRefreshing ? null : _refresh,
+                tooltip: 'Refresh',
+                visualDensity: VisualDensity.compact,
+                icon: Icon(
+                  Icons.refresh_rounded,
+                  size: 22,
+                  color: _isRefreshing
+                      ? GlassColors.disabled
+                      : GlassColors.primaryBlue,
+                ),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 16),
-        if (_assignments.isEmpty)
-          _buildEmptyState()
-        else
-          ..._assignments.map(
-            (assignment) => AssignmentCard(
-              title: assignment.title,
-              subject: assignment.subject,
-              dueDate: formatAssignmentDueDate(assignment.dueDate),
-              batch: assignment.batch,
-              description: assignment.description,
-              hasAttachment: assignment.hasAttachment,
-              attachmentName: assignment.attachmentName,
-              onOpen: () => _openAssignment(assignment),
+          const SizedBox(height: 6),
+          Text(
+            'Everything posted for your division and batch.',
+            style: TextStyle(
+              fontSize: 13,
+              color: GlassColors.secondaryTextOf(context),
             ),
           ),
-      ],
+          const SizedBox(height: 16),
+          if (_assignments.isEmpty)
+            _buildEmptyState()
+          else
+            ..._assignments.map(
+              (assignment) => AssignmentCard(
+                title: assignment.title,
+                subject: assignment.subject,
+                dueDate: formatAssignmentDueDate(assignment.dueDate),
+                batch: assignment.batch,
+                description: assignment.description,
+                hasAttachment: assignment.hasAttachment,
+                attachmentName: assignment.attachmentName,
+                onOpen: () => _openAssignment(assignment),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
