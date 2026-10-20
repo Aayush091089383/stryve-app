@@ -14,6 +14,7 @@ from sqlalchemy.orm import relationship
 from database import Base
 
 import enum
+from datetime import datetime
 
 
 class StudentStatus(str, enum.Enum):
@@ -406,6 +407,34 @@ class Notification(Base):
     created_at = Column(DateTime, nullable=False)
 
     student = relationship("Student", foreign_keys=[student_id])
+
+
+class FcmToken(Base):
+    """One Firebase Cloud Messaging device token, owned by one student.
+
+    Push is a delivery channel, not a source of truth: the in-app
+    ``notifications`` rows are still what the bell and the Notifications screen
+    read. A row here only says "this phone belongs to this student right now".
+
+    ``token`` is UNIQUE because FCM issues one token per app install and a
+    token can only ever ring one phone. When the same phone is signed in as a
+    different student, the row is re-pointed instead of duplicated (see the
+    ``/notifications/device-token`` endpoint), so a handed-over phone never
+    keeps receiving the previous student's alerts.
+
+    Tokens die silently (reinstall, app data cleared, Play Services reset). A
+    send that FCM rejects permanently deletes the row.
+    """
+
+    __tablename__ = "fcm_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
+
+    token = Column(String, unique=True, index=True, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class FreePeriodClaim(Base):

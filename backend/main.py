@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import (
+    BackgroundTasks,
     Depends,
     FastAPI,
     File,
@@ -23,6 +24,7 @@ from sqlalchemy.exc import IntegrityError
 
 import models
 import official_data
+import firebase_service
 from auth import (
     generate_token,
     generate_token_expiration,
@@ -36,6 +38,7 @@ from auth import (
 from config import settings
 import database
 from database import Base, engine  # noqa: F401  (re-exported for existing callers)
+from database import SessionLocal
 from dependencies import get_db
 from privacy import mask_name
 from ratelimit import SlidingWindowLimiter
@@ -63,6 +66,8 @@ from schemas import (
     TimetableEntryOut,
     AssignmentOut,
     NotificationOut,
+    DeviceTokenRegister,
+    DeviceTokenOut,
     TokenResponse,
     TeacherPermissionsUpdate,
     TeacherAssignmentOut,
@@ -852,6 +857,75 @@ def mark_all_notifications_read(
     )
     db.commit()
     return {"message": "Notifications marked as read", "marked_read": marked}
+
+
+@app.post("/notifications/device-token", response_model=DeviceTokenOut)
+def register_device_token(
+    payload: DeviceTokenRegister,
+    student: models.Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Remember this device's Firebase token for the signed-in student.
+
+    Idempotent: the app calls this on every launch and whenever Firebase
+    rotates the token, so the same token must not accumulate rows.
+
+    A token belongs to a *device*, not an account. FCM itself does not know
+    which student is signed in, so if the row already exists for somebody else
+    (the phone was handed over, or a second student logged in on it) the row is
+    re-pointed at the caller. That is what stops the previous student's alerts
+    from arriving on a phone they no longer use; the alternate - keeping the
+    old owner - would leak that class's assignments to the wrong person.
+
+    The token is never returned or logged: it is only a delivery address.
+    """
+    row = (
+        db.query(models.FcmToken)
+        .filter(models.FcmToken.token == payload.token)
+        .first()
+    )
+
+    if row is None:
+        db.add(
+            models.FcmToken(
+                student_id=student.id,
+                token=payload.token,
+                created_at=datetime.utcnow(),
+            )
+        )
+    elif row.student_id != student.id:
+        row.student_id = student.id
+        row.created_at = datetime.utcnow()
+
+    db.commit()
+    return DeviceTokenOut(registered=True)
+
+
+@app.delete("/notifications/device-token", response_model=DeviceTokenOut)
+def unregister_device_token(
+    token: str,
+    student: models.Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Forget a device token on logout (best effort, idempotent).
+
+    Only the caller's own row is removed: knowing another student's token must
+    not be enough to silence their notifications. An unknown token is a
+    success, because the goal - "this device no longer rings for me" - holds.
+    """
+    cleaned = (token or "").strip()
+    if not cleaned:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Device token is required",
+        )
+
+    db.query(models.FcmToken).filter(
+        models.FcmToken.token == cleaned,
+        models.FcmToken.student_id == student.id,
+    ).delete(synchronize_session=False)
+    db.commit()
+    return DeviceTokenOut(registered=False)
 
 
 @app.put("/notifications/{notification_id}/read", response_model=NotificationOut)
@@ -2141,7 +2215,16 @@ def _safe_display_name(filename: str | None) -> str:
     return name[:120] or "assignment.pdf"
 
 
-def _notify_students_of_assignment(db: Session, assignment: models.Assignment) -> int:
+def _assignment_notification_text(assignment: models.Assignment) -> tuple[str, str]:
+    """Title and body for an upload, shared by the in-app row and the push.
+
+    One helper for both channels so the tray alert and the Notifications screen
+    can never word the same upload differently.
+    """
+    return "New assignment", f"New assignment uploaded: {assignment.title}"
+
+
+def _notify_students_of_assignment(db: Session, assignment: models.Assignment) -> list[int]:
     """Queue one notification per student who can see a new assignment.
 
     Recipients follow exactly the same rule as ``GET /assignments``: the same
@@ -2152,6 +2235,9 @@ def _notify_students_of_assignment(db: Session, assignment: models.Assignment) -
 
     The rows are added to the caller's session but not committed here, so the
     assignment and its notifications are saved in one transaction.
+
+    Returns the recipient student ids, which is what the push delivery uses to
+    find device tokens once the transaction has committed.
     """
     query = db.query(models.Student).filter(
         models.Student.year == assignment.year,
@@ -2169,10 +2255,9 @@ def _notify_students_of_assignment(db: Session, assignment: models.Assignment) -
         )
 
     created_at = datetime.utcnow()
-    title = "New assignment"
-    message = f"New assignment uploaded: {assignment.title}"
+    title, message = _assignment_notification_text(assignment)
 
-    count = 0
+    recipient_ids: list[int] = []
     for student in query.all():
         db.add(
             models.Notification(
@@ -2183,8 +2268,61 @@ def _notify_students_of_assignment(db: Session, assignment: models.Assignment) -
                 created_at=created_at,
             )
         )
-        count += 1
-    return count
+        recipient_ids.append(student.id)
+    return recipient_ids
+
+
+def _push_tokens_for_students(db: Session, student_ids: list[int]) -> list[str]:
+    """Every registered device token belonging to ``student_ids``.
+
+    Read after the upload transaction committed: a phone that registered a
+    token while the teacher was uploading is included, and a failed push can
+    never roll the assignment back.
+    """
+    if not student_ids:
+        return []
+
+    rows = (
+        db.query(models.FcmToken.token)
+        .filter(models.FcmToken.student_id.in_(student_ids))
+        .all()
+    )
+    return [row[0] for row in rows if row[0]]
+
+
+def _deliver_assignment_push(
+    tokens: list[str],
+    title: str,
+    body: str,
+    data: dict,
+) -> None:
+    """Background job: push the alert and prune dead tokens.
+
+    Runs after the HTTP response, in its own short-lived session, so Google's
+    latency never reaches the teacher's upload and nothing here can undo it.
+    Every failure is swallowed - the in-app notification row is the record, and
+    it is already committed.
+    """
+    try:
+        result = firebase_service.send_push_notification(
+            tokens, title, body, data=data
+        )
+    except Exception:
+        return
+
+    if not result.invalid_tokens:
+        return
+
+    db = SessionLocal()
+    try:
+        db.query(models.FcmToken).filter(
+            models.FcmToken.token.in_(result.invalid_tokens)
+        ).delete(synchronize_session=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 @app.post(
@@ -2193,6 +2331,7 @@ def _notify_students_of_assignment(db: Session, assignment: models.Assignment) -
     status_code=status.HTTP_201_CREATED,
 )
 def upload_assignment(
+    background: BackgroundTasks,
     title: str = Form(...),
     subject: str = Form(...),
     due_date: str = Form(...),
@@ -2318,13 +2457,14 @@ def upload_assignment(
         created_at=datetime.utcnow(),
     )
 
+    recipient_ids: list[int] = []
     try:
         db.add(assignment)
         # Flush so the assignment has an id before its notifications are queued;
         # everything below is still committed as one transaction.
         db.flush()
 
-        _notify_students_of_assignment(db, assignment)
+        recipient_ids = _notify_students_of_assignment(db, assignment)
 
         db.commit()
         db.refresh(assignment)
@@ -2334,6 +2474,24 @@ def upload_assignment(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Could not save the assignment - please try again",
+        )
+
+    # Push runs after the response, so a slow or unconfigured Firebase can
+    # never delay the teacher's upload or fail it. The in-app notification rows
+    # above are already the durable record.
+    push_tokens = _push_tokens_for_students(db, recipient_ids)
+    if push_tokens:
+        push_title, push_body = _assignment_notification_text(assignment)
+        background.add_task(
+            _deliver_assignment_push,
+            push_tokens,
+            push_title,
+            push_body,
+            {
+                "type": "assignment",
+                "assignment_id": assignment.id,
+                "subject": assignment.subject,
+            },
         )
 
     return assignment

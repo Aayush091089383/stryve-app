@@ -14,3 +14,6 @@ python-dotenv==1.2.4
 pwdlib[argon2]==0.3.1
 python-multipart==0.0.32
 email-validator==2.3.0
+# Firebase Cloud Messaging (push notifications). `firebase_service.py` imports
+# this lazily, so the backend still starts when it is not installed.
+firebase-admin==6.6.0

@@ -1,3 +1,5 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +8,7 @@ import 'role_selection_page.dart';
 import 'home_page.dart';
 import 'teacher_panel_page.dart';
 import 'services/auth_service.dart';
+import 'services/push_notification_service.dart';
 import 'services/teacher_auth_service.dart';
 import 'utils/glass_container.dart';
 import 'utils/theme_provider.dart';
@@ -40,6 +43,13 @@ void main() {
   // Use edge-to-edge with light status/navigation bars matching glassmorphism design
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(_lightOverlay);
+
+  // A push that arrives while the app is closed is handled in a separate
+  // isolate, so the handler has to be registered before anything else runs.
+  // Android-only: the Windows build has no FCM implementation.
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  }
 
   runApp(const StryveApp());
 }

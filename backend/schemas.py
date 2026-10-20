@@ -481,3 +481,34 @@ class DirectoryStatusOut(BaseModel):
     faculty_count: int
     lab_count: int
     missing_data: list[str] = []
+
+
+# ======================================================================
+# Push notifications (Firebase Cloud Messaging)
+# ======================================================================
+class DeviceTokenRegister(BaseModel):
+    """The FCM registration token this device received from Firebase.
+
+    Validated here (not in the endpoint) so an empty or absurdly long token is
+    rejected with the usual 422 shape instead of reaching the database.
+    """
+
+    token: str
+
+    @field_validator("token")
+    @classmethod
+    def token_is_usable(cls, v: str) -> str:
+        cleaned = (v or "").strip()
+        if not cleaned:
+            raise ValueError("Device token is required")
+        # FCM tokens are a few hundred characters; 4096 leaves plenty of room
+        # while keeping an oversized body out of the database.
+        if len(cleaned) > 4096:
+            raise ValueError("Device token is too long")
+        return cleaned
+
+
+class DeviceTokenOut(BaseModel):
+    """Whether this device is now registered for push, for the caller."""
+
+    registered: bool

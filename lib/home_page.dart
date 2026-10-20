@@ -13,6 +13,7 @@ import 'role_selection_page.dart';
 import 'services/api_cache.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
+import 'services/push_notification_service.dart';
 import 'student.dart';
 import 'student_notification.dart';
 import 'timetable.dart';
@@ -32,6 +33,10 @@ class HomePage extends StatefulWidget {
   /// the app, where [LocalSystemNotifications] is used.
   final SystemNotifications? systemNotifications;
 
+  /// Optional injection seam for Firebase push, for tests only. Null in the
+  /// app, where a real [PushNotificationService] registers this phone.
+  final PushNotificationService? pushNotifications;
+
   /// The floating glass navigation bar's footprint: the distance from the
   /// bottom of the screen to the top edge of the bar.
   ///
@@ -46,6 +51,7 @@ class HomePage extends StatefulWidget {
     required this.student,
     this.client,
     this.systemNotifications,
+    this.pushNotifications,
   });
 
   @override
@@ -78,6 +84,14 @@ class _HomePageState extends State<HomePage> {
       _systemNotifications ??=
           widget.systemNotifications ?? LocalSystemNotifications();
 
+  PushNotificationService? _pushNotifications;
+  PushNotificationService get _pushService =>
+      _pushNotifications ??=
+          widget.pushNotifications ??
+          PushNotificationService(
+            systemNotifications: _notificationsPresenter,
+          );
+
   /// Highest notification id already announced in the system tray. Starts at 0
   /// per app launch, so the newest unread assignment is announced once and a
   /// rebuild or a second fetch never repeats it.
@@ -94,10 +108,24 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _pages[0] = _buildPage(0);
     _fetchNotifications();
+
+    // Register this phone for push on top of the in-app feed. Best effort:
+    // a missing Firebase project, denied permission or unreachable backend
+    // leaves the bell exactly as it was.
+    unawaited(
+      _pushService.start(
+        authToken: widget.student.token,
+        // A push that lands while the app is open means the feed changed;
+        // refresh the badge, but do not raise a second tray alert for a row
+        // the push just announced.
+        onMessage: () => unawaited(_fetchNotifications(alert: false)),
+      ),
+    );
   }
 
   @override
   void dispose() {
+    _pushNotifications?.dispose();
     _ownedNotificationClient?.close();
     super.dispose();
   }

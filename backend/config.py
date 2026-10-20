@@ -71,6 +71,17 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads/assignments"
     MAX_ASSIGNMENT_FILE_MB: int = 10
 
+    # Firebase Cloud Messaging (push notifications).
+    # The service-account JSON is a server credential: it is gitignored and is
+    # never logged or returned by any endpoint. FCM_ENABLED=0 turns push off
+    # without deleting the file (useful for local runs and the test suites).
+    FCM_ENABLED: bool = True
+    FCM_CREDENTIALS_FILE: str = "firebase-service-account.json"
+    # Android channel the app creates for assignment alerts. The pushed
+    # notification names it so it lands in the same category the in-app alert
+    # uses; a missing channel simply falls back to the app's default.
+    FCM_ANDROID_CHANNEL_ID: str = "stryve_assignments"
+
     # CORS Settings
     ALLOWED_ORIGINS: str = "*"  # Comma-separated in production
 
@@ -91,6 +102,14 @@ class Settings(BaseSettings):
     def upload_path(self) -> Path:
         """Absolute directory for uploaded assignment PDFs (anchored to backend/)."""
         path = Path(self.UPLOAD_DIR)
+        if not path.is_absolute():
+            path = BACKEND_DIR / path
+        return path
+
+    @property
+    def fcm_credentials_path(self) -> Path:
+        """Absolute path of the FCM service-account JSON (anchored to backend/)."""
+        path = Path(self.FCM_CREDENTIALS_FILE)
         if not path.is_absolute():
             path = BACKEND_DIR / path
         return path

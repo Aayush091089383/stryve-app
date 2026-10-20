@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "840346714399",
+    "project_id": "stryve-fc5af",
+    "storage_bucket": "stryve-fc5af.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:840346714399:android:2f10af277859012d14702a",
+        "android_client_info": {
+          "package_name": "com.stryve.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDKqmdUVzITNH6U9QxSozDY0WjeHjNOCzc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

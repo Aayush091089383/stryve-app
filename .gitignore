@@ -92,6 +92,13 @@ __pycache__/
 *.keystore
 android/key.properties
 
+# Firebase server credential: full admin access to the FCM project (it can
+# message every device). Only the operator's machine running the backend has
+# it; `android/app/google-services.json` is the client config and is not a
+# secret, so it stays in the repo.
+backend/firebase-service-account.json
+**/firebase-service-account*.json
+
 # Logs & runtime junk
 *.log
 server_job.txt
