@@ -253,7 +253,8 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
   /// Several uploads for one subject stay inside that subject's section
   /// instead of becoming several look-alike top-level cards. Within a section
   /// the soonest deadline comes first and same-day uploads fall back to the
-  /// newest id, so the PDF that was just posted is the one at the top.
+  /// oldest id, so a subject reads in the order its work was set: the first
+  /// assignment at the top, the latest upload at the bottom.
   List<_SubjectSectionData> _groupedAssignments() {
     final bySubject = <String, List<Assignment>>{};
     for (final assignment in _assignments) {
@@ -271,7 +272,7 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
       final rows = bySubject[subject]!
         ..sort((a, b) {
           final byDue = a.dueDate.compareTo(b.dueDate);
-          return byDue != 0 ? byDue : b.id.compareTo(a.id);
+          return byDue != 0 ? byDue : a.id.compareTo(b.id);
         });
       return _SubjectSectionData(subject: subject, rows: rows);
     }).toList();
