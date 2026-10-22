@@ -13,6 +13,7 @@ import 'services/auth_service.dart';
 import 'student.dart';
 import 'utils/assignment_card.dart';
 import 'utils/glass_container.dart';
+import 'utils/linkified_text.dart';
 import 'utils/motion.dart';
 import 'utils/pdf_surface.dart';
 import 'utils/video_surface.dart';
@@ -100,6 +101,7 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
 
   Future<void> _openAssignment(
     Assignment assignment, {
+    AssignmentAttachment? file,
     List<Assignment>? siblings,
   }) async {
     if (_openingViewer) return;
@@ -109,18 +111,25 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
       // folder that was opened rather than jumping to a different subject.
       // The viewer skips the rows without a PDF and finds the tapped one by id.
       final group = siblings ?? _assignments;
+      // The tapped file decides the screen (and the endpoint); with no explicit
+      // file the assignment's primary one is opened, exactly as before.
+      final target = file ?? assignment.primaryFile;
+      final attachmentId = target == null || target.isLegacy ? null : target.id;
+      final isVideo = target?.isVideo ?? assignment.isVideo;
+
       await Navigator.of(context).push(
         MaterialPageRoute(
           // The file decides the screen: a video streams in the player, a PDF
           // renders in the reader. Both go through the same authorized
           // endpoint, so the backend still decides who may open what.
-          builder: (context) => assignment.isVideo
+          builder: (context) => isVideo
               ? VideoPlayerPage(
                   assignment: assignment,
                   assignments: group,
                   initialIndex: group.indexWhere(
                     (row) => row.id == assignment.id,
                   ),
+                  attachmentId: attachmentId,
                   token: widget.student.token,
                   surfaceFactory: widget.videoSurfaceFactory,
                 )
@@ -130,6 +139,7 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
                   initialIndex: group.indexWhere(
                     (row) => row.id == assignment.id,
                   ),
+                  attachmentId: attachmentId,
                   token: widget.student.token,
                   client: widget.client,
                   load: widget.loadPdf,
@@ -453,8 +463,9 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
                 data: group,
                 expanded: _expandedSubjects.contains(group.subject),
                 onToggle: () => _toggleSubject(group.subject),
-                onOpen: (assignment) => _openAssignment(
+                onOpen: (assignment, file) => _openAssignment(
                   assignment,
+                  file: file,
                   siblings: group.rows,
                 ),
               ),
@@ -585,7 +596,7 @@ class _SubjectSection extends StatelessWidget {
   final _SubjectSectionData data;
   final bool expanded;
   final VoidCallback onToggle;
-  final void Function(Assignment assignment) onOpen;
+  final void Function(Assignment assignment, AssignmentAttachment? file) onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -671,7 +682,8 @@ class _SubjectSection extends StatelessWidget {
                             ? const _NoAssignmentRow()
                             : _AssignmentFileRow(
                                 assignment: assignment,
-                                onOpen: () => onOpen(assignment),
+                                onOpenFile: (file) =>
+                                    onOpen(assignment, file),
                               ),
                       ),
                   ],
@@ -689,16 +701,23 @@ class _SubjectSection extends StatelessWidget {
 /// header this row sits under, so repeating it would be noise, and a nested
 /// row must not compete with the folder that owns it.
 class _AssignmentFileRow extends StatelessWidget {
-  const _AssignmentFileRow({required this.assignment, required this.onOpen});
+  const _AssignmentFileRow({
+    required this.assignment,
+    required this.onOpenFile,
+  });
 
   final Assignment assignment;
-  final VoidCallback onOpen;
+  final void Function(AssignmentAttachment file) onOpenFile;
 
   @override
   Widget build(BuildContext context) {
     final secondary = GlassColors.secondaryTextOf(context);
     final description = assignment.description?.trim() ?? '';
-    final hasFile = assignment.hasAttachment;
+    final files = assignment.files;
+    final hasFile = files.isNotEmpty;
+    // Tapping the card is only unambiguous when there is nothing to choose
+    // between; with several files the student taps the one they want.
+    final onlyFile = files.length == 1 ? files.first : null;
 
     return GlassCard(
       // A flat tint: this sits on the page's already-blurred background and a
@@ -707,7 +726,7 @@ class _AssignmentFileRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       borderRadius: 14,
-      onTap: hasFile ? onOpen : null,
+      onTap: onlyFile == null ? null : () => onOpenFile(onlyFile),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -725,7 +744,9 @@ class _AssignmentFileRow extends StatelessWidget {
                 child: Icon(
                   !hasFile
                       ? Icons.assignment_outlined
-                      : assignment.isVideo
+                      : files.length > 1
+                      ? Icons.attach_file_rounded
+                      : onlyFile!.isVideo
                       ? Icons.play_circle_fill_rounded
                       : Icons.picture_as_pdf_rounded,
                   size: 20,
@@ -796,7 +817,7 @@ class _AssignmentFileRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (hasFile) ...[
+              if (onlyFile != null) ...[
                 const SizedBox(width: 8),
                 Icon(Icons.chevron_right_rounded, size: 20, color: secondary),
               ],
@@ -804,51 +825,95 @@ class _AssignmentFileRow extends StatelessWidget {
           ),
           if (description.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
+            // A link a teacher typed in the instructions is meant to be
+            // tapped, not read out.
+            LinkifiedText(
               description,
-              maxLines: 2,
+              maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.35,
-                color: secondary,
-              ),
+              style: TextStyle(fontSize: 12, height: 1.35, color: secondary),
+              linkStyle: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ],
           if (hasFile) ...[
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    assignment.attachmentName ?? 'Attached PDF',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: secondary),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 118,
-                  child: GlassButton(
-                    onPressed: onOpen,
-                    color: GlassColors.primaryBlue,
-                    height: 34,
-                    borderRadius: 9,
-                    child: Text(
-                      assignment.isVideo ? 'PLAY VIDEO' : 'READ PDF',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+            if (onlyFile != null)
+              _AttachmentLine(
+                file: onlyFile,
+                onOpen: () => onOpenFile(onlyFile),
+              )
+            else
+              // Several files: one line each, so every attachment can be
+              // opened on its own instead of guessing which one a single
+              // "READ PDF" button meant.
+              Column(
+                children: [
+                  for (final file in files)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: _AttachmentLine(
+                        file: file,
+                        onOpen: () => onOpenFile(file),
                       ),
                     ),
-                  ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ],
       ),
+    );
+  }
+}
+
+/// One file inside an assignment row: its name, and the one action it
+/// supports (read a PDF, play a video).
+class _AttachmentLine extends StatelessWidget {
+  const _AttachmentLine({required this.file, required this.onOpen});
+
+  final AssignmentAttachment file;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = GlassColors.secondaryTextOf(context);
+    final name = file.name.trim().isEmpty ? 'Attached file' : file.name.trim();
+
+    return Row(
+      children: [
+        Icon(
+          file.isVideo
+              ? Icons.play_circle_outline_rounded
+              : Icons.picture_as_pdf_outlined,
+          size: 16,
+          color: GlassColors.primaryBlue,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: secondary),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 118,
+          child: GlassButton(
+            onPressed: onOpen,
+            color: GlassColors.primaryBlue,
+            height: 34,
+            borderRadius: 9,
+            child: Text(
+              file.isVideo ? 'PLAY VIDEO' : 'READ PDF',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -27,6 +27,7 @@ dependencies:
   firebase_messaging: ^16.7.0
   video_player: ^2.14.1
   chewie: ^1.8.5
+  url_launcher: ^6.3.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

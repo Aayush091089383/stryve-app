@@ -108,11 +108,17 @@ class AssignmentPdfService {
     this.client,
     required this.token,
     this.baseUrl,
+    this.attachmentId,
   });
 
   final http.Client? client;
   final String token;
   final String? baseUrl;
+
+  /// One file of a multi-attachment assignment. Null reads the primary file
+  /// through the legacy `/file` route, which is what every caller did before
+  /// assignments could carry more than one file.
+  final int? attachmentId;
 
   String get _baseUrl => baseUrl ?? Environment.backendUrl;
 
@@ -126,7 +132,11 @@ class AssignmentPdfService {
   /// Nothing is written to disk here - the bytes are handed straight to the
   /// viewer. A Download is a separate, explicit action.
   Future<AssignmentPdfResult> load(int assignmentId) async {
-    final uri = Uri.parse('$_baseUrl/assignments/$assignmentId/file');
+    final uri = Uri.parse(
+      attachmentId == null
+          ? '$_baseUrl/assignments/$assignmentId/file'
+          : '$_baseUrl/assignments/$assignmentId/files/$attachmentId',
+    );
 
     http.Response response;
     try {

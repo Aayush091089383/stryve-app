@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'linkified_text.dart';
+
 import 'glass_container.dart';
 
 /// Formats a backend `due_date` ("YYYY-MM-DD") the way the student screens show
@@ -44,6 +46,7 @@ class AssignmentCard extends StatelessWidget {
     this.hasAttachment = false,
     this.attachmentName,
     this.isVideo = false,
+    this.fileCount = 1,
     this.onOpen,
   });
 
@@ -61,6 +64,11 @@ class AssignmentCard extends StatelessWidget {
   /// instead of telling a student to "READ" a recording. Defaults to false:
   /// every caller that predates video uploads keeps its exact wording.
   final bool isVideo;
+
+  /// How many files the assignment carries. The card opens the first one; the
+  /// label says how many there are so a multi-file post is not mistaken for a
+  /// single attachment.
+  final int fileCount;
 
   final VoidCallback? onOpen;
 
@@ -195,7 +203,7 @@ class AssignmentCard extends StatelessWidget {
           ),
           if (description != null && description!.trim().isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text(
+            LinkifiedText(
               description!,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -204,21 +212,26 @@ class AssignmentCard extends StatelessWidget {
                 height: 1.35,
                 color: GlassColors.secondaryTextOf(context),
               ),
+              linkStyle: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ],
           if (hasAttachment) ...[
             const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(
-                  Icons.picture_as_pdf_rounded,
+                Icon(
+                  isVideo
+                      ? Icons.play_circle_outline_rounded
+                      : Icons.picture_as_pdf_rounded,
                   size: 16,
                   color: GlassColors.primaryBlue,
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    attachmentName ?? 'Attached PDF',
+                    fileCount > 1
+                        ? '$fileCount files'
+                        : attachmentName ?? 'Attached PDF',
                     style: TextStyle(
                       fontSize: 12,
                       color: GlassColors.secondaryTextOf(context),

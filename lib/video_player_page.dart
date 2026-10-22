@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'assignment.dart';
 import 'config/environment.dart';
 import 'utils/glass_container.dart';
+import 'utils/linkified_text.dart';
 import 'utils/video_surface.dart';
 
 class VideoPlayerPage extends StatefulWidget {
@@ -21,11 +22,16 @@ class VideoPlayerPage extends StatefulWidget {
     required this.token,
     this.assignments = const [],
     this.initialIndex = 0,
+    this.attachmentId,
     this.baseUrl,
     this.surfaceFactory,
   });
 
   final Assignment assignment;
+
+  /// One video of a multi-attachment assignment. Null streams the primary
+  /// file through the legacy route.
+  final int? attachmentId;
 
   /// The video assignments the list was showing, for Previous/Next. Empty (the
   /// default) means "just this one".
@@ -52,6 +58,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   late final List<Assignment> _playable;
   int _index = 0;
 
+  /// The attachment opened from the list; cleared when Previous/Next moves to
+  /// another assignment, whose primary video is then streamed.
+  int? _attachmentId;
+
   Assignment get _current => _playable[_index];
 
   bool get _hasPrevious => _index > 0;
@@ -62,6 +72,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     super.initState();
     _playable = _playableFrom(widget.assignments, widget.assignment);
     _index = _indexOfCurrent();
+    _attachmentId = widget.attachmentId;
   }
 
   /// The video rows around [current], always containing [current].
@@ -96,13 +107,20 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   ///
   /// The same route the PDF reader uses, so a video is only readable by the
   /// students the backend says may see that assignment.
-  String _urlFor(Assignment assignment, String host) =>
-      '$host/assignments/${assignment.id}/file';
+  String _urlFor(Assignment assignment, String host) {
+    final attachmentId = _attachmentId;
+    return attachmentId == null || attachmentId <= 0
+        ? '$host/assignments/${assignment.id}/file'
+        : '$host/assignments/${assignment.id}/files/$attachmentId';
+  }
 
   void _step(int delta) {
     final target = _index + delta;
     if (target < 0 || target >= _playable.length) return;
-    setState(() => _index = target);
+    setState(() {
+      _index = target;
+      _attachmentId = null;
+    });
   }
 
   Widget _meta(String text) {
@@ -178,13 +196,16 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                             .trim()
                             .isNotEmpty) ...[
                           const SizedBox(height: 8),
-                          Text(
+                          LinkifiedText(
                             assignment.description!.trim(),
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 12.5,
                               color: GlassColors.secondaryTextOf(context),
+                            ),
+                            linkStyle: const TextStyle(
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],

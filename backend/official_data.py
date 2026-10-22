@@ -61,6 +61,22 @@ BREAKS = [
     ("15:00", "15:15", "SHORT BREAK"),
 ]
 
+# Sessions that deliberately span more than one printed period.
+#
+# The corrected sheet runs these practicals across two periods (and Monday's
+# D-3 practical starts at 15:35), so a teacher marks one SESSION rather than two
+# halves. They are ordinary classes: not free periods, and NOT part of the
+# six-period grid above - free-period availability keeps iterating TIME_SLOTS,
+# so a block here can never be offered as a claimable free period.
+LAB_BLOCKS = [
+    ("10:15", "12:15"),
+    ("13:00", "15:00"),
+    ("15:35", "17:15"),
+]
+
+# Every (start, end) a lecture/attendance session may legitimately use.
+SESSION_BLOCKS = TIME_SLOTS + [block for block in LAB_BLOCKS if block not in TIME_SLOTS]
+
 BATCHES = ["D-1", "D-2", "D-3"]
 
 # --------------------------------------------------------------------------
@@ -147,10 +163,13 @@ TIMETABLE = [
     ("Monday", "14:00", "15:00", "BEE", "HBW", None),
     ("Monday", "15:15", "16:15", "PHY", "SPG", "D-1"),
     ("Monday", "15:15", "16:15", "BEE", "HBW", "D-2"),
-    ("Monday", "16:15", "17:15", "EG", "VTM", "D-3"),
+    # The D-3 practical starts at 15:35 and runs to the end of the day, not at
+    # the 16:15 period boundary (see CONFIRMED).
+    ("Monday", "15:35", "17:15", "EG", "VTM", "D-3"),
     # ---- Tuesday
     ("Tuesday", "10:15", "11:15", "PHY", "SPG", "D-2"),
-    ("Tuesday", "10:15", "11:15", "BEE", "HBW", "D-3"),
+    # D-3's BEE practical runs across both morning periods, to 12:15.
+    ("Tuesday", "10:15", "12:15", "BEE", "HBW", "D-3"),
     ("Tuesday", "11:15", "12:15", "EG", "VTM", "D-1"),
     ("Tuesday", "13:00", "14:00", "BEE", "HBW", None),
     ("Tuesday", "14:00", "15:00", "M-1", "SMG", None),
@@ -160,7 +179,8 @@ TIMETABLE = [
     ("Wednesday", "10:15", "11:15", "EG", "VTM", None),
     ("Wednesday", "11:15", "12:15", "M-1", "SMG", None),
     ("Wednesday", "13:00", "14:00", "DTIL", "RST", "D-2"),
-    ("Wednesday", "13:00", "14:00", "FPL", "RVS (CCI)", "D-3"),
+    # D-3's FPL practical runs 13:00-15:00.
+    ("Wednesday", "13:00", "15:00", "FPL", "RVS (CCI)", "D-3"),
     ("Wednesday", "14:00", "15:00", "LIB", "TAS", "D-1"),
     ("Wednesday", "15:15", "16:15", "CCC-1", "HBW", None),
     ("Wednesday", "16:15", "17:15", "CCC-1", "HBW", None),
@@ -174,14 +194,16 @@ TIMETABLE = [
     # ---- Friday
     ("Friday", "10:15", "11:15", "PHY", "SPG", None),
     ("Friday", "11:15", "12:15", "EG", "VTM", None),
-    ("Friday", "13:00", "14:00", "PHY", "SPG", "D-3"),
+    # D-3's PHY practical runs 13:00-15:00.
+    ("Friday", "13:00", "15:00", "PHY", "SPG", "D-3"),
     ("Friday", "13:00", "14:00", "BEE", "HBW", "D-1"),
     ("Friday", "14:00", "15:00", "EG", "VTM", "D-2"),
     ("Friday", "15:15", "16:15", "DTIL", "SPG", "D-1"),
     ("Friday", "15:15", "16:15", "FPL", "RVS (CCI)", "D-2"),
     ("Friday", "16:15", "17:15", "LIB", "TAS", "D-3"),
     # ---- Saturday
-    ("Saturday", "10:15", "11:15", "DTIL", "RST", "D-3"),
+    # D-3's DTIL practical runs across both morning periods, to 12:15.
+    ("Saturday", "10:15", "12:15", "DTIL", "RST", "D-3"),
     ("Saturday", "10:15", "11:15", "FPL", "RVS (CCI)", "D-1"),
     ("Saturday", "11:15", "12:15", "LIB", "TAS", "D-2"),
     ("Saturday", "13:00", "14:00", "CCC-1", "HBW", None),
@@ -240,6 +262,9 @@ CONFIRMED = [
     "Graphics (VTM) - all three are ordinary batch practicals, never RELM.",
     "The five free periods are DIVISION-WIDE: one slot per period for the whole "
     "of Division D, never four separate Whole division / D-1 / D-2 / D-3 slots.",
+    "Practical durations were corrected against the department's sheet: Friday "
+    "D-3 PHY and Wednesday D-3 FPL run 13:00-15:00, Tuesday D-3 BEE and Saturday "
+    "D-3 DTIL run 10:15-12:15, and Monday's D-3 EG practical runs 15:35-17:15.",
 ]
 
 # --------------------------------------------------------------------------
@@ -256,12 +281,10 @@ UNCONFIRMED = [
     "Which faculty run the shared 'DTL' practical marked 'SPG/RST'. The "
     "string 'RVS (CCI)' is confirmed verbatim; what the parenthesised '(CCI)' "
     "denotes is still not stated anywhere in the document.",
-    "Which cell the Monday practicals are printed in. Monday has no free "
-    "period (confirmed) and carries D-1 PHY, D-2 BEE and D-3 EG, but the sheet's "
-    "03.15-04.15 Monday cell is hard to read and may group all three in one "
-    "period. This transcription - and the live database - keep the supplied "
-    "periods: PHY (D-1) and BEE (D-2) at 15:15, EG (D-3) at 16:15. No time was "
-    "invented or moved; changing the split needs the printed sheet, not a guess.",
+    "Whether D-1 and D-2 sit in the printed 03.15-04.15 Monday cell together "
+    "with D-3. The D-3 practical's own time is now confirmed as 15:35-17:15 "
+    "(see CONFIRMED); PHY (D-1) and BEE (D-2) stay at 15:15 until the sheet is "
+    "read again.",
 ]
 
 
@@ -277,6 +300,8 @@ __all__ = [
     "CLASS_COORDINATOR_CODE",
     "DAYS",
     "TIME_SLOTS",
+    "LAB_BLOCKS",
+    "SESSION_BLOCKS",
     "BREAKS",
     "BATCHES",
     "SUBJECTS",

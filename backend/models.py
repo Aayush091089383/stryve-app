@@ -15,6 +15,7 @@ from database import Base
 
 import enum
 from datetime import datetime
+from pathlib import Path
 
 
 class StudentStatus(str, enum.Enum):
@@ -211,9 +212,54 @@ class Assignment(Base):
 
     uploader = relationship("Teacher", foreign_keys=[uploaded_by])
 
+    # Every file posted with this assignment (one row per PDF/video). The legacy
+    # ``stored_name``/``original_name``/``file_size`` columns above still mirror
+    # the FIRST attachment: they keep the pre-multi-file download endpoint and
+    # every older client working, and a migrated database already has one row
+    # here per existing file.
+    attachments = relationship(
+        "AssignmentAttachment",
+        backref="assignment",
+        cascade="all, delete-orphan",
+        order_by="AssignmentAttachment.id",
+        lazy="selectin",
+    )
+
     @property
     def has_attachment(self) -> bool:
         return bool(self.stored_name)
+
+
+class AssignmentAttachment(Base):
+    """One file attached to an assignment (a PDF or a video).
+
+    ``stored_name`` is the server-generated name inside the upload directory;
+    ``original_name`` is the uploader's own label, kept for display only. Files
+    are served through the authorized download routes, never statically.
+    """
+
+    __tablename__ = "assignment_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    assignment_id = Column(
+        Integer,
+        ForeignKey("assignments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    stored_name = Column(String, nullable=False)
+    original_name = Column(String, nullable=False)
+    file_size = Column(Integer, nullable=False)
+
+    @property
+    def is_video(self) -> bool:
+        return Path(self.stored_name or "").suffix.lower() in {
+            ".mp4",
+            ".mov",
+            ".mkv",
+        }
 
 
 class Subject(Base):

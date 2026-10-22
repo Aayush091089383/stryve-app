@@ -29,6 +29,7 @@ import 'services/assignment_pdf_service.dart';
 import 'services/auth_service.dart';
 import 'utils/assignment_file_name.dart';
 import 'utils/glass_container.dart';
+import 'utils/linkified_text.dart';
 import 'utils/pdf_surface.dart';
 
 class AssignmentPdfViewerPage extends StatefulWidget {
@@ -38,6 +39,7 @@ class AssignmentPdfViewerPage extends StatefulWidget {
     required this.token,
     this.assignments = const [],
     this.initialIndex = 0,
+    this.attachmentId,
     this.client,
     this.load,
     this.savePdf,
@@ -45,6 +47,11 @@ class AssignmentPdfViewerPage extends StatefulWidget {
   });
 
   final Assignment assignment;
+
+  /// One file of a multi-attachment assignment. Null opens the primary file
+  /// through the legacy route; Previous/Next always moves between assignments
+  /// and opens their primary files.
+  final int? attachmentId;
 
   /// Every assignment the list showed, in its display order.
   ///
@@ -83,6 +90,11 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
   /// Index into [_readable] of the document on screen.
   int _index = 0;
 
+  /// The attachment opened from the list, while it is still on screen. Null
+  /// means "the assignment's primary file", which is also what Previous/Next
+  /// falls back to.
+  int? _attachmentId;
+
   Uint8List? _bytes;
   AssignmentPdfResult? _failure;
   bool _loading = true;
@@ -102,6 +114,7 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
     super.initState();
     _readable = _readableFrom(widget.assignments, widget.assignment);
     _index = _indexOfCurrent();
+    _attachmentId = widget.attachmentId;
     _surface = _createSurface();
     _surface.handle.addListener(_onSurfaceChanged);
     _loadPdf();
@@ -162,13 +175,20 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
       _bytes = null;
     });
 
-    final loader =
-        widget.load ??
-        AssignmentPdfService(client: widget.client, token: widget.token).load;
+    final nativeService = AssignmentPdfService(
+      client: widget.client,
+      token: widget.token,
+      attachmentId: _attachmentId,
+    );
+    final loader = widget.load ?? nativeService.load;
 
     final AssignmentPdfResult result;
     try {
-      result = await loader(_current.id);
+      // A caller that injected [load] gets the assignment id alone (its own
+      // seam); production reads the exact attachment that was tapped.
+      result = widget.load != null
+          ? await loader(_current.id)
+          : await nativeService.load(_current.id);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -230,6 +250,8 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
     setState(() {
       _index = target;
       _saving = false;
+      // A different assignment means a different primary file.
+      _attachmentId = null;
       _surface = _createSurface();
     });
     _surface.handle.addListener(_onSurfaceChanged);
@@ -374,12 +396,13 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
           ),
           if ((assignment.description ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
+            LinkifiedText(
               assignment.description!.trim(),
               style: TextStyle(
                 fontSize: 12.5,
                 color: GlassColors.secondaryTextOf(context),
               ),
+              linkStyle: const TextStyle(fontWeight: FontWeight.w600),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),

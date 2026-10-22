@@ -156,9 +156,9 @@ BASELINE_TIMETABLE = [
     (6, "Monday", "15:00", "15:15", "SHORT BREAK", "", None, 1),
     (7, "Monday", "15:15", "16:15", "PHY", "SPG", "D-1", 0),
     (8, "Monday", "15:15", "16:15", "BEE", "HBW", "D-2", 0),
-    (9, "Monday", "16:15", "17:15", "EG", "VTM", "D-3", 0),
+    (9, "Monday", "15:35", "17:15", "EG", "VTM", "D-3", 0),
     (10, "Tuesday", "10:15", "11:15", "PHY", "SPG", "D-2", 0),
-    (11, "Tuesday", "10:15", "11:15", "BEE", "HBW", "D-3", 0),
+    (11, "Tuesday", "10:15", "12:15", "BEE", "HBW", "D-3", 0),
     (12, "Tuesday", "11:15", "12:15", "EG", "VTM", "D-1", 0),
     (13, "Tuesday", "12:15", "13:00", "LUNCH BREAK", "", None, 1),
     (14, "Tuesday", "13:00", "14:00", "BEE", "HBW", None, 0),
@@ -170,7 +170,7 @@ BASELINE_TIMETABLE = [
     (20, "Wednesday", "11:15", "12:15", "M-1", "SMG", None, 0),
     (21, "Wednesday", "12:15", "13:00", "LUNCH BREAK", "", None, 1),
     (22, "Wednesday", "13:00", "14:00", "DTIL", "RST", "D-2", 0),
-    (23, "Wednesday", "13:00", "14:00", "FPL", "RVS (CC1)", "D-3", 0),
+    (23, "Wednesday", "13:00", "15:00", "FPL", "RVS (CC1)", "D-3", 0),
     (24, "Wednesday", "14:00", "15:00", "LIB", "TAS", "D-1", 0),
     (25, "Wednesday", "15:00", "15:15", "SHORT BREAK", "", None, 1),
     (26, "Wednesday", "15:15", "16:15", "CCC-1", "HBW", None, 0),
@@ -186,14 +186,14 @@ BASELINE_TIMETABLE = [
     (36, "Friday", "10:15", "11:15", "PHY", "SPG", None, 0),
     (37, "Friday", "11:15", "12:15", "EG", "VTM", None, 0),
     (38, "Friday", "12:15", "13:00", "LUNCH BREAK", "", None, 1),
-    (39, "Friday", "13:00", "14:00", "PHY", "SPG", "D-3", 0),
+    (39, "Friday", "13:00", "15:00", "PHY", "SPG", "D-3", 0),
     (40, "Friday", "13:00", "14:00", "BEE", "HBW", "D-1", 0),
     (41, "Friday", "14:00", "15:00", "EG", "VTM", "D-2", 0),
     (42, "Friday", "15:00", "15:15", "SHORT BREAK", "", None, 1),
     (43, "Friday", "15:15", "16:15", "DTIL", "SPG", "D-1", 0),
     (44, "Friday", "15:15", "16:15", "FPL", "RVS (CC1)", "D-2", 0),
     (45, "Friday", "16:15", "17:15", "LIB", "TAS", "D-3", 0),
-    (46, "Saturday", "10:15", "11:15", "DTIL", "RST", "D-3", 0),
+    (46, "Saturday", "10:15", "12:15", "DTIL", "RST", "D-3", 0),
     (47, "Saturday", "10:15", "11:15", "FPL", "RVS (CCI)", "D-1", 0),
     (48, "Saturday", "11:15", "12:15", "LIB", "TAS", "D-2", 0),
     (49, "Saturday", "12:15", "13:00", "LUNCH BREAK", "", None, 1),
@@ -869,16 +869,25 @@ else:
     covered = (
         set(verifier.PRESERVED_TABLES)
         | set(verifier.OFFICIAL_TABLES)
+        | set(verifier.UNRELATED_TABLES)
         | {verifier.TIMETABLE_TABLE}
     )
     check(
-        "every table in the schema is classified (preserved, official or timetable)",
+        "every table in the schema is classified "
+        "(preserved, official, unrelated or timetable)",
         model_tables == covered,
         f"uncovered={sorted(model_tables - covered)} extra={sorted(covered - model_tables)}",
     )
     check(
         "no table is in two categories",
-        not (set(verifier.PRESERVED_TABLES) & set(verifier.OFFICIAL_TABLES)),
+        not (
+            set(verifier.PRESERVED_TABLES) & set(verifier.OFFICIAL_TABLES)
+            or set(verifier.PRESERVED_TABLES) & set(verifier.UNRELATED_TABLES)
+            or set(verifier.OFFICIAL_TABLES) & set(verifier.UNRELATED_TABLES)
+            or verifier.TIMETABLE_TABLE in set(verifier.PRESERVED_TABLES)
+            | set(verifier.OFFICIAL_TABLES)
+            | set(verifier.UNRELATED_TABLES)
+        ),
     )
 
     # -- the plan matches the official grid and the live baseline ----------

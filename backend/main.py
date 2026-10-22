@@ -1135,8 +1135,13 @@ def _faculty_tokens(faculty: str | None) -> set[str]:
 
 
 def _slot_pair(start_time: str, end_time: str) -> tuple[str, str] | None:
-    """Return the official (start, end) slot, or None when it does not exist."""
-    for known_start, known_end in official_data.TIME_SLOTS:
+    """Return the official (start, end) session, or None when it does not exist.
+
+    Official single periods and the printed multi-period practical blocks are
+    both valid: a lab that runs 10:15-12:15 is marked as one session, not two
+    halves, and the sheet's own correction is what allows it.
+    """
+    for known_start, known_end in official_data.SESSION_BLOCKS:
         if start_time == known_start and end_time == known_end:
             return known_start, known_end
     return None
@@ -1892,10 +1897,13 @@ def _free_period_availability(
     slots: list[FreePeriodSlotOut] = []
 
     for start_time, end_time in official_data.TIME_SLOTS:
+        # Overlap, not equality: a practical that runs across both periods of a
+        # slot (or starts at 15:35) still occupies it, so the period is reported
+        # as busy instead of looking free to another teacher.
         in_slot = [
             entry
             for entry in entries
-            if entry.start_time == start_time and entry.end_time == end_time
+            if entry.start_time < end_time and entry.end_time > start_time
         ]
 
         # The sheet's own free-period table decides whether this period is a
@@ -2311,6 +2319,62 @@ _MEDIA_CONTENT_TYPES = {
 }
 
 
+# One upload may carry several files, but never an unbounded number: each file
+# is read into memory for the magic-byte check before it is written.
+MAX_ASSIGNMENT_ATTACHMENTS = 10
+
+
+def _validated_upload_bytes(
+    upload: UploadFile, max_bytes: int
+) -> tuple[bytes, str]:
+    """Read one uploaded file and prove it is a PDF or a video.
+
+    The claimed content type is only a hint: the bytes decide what this is (see
+    ``_sniff_media_kind``), and a file whose header contradicts its contents is
+    refused rather than stored and served as the wrong kind.
+    """
+    content_type = (upload.content_type or "").split(";")[0].strip().lower()
+    if content_type and content_type not in _ALLOWED_UPLOAD_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Only PDF and video files can be uploaded",
+        )
+
+    data = upload.file.read(max_bytes + 1)
+
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The uploaded file is empty",
+        )
+
+    if len(data) > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=(
+                "Each file must be at most "
+                f"{settings.MAX_ASSIGNMENT_FILE_MB} MB"
+            ),
+        )
+
+    media_kind = _sniff_media_kind(data)
+    if media_kind is None:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="The uploaded file is not a valid PDF or video",
+        )
+
+    if content_type and content_type not in _GENERIC_BINARY_TYPES:
+        claimed_video = content_type in _ALLOWED_VIDEO_TYPES
+        if (media_kind == "pdf") == claimed_video:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail="The file type does not match its contents",
+            )
+
+    return data, media_kind
+
+
 def _sniff_media_kind(data: bytes) -> str | None:
     """The real kind of an attachment, read from its first bytes.
 
@@ -2461,16 +2525,20 @@ def upload_assignment(
     division: str = Form("D"),
     description: str = Form(""),
     batch: str = Form(""),
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(None),
+    files: list[UploadFile] = File(default=[]),
     teacher: models.Teacher = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
-    """Upload a PDF or video assignment for a class group.
+    """Upload a PDF/video assignment, with one or more attached files.
 
     Validates the file type (magic bytes, not just a header), the size, the
-    metadata and the caller's authorization. PDFs and MP4/MOV/MKV video are
-    accepted; the stored extension follows what the bytes are, and the client's
-    name is kept only for display.
+    metadata and the caller's authorization, for EVERY file. PDFs and
+    MP4/MOV/MKV video are accepted; the stored extension follows what the bytes
+    are, and the client's name is kept only for display.
+
+    ``files`` is the multi-file field; the older single ``file`` field is still
+    accepted so an existing CLI or app build keeps working unchanged.
 
     Uploading the real PDF for a subject replaces that class group's text-only
     rows for the same subject/year/division, so a student sees one card per
@@ -2516,52 +2584,51 @@ def upload_assignment(
 
     due = _parse_date(due_date)
 
-    content_type = (file.content_type or "").split(";")[0].strip().lower()
-    if content_type and content_type not in _ALLOWED_UPLOAD_TYPES:
+    uploads = [
+        item
+        for item in ([file] if file is not None else []) + list(files or [])
+        if item is not None
+    ]
+    if not uploads:
         raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="Only PDF and video files can be uploaded",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one file is required",
         )
-
-    max_bytes = max(1, settings.MAX_ASSIGNMENT_FILE_MB) * 1024 * 1024
-    data = file.file.read(max_bytes + 1)
-
-    if not data:
+    if len(uploads) > MAX_ASSIGNMENT_ATTACHMENTS:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="The uploaded file is empty"
-        )
-
-    if len(data) > max_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "The file must be at most "
-                f"{settings.MAX_ASSIGNMENT_FILE_MB} MB"
+                "At most "
+                f"{MAX_ASSIGNMENT_ATTACHMENTS} files can be attached to one "
+                "assignment"
             ),
         )
 
-    # The bytes decide what this is. A PDF that claims to be a video (or the
-    # other way round) is a mislabelled upload, not a file to store.
-    media_kind = _sniff_media_kind(data)
-    if media_kind is None:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="The uploaded file is not a valid PDF or video",
-        )
-
-    if content_type and content_type not in _GENERIC_BINARY_TYPES:
-        claimed_video = content_type in _ALLOWED_VIDEO_TYPES
-        if (media_kind == "pdf") == claimed_video:
-            raise HTTPException(
-                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail="The file type does not match its contents",
-            )
-
+    max_bytes = max(1, settings.MAX_ASSIGNMENT_FILE_MB) * 1024 * 1024
     upload_dir = settings.upload_path
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    stored_name = f"{uuid.uuid4().hex}{_MEDIA_EXTENSIONS[media_kind]}"
-    (upload_dir / stored_name).write_bytes(data)
+    # (path, stored name, display name, size) for every file already written.
+    # A later file that fails validation removes the earlier ones again, so a
+    # rejected multi-file upload leaves nothing behind.
+    stored_files: list[tuple[Path, str, str, int]] = []
+    try:
+        for upload in uploads:
+            data, media_kind = _validated_upload_bytes(upload, max_bytes)
+            stored_name = f"{uuid.uuid4().hex}{_MEDIA_EXTENSIONS[media_kind]}"
+            (upload_dir / stored_name).write_bytes(data)
+            stored_files.append(
+                (
+                    upload_dir / stored_name,
+                    stored_name,
+                    _safe_display_name(upload.filename),
+                    len(data),
+                )
+            )
+    except HTTPException:
+        for path, *_ in stored_files:
+            path.unlink(missing_ok=True)
+        raise
 
     # The text-only rows this upload supersedes: same subject, year and
     # division, and no PDF. They are replaced, never edited, and only after the
@@ -2579,6 +2646,11 @@ def upload_assignment(
     for row in replaced_placeholders:
         db.delete(row)
 
+    # The first file also fills the legacy single-file columns, so the old
+    # download route and any client that predates multiple attachments keep
+    # working against the same assignment.
+    _path, primary_name, primary_original, primary_size = stored_files[0]
+
     assignment = models.Assignment(
         subject=clean_subject,
         title=clean_title,
@@ -2587,12 +2659,20 @@ def upload_assignment(
         year=year,
         division=clean_division,
         batch=normalised_batch or None,
-        stored_name=stored_name,
-        original_name=_safe_display_name(file.filename),
-        file_size=len(data),
+        stored_name=primary_name,
+        original_name=primary_original,
+        file_size=primary_size,
         uploaded_by=teacher.id,
         created_at=datetime.utcnow(),
     )
+    assignment.attachments = [
+        models.AssignmentAttachment(
+            stored_name=stored_name,
+            original_name=original_name,
+            file_size=size,
+        )
+        for _stored_path, stored_name, original_name, size in stored_files
+    ]
 
     recipient_ids: list[int] = []
     try:
@@ -2607,7 +2687,8 @@ def upload_assignment(
         db.refresh(assignment)
     except IntegrityError:
         db.rollback()
-        (upload_dir / stored_name).unlink(missing_ok=True)
+        for path, *_ in stored_files:
+            path.unlink(missing_ok=True)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Could not save the assignment - please try again",
@@ -2689,25 +2770,31 @@ def delete_uploaded_assignment(
             detail="You can only manage assignments you uploaded",
         )
 
+    # Every file the assignment carries goes with it: the legacy column and any
+    # additional attachments (the ORM cascade removes their rows).
+    stored_names = {row.stored_name for row in assignment.attachments}
     if assignment.stored_name:
-        (settings.upload_path / assignment.stored_name).unlink(missing_ok=True)
+        stored_names.add(assignment.stored_name)
+    for name in stored_names:
+        (settings.upload_path / name).unlink(missing_ok=True)
 
     db.delete(assignment)
     db.commit()
     return {"message": "Assignment removed", "assignment_id": assignment_id}
 
 
-@app.get("/assignments/{assignment_id}/file")
-def download_assignment_file(
+def _authorized_assignment_file(
+    db: Session,
+    actor: tuple,
     assignment_id: int,
-    actor: tuple = Depends(get_current_actor),
-    db: Session = Depends(get_db),
-):
-    """Download an assignment PDF, only for people allowed to see that assignment.
+    attachment_id: int | None = None,
+) -> tuple[Path, str]:
+    """Resolve one of an assignment's files, or refuse with the right status.
 
-    A student must match the assignment's year/division and, for a batch
-    assignment, their stored batch. A teacher may download what they uploaded
-    (admins anything).
+    The single-file route (``attachment_id`` None) serves the legacy columns;
+    the per-attachment route serves one row of ``assignment_attachments``. Both
+    are authorized the same way - by the assignment's visibility, never by the
+    file's id alone - and neither ever trusts a client-supplied path.
     """
     role, account = actor
 
@@ -2715,11 +2802,32 @@ def download_assignment_file(
         models.Assignment.id == assignment_id
     ).first()
 
-    if not assignment or not assignment.stored_name:
+    if not assignment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="This assignment has no attached file",
         )
+
+    if attachment_id is None:
+        stored_name = assignment.stored_name
+        display_name = assignment.original_name
+        if not stored_name:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="This assignment has no attached file",
+            )
+    else:
+        attachment = next(
+            (row for row in assignment.attachments if row.id == attachment_id),
+            None,
+        )
+        if attachment is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="This assignment has no file with that id",
+            )
+        stored_name = attachment.stored_name
+        display_name = attachment.original_name
 
     if role == "student":
         batch = _normalise_batch(account.batch)
@@ -2740,19 +2848,23 @@ def download_assignment_file(
             detail="You are not permitted to download this assignment",
         )
 
-    if Path(assignment.stored_name).name != assignment.stored_name:
+    if Path(stored_name).name != stored_name:
         # Defensive: a stored name must never be a path.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invalid stored file"
         )
 
-    path = settings.upload_path / assignment.stored_name
+    path = settings.upload_path / stored_name
     if not path.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="The stored file is no longer available",
         )
 
+    return path, display_name or f"assignment-{assignment.id}{path.suffix.lower() or '.pdf'}"
+
+
+def _file_response(path: Path, display_name: str) -> FileResponse:
     return FileResponse(
         path,
         # The stored extension is what the upload actually was; serving every
@@ -2760,9 +2872,43 @@ def download_assignment_file(
         media_type=_MEDIA_CONTENT_TYPES.get(
             path.suffix.lower(), "application/octet-stream"
         ),
-        filename=assignment.original_name
-        or f"assignment-{assignment.id}{path.suffix.lower() or '.pdf'}",
+        filename=display_name,
     )
+
+
+@app.get("/assignments/{assignment_id}/file")
+def download_assignment_file(
+    assignment_id: int,
+    actor: tuple = Depends(get_current_actor),
+    db: Session = Depends(get_db),
+):
+    """Download an assignment's primary file (the pre-multi-file route).
+
+    Kept for every client that predates ``attachments``: it serves the first
+    file, exactly as before. A student must match the assignment's
+    year/division and, for a batch assignment, their stored batch. A teacher may
+    download what they uploaded (admins anything).
+    """
+    path, display_name = _authorized_assignment_file(db, actor, assignment_id)
+    return _file_response(path, display_name)
+
+
+@app.get("/assignments/{assignment_id}/files/{attachment_id}")
+def download_assignment_attachment(
+    assignment_id: int,
+    attachment_id: int,
+    actor: tuple = Depends(get_current_actor),
+    db: Session = Depends(get_db),
+):
+    """Download ONE file of a multi-file assignment.
+
+    The attachment must belong to the assignment and the caller must be allowed
+    to see that assignment; the id alone grants nothing.
+    """
+    path, display_name = _authorized_assignment_file(
+        db, actor, assignment_id, attachment_id
+    )
+    return _file_response(path, display_name)
 
 
 # ==================================================================

@@ -311,6 +311,7 @@ class _TasksContent extends StatelessWidget {
             hasAttachment: a.hasAttachment,
             attachmentName: a.attachmentName,
             isVideo: a.isVideo,
+            fileCount: a.files.length,
             onOpen: () => onOpen(a),
           ),
         ),

@@ -208,6 +208,21 @@ class TimetableEntryOut(BaseModel):
         from_attributes = True
 
 
+class AttachmentOut(BaseModel):
+    """One file attached to an assignment.
+
+    The kind (PDF or video) is the client's business: it is derived from the
+    display name's extension, exactly like the single-file fields below.
+    """
+
+    id: int
+    original_name: str
+    file_size: int
+
+    class Config:
+        from_attributes = True
+
+
 class AssignmentOut(BaseModel):
     id: int
     subject: str
@@ -218,10 +233,13 @@ class AssignmentOut(BaseModel):
     division: str
     batch: str | None
 
-    # Attachment metadata (NULL/false for the pre-existing text-only rows).
+    # Attachment metadata (NULL/false for the pre-existing text-only rows). The
+    # three single-file fields mirror the FIRST attachment and stay for clients
+    # that predate multiple files; ``attachments`` is the full list.
     has_attachment: bool = False
     original_name: str | None = None
     file_size: int | None = None
+    attachments: list[AttachmentOut] = []
 
     uploaded_by: int | None = None
     created_at: datetime | None = None

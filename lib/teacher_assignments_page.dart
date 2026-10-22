@@ -23,6 +23,10 @@ class PickedAssignmentFile {
 /// OS file dialog; production uses the platform file chooser.
 typedef AssignmentFilePicker = Future<PickedAssignmentFile?> Function();
 
+/// How one or more files are chosen. The single-file [AssignmentFilePicker]
+/// above stays for callers (and tests) that predate multiple attachments.
+typedef AssignmentFilesPicker = Future<List<PickedAssignmentFile>> Function();
+
 /// The seven subjects of Division D's first-year timetable, in the wording the
 /// official sheet uses. The backend replaces a subject's text-only row with the
 /// upload, so the label a teacher picks is the label stored on the assignment.
@@ -96,6 +100,28 @@ Future<PickedAssignmentFile?> defaultPickAssignmentFile() async {
 /// it offers, and existing callers keep working.
 Future<PickedAssignmentFile?> defaultPickPdf() => defaultPickAssignmentFile();
 
+/// Pick one or more PDFs/videos from the device.
+Future<List<PickedAssignmentFile>> defaultPickAssignmentFiles() async {
+  final typeGroup = XTypeGroup(
+    label: 'PDFs and videos',
+    extensions: kAssignmentFileTypes.keys.toList(),
+    mimeTypes: <String>[
+      'application/pdf',
+      'video/mp4',
+      'video/quicktime',
+      'video/x-matroska',
+    ],
+  );
+  final files = await openFiles(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
+  final picked = <PickedAssignmentFile>[];
+  for (final file in files) {
+    picked.add(
+      PickedAssignmentFile(name: file.name, bytes: await file.readAsBytes()),
+    );
+  }
+  return picked;
+}
+
 /// Assignments tab: upload a PDF or video assignment and manage the ones you
 /// uploaded.
 ///
@@ -108,12 +134,17 @@ class TeacherAssignmentsView extends StatefulWidget {
     required this.authService,
     required this.client,
     this.pickFile,
+    this.pickFiles,
     this.onSessionExpired,
   });
 
   final TeacherAuthService authService;
   final http.Client client;
   final AssignmentFilePicker? pickFile;
+
+  /// Multi-file picker seam. When null, [pickFile] is used if it was supplied
+  /// (existing tests), otherwise the real multi-select dialog.
+  final AssignmentFilesPicker? pickFiles;
   final Future<void> Function()? onSessionExpired;
 
   @override
@@ -201,12 +232,21 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
   }
 
   Future<void> _startUpload() async {
-    final picker = widget.pickFile ?? defaultPickPdf;
+    final injectedSingle = widget.pickFile;
+    final AssignmentFilesPicker picker = widget.pickFiles ??
+        (injectedSingle == null
+            ? defaultPickAssignmentFiles
+            : () async {
+                final one = await injectedSingle();
+                return one == null
+                    ? const <PickedAssignmentFile>[]
+                    : <PickedAssignmentFile>[one];
+              });
 
     final payload = await showModalBottomSheet<_UploadPayload>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _AssignmentUploadSheet(pickFile: picker),
+      builder: (_) => _AssignmentUploadSheet(pickFiles: picker),
     );
 
     if (payload == null || !mounted) return;
@@ -238,24 +278,22 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
       request.fields['year'] = '${payload.year}';
       request.fields['division'] = payload.division;
       request.fields['batch'] = payload.batch;
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          payload.file.bytes,
-          filename: uploadFileName(payload.file.name),
-          // MediaType takes the type and the subtype separately: passing
-          // 'application/pdf' as the first argument produced
-          // "application/pdf/pdf", which the backend rightly rejects with
-          // "Only PDF files can be uploaded" for a perfectly valid PDF.
-          // The type follows the name actually being sent, not the raw pick:
-          // Android's picker can hand back a cache name with no extension,
-          // which `uploadFileName` fixes to .pdf. A video announced as a PDF
-          // would be refused by the backend's content check.
-          contentType: MediaType.parse(
-            assignmentContentType(uploadFileName(payload.file.name)),
+      // One part per file, all under the backend's multi-file field. Each
+      // part's type follows the name actually being sent, not the raw pick:
+      // Android's picker can hand back a cache name with no extension, which
+      // `uploadFileName` fixes to .pdf. A video announced as a PDF would be
+      // refused by the backend's content check.
+      for (final picked in payload.files) {
+        final name = uploadFileName(picked.name);
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'files',
+            picked.bytes,
+            filename: name,
+            contentType: MediaType.parse(assignmentContentType(name)),
           ),
-        ),
-      );
+        );
+      }
 
       // Sent through the view's client (not request.send()) so widget tests can
       // inspect the multipart body without a live backend.
@@ -666,7 +704,7 @@ class _UploadPayload {
     required this.year,
     required this.division,
     required this.batch,
-    required this.file,
+    required this.files,
   });
 
   final String title;
@@ -676,14 +714,14 @@ class _UploadPayload {
   final int year;
   final String division;
   final String batch;
-  final PickedAssignmentFile file;
+  final List<PickedAssignmentFile> files;
 }
 
 /// The upload form. Returns the filled-in payload, or null when cancelled.
 class _AssignmentUploadSheet extends StatefulWidget {
-  const _AssignmentUploadSheet({required this.pickFile});
+  const _AssignmentUploadSheet({required this.pickFiles});
 
-  final AssignmentFilePicker pickFile;
+  final AssignmentFilesPicker pickFiles;
 
   @override
   State<_AssignmentUploadSheet> createState() => _AssignmentUploadSheetState();
@@ -701,7 +739,7 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
   String _batch = '';
   int _year = 1;
   DateTime _dueDate = DateTime.now().add(const Duration(days: 7));
-  PickedAssignmentFile? _file;
+  List<PickedAssignmentFile> _files = const [];
   String? _error;
 
   @override
@@ -711,18 +749,30 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
     super.dispose();
   }
 
-  Future<void> _pickFile() async {
+  Future<void> _pickFiles() async {
     try {
-      final picked = await widget.pickFile();
-      if (!mounted || picked == null) return;
+      final picked = await widget.pickFiles();
+      if (!mounted || picked.isEmpty) return;
       setState(() {
-        _file = picked;
+        _files = picked;
         _error = null;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = 'Could not read that file. Please try again.');
     }
+  }
+
+  /// "Choose PDFs or videos", "lecture.mp4 (8 MB)", "3 files (12 MB)".
+  String get _fileLabel {
+    if (_files.isEmpty) return 'CHOOSE PDFS OR VIDEOS';
+    if (_files.length == 1) {
+      final file = _files.single;
+      return '${file.name} (${(file.sizeBytes / 1024).toStringAsFixed(0)} KB)';
+    }
+    final totalKb =
+        _files.fold<int>(0, (sum, file) => sum + file.sizeBytes) / 1024;
+    return '${_files.length} FILES (${totalKb.toStringAsFixed(0)} KB)';
   }
 
   Future<void> _pickDate() async {
@@ -753,7 +803,7 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
       setState(() => _error = 'Please choose the subject.');
       return;
     }
-    if (_file == null) {
+    if (_files.isEmpty) {
       setState(() => _error = 'Please choose a PDF or video file to upload.');
       return;
     }
@@ -768,7 +818,7 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
         year: _year,
         division: _division,
         batch: _batch,
-        file: _file!,
+        files: _files,
       ),
     );
   }
@@ -892,16 +942,45 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
             ),
             const SizedBox(height: 16),
             GlassOutlinedButton(
-              onPressed: _pickFile,
+              onPressed: _pickFiles,
               height: 52,
               borderRadius: 14,
               child: Text(
-                _file == null
-                    ? 'CHOOSE PDF OR VIDEO'
-                    : '${_file!.name} (${(_file!.sizeBytes / 1024).toStringAsFixed(0)} KB)',
+                _fileLabel,
                 style: const TextStyle(fontSize: 13),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (_files.length > 1) ...[
+              const SizedBox(height: 8),
+              for (final file in _files)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        assignmentContentType(file.name).startsWith('video/')
+                            ? Icons.play_circle_outline_rounded
+                            : Icons.picture_as_pdf_outlined,
+                        size: 14,
+                        color: GlassColors.primaryBlue,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          file.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: GlassColors.secondaryTextOf(context),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 12),
               Text(

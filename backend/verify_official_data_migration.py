@@ -141,8 +141,10 @@ APPROVED_ROW_IDENTITY: dict[int, tuple[str, str, str, str]] = {
     # deliberately NOT part of this plan.)
     50: ("Saturday", "13:00", "14:00", "CCC-1"),
     51: ("Saturday", "14:00", "15:00", "CCC-1"),
-    # FPL faculty cell: the sheet prints the LETTER I -> "RVS (CCI)".
-    23: ("Wednesday", "13:00", "14:00", "FPL"),
+    # FPL faculty cell: the sheet prints the LETTER I -> "RVS (CCI)". The cell
+    # now runs 13:00-15:00 (Revision 4 of the sheet), already true in the
+    # baseline because that correction predates this seed.
+    23: ("Wednesday", "13:00", "15:00", "FPL"),
     44: ("Friday", "15:15", "16:15", "FPL"),
     # The five weekly "RELM" rows: free periods, not breaks.
     17: ("Tuesday", "15:15", "16:15", "RELM"),
@@ -192,6 +194,18 @@ APPROVED_NEW_COLUMNS: dict[tuple[str, str], Any] = {
 # already exist in the live database and were added by earlier revisions.
 BASELINE_MUST_PREDATE: tuple[tuple[str, str], ...] = (
     ("timetable_entries", "is_free_period"),
+)
+
+# Tables this migration never reads. They are created by the backend for other
+# features (announcements, push tokens, in-app notifications, assignment
+# attachments) and the seeder must not touch them, so neither must this script.
+# They are listed so the tests' "every table is classified" guard keeps failing
+# loudly when a new model appears without a deliberate decision.
+UNRELATED_TABLES = (
+    "announcements",
+    "assignment_attachments",
+    "fcm_tokens",
+    "notifications",
 )
 
 # Rows in these tables must survive exactly: no deletion, no insertion, no edit.

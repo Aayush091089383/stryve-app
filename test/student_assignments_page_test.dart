@@ -49,6 +49,7 @@ Map<String, dynamic> assignmentJson({
   String? batch,
   bool hasAttachment = true,
   String? originalName = 'problems.pdf',
+  List<Map<String, dynamic>>? attachments,
 }) => {
   'id': id,
   'subject': subject,
@@ -60,7 +61,11 @@ Map<String, dynamic> assignmentJson({
   'batch': batch,
   'has_attachment': hasAttachment,
   'original_name': hasAttachment ? originalName : null,
+  'attachments': ?attachments,
 };
+
+Map<String, dynamic> attachmentJson(int id, String name, {int size = 1024}) =>
+    {'id': id, 'original_name': name, 'file_size': size};
 
 http.Response ok(List<Map<String, dynamic>> items) => http.Response(
   jsonEncode(items),
@@ -258,6 +263,79 @@ void main() {
     // The player asks for the same authorized endpoint the PDF reader uses.
     expect(asked?.url.endsWith('/assignments/7/file'), isTrue, reason: asked?.url);
     expect(asked?.token, kToken);
+  });
+
+  testWidgets('a multi-file assignment lists every attachment', (tester) async {
+    final client = MockClient(
+      (request) async => ok([
+        assignmentJson(
+          id: 5,
+          subject: 'MATH',
+          title: 'Unit 1 pack',
+          attachments: [
+            attachmentJson(51, 'notes.pdf'),
+            attachmentJson(52, 'lecture.mp4'),
+          ],
+        ),
+      ]),
+    );
+
+    await pumpAssignments(tester, client);
+    await openFolder(tester, 'MATH');
+
+    expect(find.text('notes.pdf'), findsOneWidget);
+    expect(find.text('lecture.mp4'), findsOneWidget);
+    expect(find.text('READ PDF'), findsOneWidget);
+    expect(find.text('PLAY VIDEO'), findsOneWidget);
+  });
+
+  testWidgets('opening the second video streams that attachment', (
+    tester,
+  ) async {
+    final client = MockClient(
+      (request) async => ok([
+        assignmentJson(
+          id: 9,
+          subject: 'MATH',
+          title: 'Two recordings',
+          attachments: [
+            attachmentJson(91, 'part-1.mp4'),
+            attachmentJson(92, 'part-2.mp4'),
+          ],
+        ),
+      ]),
+    );
+
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    VideoSource? asked;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AssignmentsPage(
+          student: studentFixture(),
+          client: client,
+          videoSurfaceFactory: (source) {
+            asked = source;
+            return const Center(child: Text('FAKE PLAYER'));
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await openFolder(tester, 'MATH');
+    await tester.tap(find.text('PLAY VIDEO').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(VideoPlayerPage), findsOneWidget);
+    expect(
+      asked?.url.endsWith('/assignments/9/files/92'),
+      isTrue,
+      reason: 'the tapped attachment, not the first one: ${asked?.url}',
+    );
   });
 
   testWidgets('a pending request shows the loading state', (tester) async {

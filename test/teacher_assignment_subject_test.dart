@@ -215,9 +215,9 @@ void main() {
     await tester.tap(find.text('Engineering Physics').last);
     await tester.pumpAndSettle();
 
-    // The picker offers PDFs and videos now, so the button no longer says
-    // "PDF FILE"; the file it supplies below is still a PDF.
-    await tester.tap(find.text('CHOOSE PDF OR VIDEO'));
+    // The picker offers PDFs and videos, and takes several at once, so the
+    // button neither says "PDF FILE" nor names a single file.
+    await tester.tap(find.text('CHOOSE PDFS OR VIDEOS'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('UPLOAD'));
@@ -250,9 +250,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Engineering Physics').last);
     await tester.pumpAndSettle();
-    // The picker offers PDFs and videos now, so the button no longer says
-    // "PDF FILE"; the file it supplies below is still a PDF.
-    await tester.tap(find.text('CHOOSE PDF OR VIDEO'));
+    // The picker offers PDFs and videos, and takes several at once, so the
+    // button neither says "PDF FILE" nor names a single file.
+    await tester.tap(find.text('CHOOSE PDFS OR VIDEOS'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('UPLOAD'));
     await tester.pumpAndSettle();
@@ -273,6 +273,77 @@ void main() {
       body,
       contains('filename="cache-7f3a2b19.pdf"'),
       reason: 'the backend must receive a .pdf filename',
+    );
+  });
+
+  testWidgets('several picked files are all sent, each with its own type', (
+    tester,
+  ) async {
+    final sent = <http.Request>[];
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final client = MockClient((request) async {
+      if (request.url.path == '/teacher/assignments/mine') {
+        return jsonResponse(const [], 200);
+      }
+      sent.add(request);
+      return jsonResponse(uploadedJson('Engineering Physics'), 201);
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TeacherAssignmentsView(
+            authService: TeacherAuthService(),
+            client: client,
+            pickFiles: () async => [
+              PickedAssignmentFile(name: 'notes.pdf', bytes: utf8.encode(kPdf)),
+              PickedAssignmentFile(
+                name: 'lecture.mp4',
+                bytes: utf8.encode('\x00\x00\x00\x18ftypmp42fake-video-bytes'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('UPLOAD ASSIGNMENT'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Physics notes');
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Engineering Physics').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('CHOOSE PDFS OR VIDEOS'));
+    await tester.pumpAndSettle();
+
+    // The sheet lists what will be uploaded, so a mistyped pick is visible
+    // before the button is pressed.
+    expect(find.text('2 FILES (0 KB)'), findsOneWidget);
+    expect(find.text('notes.pdf'), findsOneWidget);
+    expect(find.text('lecture.mp4'), findsOneWidget);
+
+    await tester.tap(find.text('UPLOAD'));
+    await tester.pumpAndSettle();
+
+    expect(sent, hasLength(1));
+    final body = utf8.decode(sent.single.bodyBytes, allowMalformed: true);
+    expect(
+      RegExp('name="files"').allMatches(body).length,
+      2,
+      reason: 'both files must reach the backend under the multi-file field',
+    );
+    expect(body, contains('filename="notes.pdf"'));
+    expect(body, contains('filename="lecture.mp4"'));
+    expect(
+      RegExp(r'content-type: video/mp4\r?\n').hasMatch(body.toLowerCase()),
+      isTrue,
+      reason: 'the video part must be announced as video/mp4',
     );
   });
 }

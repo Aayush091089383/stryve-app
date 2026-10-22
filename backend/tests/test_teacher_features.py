@@ -873,7 +873,7 @@ check(
 )
 unlinked_claim = requests.post(
     f"{BASE}/teacher/free-periods/claim",
-    json={"day": "Monday", "start_time": "15:15", "end_time": "16:15", "division": "D", "batch": "D-3", "claim_date": NEXT_MONDAY_STR},
+    json={"day": "Monday", "start_time": "16:15", "end_time": "17:15", "division": "D", "batch": "D-1", "claim_date": NEXT_MONDAY_STR},
     headers=auth(plain_token),
     timeout=10,
 )
@@ -901,12 +901,12 @@ check("another batch's practical blocks that batch's slot", d1_slot is not None 
 whole = next((s for s in availability["slots"] if s["start_time"] == "15:15" and s["batch"] == ""), None)
 check("a period with any batch class is not free for the whole division", whole is not None and not whole["eligible"], str(whole))
 
-# Monday 15:15 has D-1 and D-2 in practicals, Monday 16:15 has D-3 in a
-# practical: those are the only periods where some group is genuinely free.
+# Monday 15:15 has all three batches in class (the corrected D-3 EG practical
+# starts at 15:35); at 16:15 only D-1 and D-2 are free.
 eligible = {(s["start_time"], s["batch"]) for s in availability["slots"] if s["eligible"]}
 check(
     "exactly the genuinely free batch periods are eligible",
-    eligible == {("15:15", "D-3"), ("16:15", "D-1"), ("16:15", "D-2")},
+    eligible == {("16:15", "D-1"), ("16:15", "D-2")},
     str(sorted(eligible)),
 )
 check(
@@ -917,16 +917,16 @@ check(
 
 claim = requests.post(
     f"{BASE}/teacher/free-periods/claim",
-    json={"day": "Monday", "start_time": "15:15", "end_time": "16:15", "division": "D", "batch": "D-3", "claim_date": NEXT_MONDAY_STR, "subject": "M-1"},
+    json={"day": "Monday", "start_time": "16:15", "end_time": "17:15", "division": "D", "batch": "D-1", "claim_date": NEXT_MONDAY_STR, "subject": "M-1"},
     headers=auth(smg_token),
     timeout=10,
 )
 check("a verified free period can be claimed", claim.status_code == 201, claim.text[:200])
-check("the claim is stored for the right date and slot", claim.json().get("claim_date") == NEXT_MONDAY_STR and claim.json().get("batch") == "D-3", str(claim.json()))
+check("the claim is stored for the right date and slot", claim.json().get("claim_date") == NEXT_MONDAY_STR and claim.json().get("batch") == "D-1", str(claim.json()))
 
 again = requests.post(
     f"{BASE}/teacher/free-periods/claim",
-    json={"day": "Monday", "start_time": "15:15", "end_time": "16:15", "division": "D", "batch": "D-3", "claim_date": NEXT_MONDAY_STR},
+    json={"day": "Monday", "start_time": "16:15", "end_time": "17:15", "division": "D", "batch": "D-1", "claim_date": NEXT_MONDAY_STR},
     headers=auth(smg_token),
     timeout=10,
 )
@@ -935,7 +935,7 @@ check("the refusal explains the conflict", "already claimed" in again.text.lower
 
 other = requests.post(
     f"{BASE}/teacher/free-periods/claim",
-    json={"day": "Monday", "start_time": "15:15", "end_time": "16:15", "division": "D", "batch": "D-3", "claim_date": NEXT_MONDAY_STR},
+    json={"day": "Monday", "start_time": "16:15", "end_time": "17:15", "division": "D", "batch": "D-1", "claim_date": NEXT_MONDAY_STR},
     headers=auth(spk_token),
     timeout=10,
 )
@@ -959,7 +959,7 @@ check("a period outside the official grid cannot be claimed", wrong_slot.status_
 
 next_week = requests.post(
     f"{BASE}/teacher/free-periods/claim",
-    json={"day": "Monday", "start_time": "15:15", "end_time": "16:15", "division": "D", "batch": "D-3", "claim_date": NEXT_MONDAY_WEEK2_STR},
+    json={"day": "Monday", "start_time": "16:15", "end_time": "17:15", "division": "D", "batch": "D-1", "claim_date": NEXT_MONDAY_WEEK2_STR},
     headers=auth(smg_token),
     timeout=10,
 )
@@ -974,21 +974,21 @@ check("the day view reports the existing claim", len(day_view["claims"]) == 1, s
 still_eligible = {(s["start_time"], s["batch"]) for s in day_view["slots"] if s["eligible"]}
 check(
     "the claimed period is no longer offered as eligible",
-    ("15:15", "D-3") not in still_eligible,
+    ("16:15", "D-1") not in still_eligible,
     str(sorted(still_eligible)),
 )
 check(
     "the periods that are still free remain offered",
-    still_eligible == {("16:15", "D-1"), ("16:15", "D-2")},
+    still_eligible == {("16:15", "D-2")},
     str(sorted(still_eligible)),
 )
 
 spk_day = requests.get(f"{BASE}/teacher/free-periods?date={NEXT_MONDAY_STR}", headers=auth(spk_token), timeout=10).json()
 check("another teacher does not see the first teacher's claim as theirs", spk_day["claims"] == [], str(spk_day["claims"]))
 check("and is told the class group is taken", any(
-    s["batch"] == "D-3" and s["start_time"] == "15:15" and "Another teacher" in (s["reason"] or "")
+    s["batch"] == "D-1" and s["start_time"] == "16:15" and "Another teacher" in (s["reason"] or "")
     for s in spk_day["slots"]
-), str([s for s in spk_day["slots"] if s["start_time"] == "15:15"]))
+), str([s for s in spk_day["slots"] if s["start_time"] == "16:15"]))
 
 release = requests.delete(
     f"{BASE}/teacher/free-periods/claims/{claims[0]['id']}", headers=auth(smg_token), timeout=10
@@ -1406,18 +1406,19 @@ check(
 # --------------------------------------------------------------------------
 # A period another teacher is assigned to is never free, even when the printed
 # grid has no class in that cell. This is tested on a per-batch gap (Monday
-# 15:15, D-3) rather than on a free period: nothing is ever assigned to a free
-# period, so an assignment there would be an invented one.
+# 16:15, D-2 - D-3 is in its EG practical) rather than on a free period:
+# nothing is ever assigned to a free period, so an assignment there would be an
+# invented one.
 # --------------------------------------------------------------------------
 manual = requests.post(
     f"{BASE}/teacher/{spk_id}/assignments",
     json={
         "subject": "M-1",
         "division": "D",
-        "batch": "D-3",
+        "batch": "D-2",
         "day": "Monday",
-        "start_time": "15:15",
-        "end_time": "16:15",
+        "start_time": "16:15",
+        "end_time": "17:15",
     },
     headers=auth(admin_token),
     timeout=10,
@@ -1437,7 +1438,7 @@ smg_slot = next(
     (
         s
         for s in blocked["slots"]
-        if s["start_time"] == "15:15" and s["batch"] == "D-3"
+        if s["start_time"] == "16:15" and s["batch"] == "D-2"
     ),
     None,
 )
@@ -1458,7 +1459,7 @@ blocked_claim = requests.post(
         "start_time": "15:15",
         "end_time": "16:15",
         "division": "D",
-        "batch": "D-3",
+        "batch": "D-2",
         "claim_date": NEXT_MONDAY_WEEK2_STR,
     },
     headers=auth(admin_token),
@@ -1472,7 +1473,7 @@ check(
 check(
     "the teacher who holds the assignment is not blocked by their own row",
     not any(
-        s["start_time"] == "15:15" and s["batch"] == "D-3" and "Another teacher" in (s["reason"] or "")
+        s["start_time"] == "16:15" and s["batch"] == "D-2" and "Another teacher" in (s["reason"] or "")
         for s in requests.get(
             f"{BASE}/teacher/free-periods?date={NEXT_MONDAY_STR}",
             headers=auth(spk_token),
@@ -1497,8 +1498,8 @@ if manual.status_code == 201:
         all(
             not (
                 row["day"] == "Monday"
-                and row["start_time"] == "15:15"
-                and row["batch"] == "D-3"
+                and row["start_time"] == "16:15"
+                and row["batch"] == "D-2"
             )
             for row in manual_assignment_gone
         ),
@@ -1726,6 +1727,178 @@ check(
 check(
     "an assignment without a file returns 404",
     requests.get(f"{BASE}/assignments/1/file", headers=auth(TOKENS["1"]), timeout=10).status_code == 404,
+)
+
+# --------------------------------------------------------------------------
+# Several files on one assignment: each is its own row, its own download, and a
+# rejected file takes the whole upload with it (nothing half-stored).
+# --------------------------------------------------------------------------
+SECOND_PDF = b"%PDF-1.4\n2 0 obj\n<< /Type /Catalog /Pages 3 0 R >>\nendobj\n%%EOF\n"
+
+
+def upload_many(token, items, payload=None):
+    body = {
+        "title": "Multi-file sheet",
+        "subject": "EG",
+        "due_date": MONDAY_STR,
+        "year": "1",
+        "division": "D",
+        "description": "Read both parts",
+        "batch": "",
+    }
+    body.update(payload or {})
+    return requests.post(
+        upload_url,
+        headers=auth(token),
+        data=body,
+        files=[("files", item) for item in items],
+        timeout=20,
+    )
+
+
+multi = upload_many(
+    admin_token,
+    [
+        ("part-1.pdf", PDF_BYTES, "application/pdf"),
+        ("part-2.pdf", SECOND_PDF, "application/pdf"),
+    ],
+)
+check("several files can be attached to one assignment", multi.status_code == 201, multi.text[:200])
+multi_id = multi.json()["id"]
+multi_attachments = multi.json().get("attachments") or []
+check(
+    "the upload returns every attachment in upload order",
+    [a["original_name"] for a in multi_attachments] == ["part-1.pdf", "part-2.pdf"],
+    str(multi_attachments)[:300],
+)
+check(
+    "each attachment has its own id",
+    len({a["id"] for a in multi_attachments}) == 2,
+    str(multi_attachments)[:300],
+)
+check(
+    "the legacy single-file columns describe the first file",
+    multi.json().get("original_name") == "part-1.pdf"
+    and multi.json().get("has_attachment") is True,
+    str(multi.json())[:300],
+)
+
+multi_rows = conn.execute(
+    "SELECT id, stored_name, original_name, file_size FROM assignment_attachments"
+    " WHERE assignment_id=? ORDER BY id",
+    (multi_id,),
+).fetchall()
+check("every attachment is its own row", len(multi_rows) == 2, str(multi_rows))
+check(
+    "the rows keep the names the uploader chose",
+    [r[2] for r in multi_rows] == ["part-1.pdf", "part-2.pdf"],
+    str(multi_rows),
+)
+check(
+    "each file is stored under a server-generated name",
+    all(r[1].endswith(".pdf") and r[1] != r[2] for r in multi_rows),
+    str(multi_rows),
+)
+check(
+    "every file is written to disk",
+    all((UPLOAD_DIR / r[1]).read_bytes() in (PDF_BYTES, SECOND_PDF) for r in multi_rows),
+    str(multi_rows),
+)
+
+student_multi = next(
+    (
+        a
+        for a in requests.get(f"{BASE}/assignments", headers=auth(TOKENS["1"]), timeout=10).json()
+        if a["id"] == multi_id
+    ),
+    None,
+)
+check(
+    "the student listing carries every attachment",
+    student_multi is not None and len(student_multi.get("attachments") or []) == 2,
+    str(student_multi)[:300],
+)
+
+for index, expected in enumerate((PDF_BYTES, SECOND_PDF)):
+    fetched = requests.get(
+        f"{BASE}/assignments/{multi_id}/files/{multi_rows[index][0]}",
+        headers=auth(TOKENS["1"]),
+        timeout=10,
+    )
+    check(
+        f"attachment {index + 1} downloads with its own bytes",
+        fetched.status_code == 200 and fetched.content == expected,
+        f"{fetched.status_code} {len(fetched.content)} bytes",
+    )
+check(
+    "the legacy single-file route serves the first attachment",
+    requests.get(
+        f"{BASE}/assignments/{multi_id}/file", headers=auth(TOKENS["1"]), timeout=10
+    ).content
+    == PDF_BYTES,
+)
+check(
+    "an attachment id from another assignment is refused",
+    requests.get(
+        f"{BASE}/assignments/{multi_id}/files/{created_upload.json()['attachments'][0]['id']}",
+        headers=auth(TOKENS["1"]),
+        timeout=10,
+    ).status_code
+    == 404,
+)
+check(
+    "an unauthenticated attachment download is refused",
+    requests.get(
+        f"{BASE}/assignments/{multi_id}/files/{multi_rows[0][0]}", timeout=10
+    ).status_code
+    == 401,
+)
+
+too_many = upload_many(
+    admin_token,
+    [(f"x{i}.pdf", PDF_BYTES, "application/pdf") for i in range(main.MAX_ASSIGNMENT_ATTACHMENTS + 1)],
+)
+check(
+    "more files than the limit are refused",
+    too_many.status_code == 400,
+    str(too_many.status_code),
+)
+files_before = len(list(UPLOAD_DIR.iterdir()))
+partial = upload_many(
+    admin_token,
+    [
+        ("ok.pdf", PDF_BYTES, "application/pdf"),
+        ("not-a-pdf.pdf", b"this is not a pdf", "application/pdf"),
+    ],
+)
+check("one invalid file refuses the whole upload", partial.status_code == 415, str(partial.status_code))
+check(
+    "and leaves no file behind",
+    len(list(UPLOAD_DIR.iterdir())) == files_before,
+    str(len(list(UPLOAD_DIR.iterdir()))),
+)
+check(
+    "and no assignment row",
+    conn.execute(
+        "SELECT COUNT(*) FROM assignments WHERE title='Multi-file sheet'"
+    ).fetchone()[0]
+    == 1,
+)
+
+multi_deleted = requests.delete(
+    f"{BASE}/teacher/assignments/{multi_id}", headers=auth(admin_token), timeout=10
+)
+check("a multi-file upload can be removed", multi_deleted.status_code == 200, multi_deleted.text[:160])
+check(
+    "its attachment rows go with it",
+    conn.execute(
+        "SELECT COUNT(*) FROM assignment_attachments WHERE assignment_id=?", (multi_id,)
+    ).fetchone()[0]
+    == 0,
+)
+check(
+    "and so do all of its files",
+    all(not (UPLOAD_DIR / r[1]).exists() for r in multi_rows),
 )
 
 deleted = requests.delete(f"{BASE}/teacher/assignments/{created_upload.json()['id']}", headers=auth(admin_token), timeout=10)
