@@ -776,10 +776,15 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
   }
 
   Future<void> _pickDate() async {
+    // A due date is a fact about the work, not about when it is typed in: a
+    // teacher back-filling last week's assignment must be able to record the
+    // date it was actually due, so the picker opens at the start of 2000
+    // instead of at today. `initialDate` still defaults to a point inside the
+    // range, which the picker requires.
     final picked = await showDatePicker(
       context: context,
       initialDate: _dueDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      firstDate: DateTime(2000),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     if (picked == null || !mounted) return;
