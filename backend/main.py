@@ -1001,6 +1001,62 @@ def create_announcement(
     return announcement
 
 
+@app.get("/teacher/announcements", response_model=list[AnnouncementOut])
+def list_manageable_announcements(
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """The announcements the caller may delete, newest first.
+
+    An admin manages the whole feed; a teacher manages only what they posted,
+    so the list a teacher sees is exactly the set the delete route accepts.
+    The scope comes from the authenticated account, never from the client.
+    """
+    query = db.query(models.Announcement).options(
+        joinedload(models.Announcement.author)
+    )
+    if teacher.role != "admin":
+        query = query.filter(models.Announcement.author_id == teacher.id)
+
+    return query.order_by(
+        models.Announcement.created_at.desc(),
+        models.Announcement.id.desc(),
+    ).all()
+
+
+@app.delete("/teacher/announcements/{announcement_id}")
+def delete_announcement(
+    announcement_id: int,
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Withdraw one announcement from the student feed.
+
+    Only the account that posted it, or an admin, may remove it - a teacher
+    cannot delete a colleague's notice. Deleting is permanent: the feed reads
+    this table directly, so there is no soft-delete flag to restore from.
+    """
+    announcement = db.query(models.Announcement).filter(
+        models.Announcement.id == announcement_id
+    ).first()
+
+    if not announcement:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Announcement not found",
+        )
+
+    if announcement.author_id != teacher.id and teacher.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete announcements you posted",
+        )
+
+    db.delete(announcement)
+    db.commit()
+    return {"message": "Announcement deleted", "announcement_id": announcement_id}
+
+
 @app.get("/announcements", response_model=list[AnnouncementOut])
 def list_my_announcements(
     student: models.Student = Depends(get_current_student),

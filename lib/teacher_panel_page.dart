@@ -502,17 +502,25 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
         ],
       ),
       body: GlassBackground(
-        child: SafeArea(
-          child: IndexedStack(
-            index: _tabIndex,
-            // Both roles carry both tabs now, and the Approvals view fetches as
-            // soon as it builds. Build each tab on first visit, so an account
-            // that is not permitted to review never fires a doomed request for
-            // a tab it has not opened.
-            children: [
-              for (var i = 0; i < pages.length; i++)
-                _seenTabs.contains(i) ? pages[i] : const SizedBox.shrink(),
-            ],
+        // One shared backdrop blur for the glass surfaces of the visible tab
+        // (identity card, section cards, list rows) instead of one blur pass
+        // per card. Light mode pays for this twice over - every surface also
+        // fills a gradient - so the grouped blur is what makes the panel
+        // scroll smoothly there. Nested surfaces keep their own blur; see
+        // [GlassContainer] and the student Home/Profile pages.
+        child: BackdropGroup(
+          child: SafeArea(
+            child: IndexedStack(
+              index: _tabIndex,
+              // Both roles carry both tabs now, and the Approvals view fetches
+              // as soon as it builds. Build each tab on first visit, so an
+              // account that is not permitted to review never fires a doomed
+              // request for a tab it has not opened.
+              children: [
+                for (var i = 0; i < pages.length; i++)
+                  _seenTabs.contains(i) ? pages[i] : const SizedBox.shrink(),
+              ],
+            ),
           ),
         ),
       ),

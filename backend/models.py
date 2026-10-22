@@ -535,10 +535,9 @@ class Announcement(Base):
     how a college-wide notice is posted - there is no special "everyone" value,
     just an unrestricted row.
 
-    Rows are append-only: nothing edits or deletes an announcement, so what a
-    student read yesterday is still what the feed says today. ``author_id``
-    points at the teacher account that posted it and is never taken from the
-    client.
+    An announcement is never edited. Its author, or an admin, may withdraw it,
+    which deletes the row and removes it from every feed. ``author_id`` points
+    at the teacher account that posted it and is never taken from the client.
     """
 
     __tablename__ = "announcements"

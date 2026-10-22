@@ -853,6 +853,22 @@ void main() {
       expect(await storage.read(key: 'teacher_auth_token'), isNull);
       expect(await storage.read(key: 'auth_token'), kStudentToken);
     });
+
+    testWidgets('the panel body shares one backdrop group', (tester) async {
+      // This group is load-bearing, not cosmetic: without it every glass card
+      // on a tab filters the backdrop again, which is what made the panels
+      // stutter in light mode. Do not drop it as a "simplification".
+      await pumpPanel(tester, panelRouter());
+      await pumpUntilFound(tester, find.text('Dr. Meera Rao'));
+
+      expect(
+        find.ancestor(
+          of: find.byType(IndexedStack),
+          matching: find.byType(BackdropGroup),
+        ),
+        findsOneWidget,
+      );
+    });
   });
 }
 

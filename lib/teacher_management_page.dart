@@ -291,9 +291,12 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
         ],
       ),
       body: GlassBackground(
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+        // Same shared backdrop as the panel itself: this page stacks a card per
+        // teacher account, and each card used to blur the backdrop again.
+        child: BackdropGroup(
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(
@@ -375,7 +378,8 @@ class _TeacherManagementPageState extends State<TeacherManagementPage> {
                       _buildEmptyState()
                     else
                       ..._teachers.map(_buildTeacherCard),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

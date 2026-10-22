@@ -9,6 +9,7 @@ import 'role_selection_page.dart';
 import 'services/auth_service.dart';
 import 'student.dart';
 import 'utils/glass_container.dart';
+import 'utils/linkified_text.dart';
 import 'utils/motion.dart';
 
 /// The student's announcements feed: everything a teacher or admin posted for
@@ -17,7 +18,8 @@ import 'utils/motion.dart';
 /// The backend decides what this student may read (`GET /announcements` is
 /// scoped by the authenticated token), so this screen never sends a year or a
 /// division and never filters on the client. Reading is the only action here:
-/// nothing in the app edits or deletes an announcement.
+/// an announcement is never edited, and withdrawing one is a teacher/admin
+/// action on their own panel, not something this screen can do.
 class AnnouncementsPage extends StatefulWidget {
   const AnnouncementsPage({super.key, required this.student, this.client});
 
@@ -340,13 +342,16 @@ class _AnnouncementCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
+          // A notice often carries a link (a form, a reading, a schedule), and
+          // reading it out character by character is useless on a phone.
+          LinkifiedText(
             announcement.message,
             style: TextStyle(
               fontSize: 14,
               height: 1.45,
               color: GlassColors.secondaryTextOf(context),
             ),
+            linkStyle: const TextStyle(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 14),
           Row(

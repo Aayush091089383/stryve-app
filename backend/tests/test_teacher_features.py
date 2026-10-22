@@ -1932,6 +1932,94 @@ check(
 )
 
 # ==========================================================================
+section("5b. Announcements: who may withdraw one")
+# ==========================================================================
+# A notice can be withdrawn only by the account that posted it, or an admin.
+# The rule is enforced by the backend, so a teacher who never sees another
+# teacher's post still cannot delete it by guessing the id.
+announce_url = f"{BASE}/teacher/announcements"
+
+teacher_notice = requests.post(
+    announce_url,
+    json={"title": "Delete me", "message": "Details at https://example.com/notice"},
+    headers=auth(plain_token),
+    timeout=10,
+)
+check("a teacher can post an announcement", teacher_notice.status_code == 201, teacher_notice.text[:160])
+teacher_notice_id = teacher_notice.json()["id"]
+
+mine_list = requests.get(announce_url, headers=auth(plain_token), timeout=10)
+check("a teacher lists the announcements they can manage", mine_list.status_code == 200, mine_list.text[:160])
+check(
+    "the listing includes their own post",
+    teacher_notice_id in {a["id"] for a in mine_list.json()},
+    str([a["id"] for a in mine_list.json()]),
+)
+check(
+    "the listing carries the author name",
+    all(a.get("author_name") for a in mine_list.json()),
+    str(mine_list.json())[:200],
+)
+check(
+    "a teacher does not list a colleague's post",
+    teacher_notice_id not in {a["id"] for a in requests.get(announce_url, headers=auth(spk_token), timeout=10).json()},
+)
+check(
+    "a colleague cannot delete it",
+    requests.delete(f"{announce_url}/{teacher_notice_id}", headers=auth(spk_token), timeout=10).status_code == 403,
+)
+check(
+    "a student cannot delete it",
+    requests.delete(f"{announce_url}/{teacher_notice_id}", headers=auth(TOKENS["1"]), timeout=10).status_code == 403,
+)
+check(
+    "an unauthenticated delete is refused",
+    requests.delete(f"{announce_url}/{teacher_notice_id}", timeout=10).status_code == 401,
+)
+check(
+    "the post is still in the student feed after the refused deletes",
+    teacher_notice_id in {a["id"] for a in requests.get(f"{BASE}/announcements", headers=auth(TOKENS["1"]), timeout=10).json()},
+)
+check(
+    "the author can withdraw their own announcement",
+    requests.delete(f"{announce_url}/{teacher_notice_id}", headers=auth(plain_token), timeout=10).status_code == 200,
+)
+check(
+    "it is gone from the student feed",
+    teacher_notice_id not in {a["id"] for a in requests.get(f"{BASE}/announcements", headers=auth(TOKENS["1"]), timeout=10).json()},
+)
+check(
+    "the row is gone, not hidden",
+    conn.execute("SELECT COUNT(*) FROM announcements WHERE id=?", (teacher_notice_id,)).fetchone()[0] == 0,
+)
+check(
+    "deleting it again is a 404",
+    requests.delete(f"{announce_url}/{teacher_notice_id}", headers=auth(plain_token), timeout=10).status_code == 404,
+)
+
+admin_notice = requests.post(
+    announce_url,
+    json={"title": "Admin notice", "message": "Posted by a teacher"},
+    headers=auth(plain_token),
+    timeout=10,
+)
+check("a second notice is posted for the admin case", admin_notice.status_code == 201, admin_notice.text[:160])
+admin_notice_id = admin_notice.json()["id"]
+check(
+    "an admin lists every announcement",
+    admin_notice_id in {a["id"] for a in requests.get(announce_url, headers=auth(admin_token), timeout=10).json()},
+)
+check(
+    "an admin can withdraw someone else's announcement",
+    requests.delete(f"{announce_url}/{admin_notice_id}", headers=auth(admin_token), timeout=10).status_code == 200,
+)
+check(
+    "the admin list no longer carries it",
+    admin_notice_id not in {a["id"] for a in requests.get(announce_url, headers=auth(admin_token), timeout=10).json()},
+)
+
+
+# ==========================================================================
 section("6. Notifications for a new assignment")
 # ==========================================================================
 # Uploading an assignment notifies exactly the students who can see it: the
