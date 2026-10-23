@@ -574,6 +574,58 @@
 
   .reject-form input { flex: 1 1 220px; }
 
+  /* --------------------------------------------------------- announcements */
+  .announcement {
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    background: rgba(8, 13, 25, 0.45);
+  }
+
+  .announcement + .announcement { margin-top: 10px; }
+
+  .announcement-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .announcement-title { min-width: 0; }
+
+  .announcement-title strong {
+    display: block;
+    font-size: 14.5px;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+
+  .announcement-meta {
+    display: block;
+    margin-top: 4px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .announcement-body {
+    margin: 10px 0 0;
+    font-size: 13px;
+    line-height: 1.65;
+    color: #d3ddf3;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .announcement-body a { color: #9dbfff; text-decoration: underline; }
+
+  .announcement-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+
+  .icon-btn.danger:hover:not(:disabled) {
+    color: #ffc3c9;
+    border-color: rgba(255, 90, 106, 0.45);
+  }
+
   /* ---------------------------------------------------------------- tables */
   .table-wrap {
     overflow-x: auto;
@@ -836,6 +888,15 @@
         <span>Assignments</span>
       </button>
 
+      <button class="nav-item" type="button" data-tab="announcements" id="tab-announcements">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M4 10v4a2 2 0 0 0 2 2h1l6 4V4L7 8H6a2 2 0 0 0-2 2z"/>
+          <path d="M17.5 9.2a4 4 0 0 1 0 5.6"/>
+        </svg>
+        <span>Announcements</span>
+      </button>
+
       <button class="nav-item" type="button" data-tab="approvals" id="navApprovals" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -972,6 +1033,74 @@
           </div>
         </section>
 
+        <!-- ------------------------------------------------ announcements -->
+        <section class="panel" id="panel-announcements">
+          <div class="grid-2">
+            <section class="card">
+              <h2>Post an announcement</h2>
+              <p class="hint">
+                Any teacher or admin can post. Leave both audience fields on “Every”
+                to reach the whole college.
+              </p>
+
+              <form id="announcementForm" novalidate>
+                <div class="field">
+                  <label for="annTitle">Title</label>
+                  <input id="annTitle" type="text" maxlength="200"
+                         placeholder="e.g. Physics practical moved to Friday" required />
+                </div>
+
+                <div class="field">
+                  <label for="annMessage">Message</label>
+                  <textarea id="annMessage" rows="6" maxlength="5000"
+                            placeholder="Write the notice. Paste links on their own line — they stay tappable." required></textarea>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label for="annYear">Year</label>
+                    <select id="annYear">
+                      <option value="" selected>Every year</option>
+                      <option value="1">Year 1</option>
+                      <option value="2">Year 2</option>
+                      <option value="3">Year 3</option>
+                      <option value="4">Year 4</option>
+                      <option value="5">Year 5</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="annDivision">Division</label>
+                    <select id="annDivision">
+                      <option value="" selected>Every division</option>
+                      <option value="D">Division D</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button id="postAnnouncementBtn" class="block" type="submit">
+                  <span class="spinner" id="postAnnouncementSpinner" hidden></span>
+                  <span id="postAnnouncementLabel">Post announcement</span>
+                </button>
+              </form>
+
+              <div id="announcementPostMessage" class="message" role="status" aria-live="polite"></div>
+            </section>
+
+            <section class="card">
+              <div class="section-head">
+                <h2>Posted announcements</h2>
+                <button class="ghost small" id="refreshAnnouncementsBtn" type="button">Refresh</button>
+              </div>
+              <p class="hint">
+                Newest first. Teachers see and withdraw their own posts; admins manage
+                the whole feed.
+              </p>
+              <div id="announcementsList"></div>
+              <div id="announcementsMessage" class="message" role="status" aria-live="polite"></div>
+            </section>
+          </div>
+        </section>
+
         <!-- ---------------------------------------------------- approvals -->
         <section class="panel" id="panel-approvals">
           <section class="card">
@@ -1100,6 +1229,10 @@
       title: "Assignments",
       sub: "Upload material and manage due dates for Division D."
     },
+    announcements: {
+      title: "Announcements",
+      sub: "Post notices to the student feed and withdraw the ones you manage."
+    },
     approvals: {
       title: "Approvals",
       sub: "Review student registrations waiting for a decision."
@@ -1155,6 +1288,15 @@
   var createTeacherLabel = document.getElementById("createTeacherLabel");
   var createMessage = document.getElementById("createMessage");
 
+  var announcementForm = document.getElementById("announcementForm");
+  var announcementBtn = document.getElementById("postAnnouncementBtn");
+  var announcementSpinner = document.getElementById("postAnnouncementSpinner");
+  var announcementLabel = document.getElementById("postAnnouncementLabel");
+  var announcementPostMessage = document.getElementById("announcementPostMessage");
+  var announcementsList = document.getElementById("announcementsList");
+  var announcementsMessage = document.getElementById("announcementsMessage");
+  var refreshAnnouncementsBtn = document.getElementById("refreshAnnouncementsBtn");
+
   var profileGrid = document.getElementById("profileGrid");
   var profileMessage = document.getElementById("profileMessage");
   var refreshProfileBtn = document.getElementById("refreshProfileBtn");
@@ -1163,6 +1305,7 @@
   var myAssignments = [];
   var pendingRows = [];
   var teacherRows = [];
+  var announcementRows = [];
   var activeTab = "assignments";
 
   // ------------------------------------------------------------ primitives
@@ -1260,6 +1403,7 @@
     myAssignments = [];
     pendingRows = [];
     teacherRows = [];
+    announcementRows = [];
     showLogin();
     showMessage(loginMessage, "Your session ended. Sign in again.", "info");
   }
@@ -1292,7 +1436,7 @@
   function allowed(tab) {
     if (tab === "teachers") return isAdmin();
     if (tab === "approvals") return canReview();
-    return tab === "assignments" || tab === "profile";
+    return tab === "assignments" || tab === "announcements" || tab === "profile";
   }
 
   function activate(tab) {
@@ -1314,6 +1458,7 @@
     pageSub.textContent = meta.sub;
 
     if (tab === "assignments") loadMine();
+    if (tab === "announcements") loadAnnouncements();
     if (tab === "approvals") loadPending();
     if (tab === "teachers") loadTeachers();
     if (tab === "profile") renderProfile();
@@ -1341,6 +1486,8 @@
     renderUser(me);
     hideMessage(uploadMessage);
     hideMessage(teachersMessage);
+    hideMessage(announcementPostMessage);
+    hideMessage(announcementsMessage);
     showMessage(uploadMessage, "Signed in as " + (me.name || "your account") + ".", "info");
     activate("assignments");
     if (canReview()) loadPending(); // fills the Approvals badge
@@ -1352,15 +1499,20 @@
     myAssignments = [];
     pendingRows = [];
     teacherRows = [];
+    announcementRows = [];
     recentList.textContent = "";
     pendingList.textContent = "";
     teachersBody.textContent = "";
+    announcementsList.textContent = "";
     profileGrid.textContent = "";
+    if (announcementForm) announcementForm.reset();
     hideMessage(recentMessage);
     hideMessage(uploadMessage);
     hideMessage(pendingMessage);
     hideMessage(teachersMessage);
     hideMessage(createMessage);
+    hideMessage(announcementPostMessage);
+    hideMessage(announcementsMessage);
     hideMessage(profileMessage);
     pendingBadge.hidden = true;
     var password = document.getElementById("password");
@@ -2181,6 +2333,258 @@
   });
 
   refreshTeachersBtn.addEventListener("click", loadTeachers);
+
+  // --------------------------------------------------------- announcements
+  var URL_PATTERN = /https?:\/\/[^\s<>"']+/g;
+
+  // A message is rendered as text nodes plus <a> elements, never as HTML, so a
+  // post cannot inject markup. Trailing punctuation stays prose.
+  function appendLinkified(container, text) {
+    var value = String(text || "");
+    var lastIndex = 0;
+    var match;
+    URL_PATTERN.lastIndex = 0;
+
+    while ((match = URL_PATTERN.exec(value)) !== null) {
+      if (match.index > lastIndex) {
+        container.appendChild(document.createTextNode(value.slice(lastIndex, match.index)));
+      }
+
+      var url = match[0];
+      var trailing = "";
+      while (/[),.;:!?]$/.test(url)) {
+        trailing = url.slice(-1) + trailing;
+        url = url.slice(0, -1);
+      }
+
+      var link = document.createElement("a");
+      link.href = url;
+      link.textContent = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      container.appendChild(link);
+
+      if (trailing) container.appendChild(document.createTextNode(trailing));
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < value.length) {
+      container.appendChild(document.createTextNode(value.slice(lastIndex)));
+    }
+  }
+
+  function audienceLabel(item) {
+    if (item.year == null && !item.division) return "Everyone";
+    if (item.year != null && item.division) {
+      return "Year " + item.year + " · Division " + item.division;
+    }
+    if (item.year != null) return "Year " + item.year;
+    return "Division " + item.division;
+  }
+
+  async function loadAnnouncements() {
+    if (!token()) return;
+    hideMessage(announcementsMessage);
+    announcementsList.textContent = "";
+    announcementsList.appendChild(stateNode("Loading announcements…"));
+    refreshAnnouncementsBtn.disabled = true;
+
+    try {
+      var result = await api("/teacher/announcements");
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        announcementsList.textContent = "";
+        announcementsList.appendChild(stateNode(
+          errorText(result.body, "Could not load announcements (" + result.response.status + ")."),
+          "error"
+        ));
+        return;
+      }
+
+      announcementRows = Array.isArray(result.body) ? result.body : [];
+      renderAnnouncements();
+    } catch (error) {
+      announcementsList.textContent = "";
+      announcementsList.appendChild(stateNode("Could not load announcements. Check your connection.", "error"));
+    } finally {
+      refreshAnnouncementsBtn.disabled = false;
+    }
+  }
+
+  function renderAnnouncements() {
+    announcementsList.textContent = "";
+
+    if (announcementRows.length === 0) {
+      announcementsList.appendChild(stateNode(
+        "No announcements yet. Anything you post will appear here and in the student app."
+      ));
+      return;
+    }
+
+    announcementRows.forEach(function (item) {
+      announcementsList.appendChild(buildAnnouncement(item));
+    });
+  }
+
+  function buildAnnouncement(item) {
+    var article = document.createElement("article");
+    article.className = "announcement";
+
+    var head = document.createElement("div");
+    head.className = "announcement-head";
+
+    var titleWrap = document.createElement("div");
+    titleWrap.className = "announcement-title";
+
+    var title = document.createElement("strong");
+    title.textContent = item.title || "(untitled)";
+
+    var meta = document.createElement("span");
+    meta.className = "announcement-meta";
+    meta.textContent = (item.author_name || "Unknown author") + " · " +
+      formatDate(item.created_at) + " · " + audienceLabel(item);
+
+    titleWrap.appendChild(title);
+    titleWrap.appendChild(meta);
+
+    var actions = document.createElement("div");
+    actions.className = "announcement-actions";
+
+    var remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-btn danger";
+    remove.setAttribute("aria-label", "Delete announcement");
+    remove.title = "Delete announcement";
+    remove.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+      '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>' +
+      '<path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+    remove.addEventListener("click", function () {
+      askDeleteAnnouncement(article, actions, item);
+    });
+
+    actions.appendChild(remove);
+
+    var body = document.createElement("p");
+    body.className = "announcement-body";
+    appendLinkified(body, item.message);
+
+    head.appendChild(titleWrap);
+    head.appendChild(actions);
+    article.appendChild(head);
+    article.appendChild(body);
+    return article;
+  }
+
+  // Deletion is permanent, so the trash icon turns into an inline confirmation
+  // instead of removing the post on the first click.
+  function askDeleteAnnouncement(article, actions, item) {
+    actions.textContent = "";
+
+    var confirmDelete = document.createElement("button");
+    confirmDelete.type = "button";
+    confirmDelete.className = "soft-danger small";
+    confirmDelete.textContent = "Delete";
+    confirmDelete.setAttribute("aria-label", "Confirm delete announcement");
+
+    var cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "ghost small";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", function () {
+      article.replaceWith(buildAnnouncement(item));
+    });
+
+    confirmDelete.addEventListener("click", function () {
+      deleteAnnouncement(item, article, confirmDelete);
+    });
+
+    actions.appendChild(confirmDelete);
+    actions.appendChild(cancel);
+  }
+
+  async function deleteAnnouncement(item, article, button) {
+    button.disabled = true;
+    button.textContent = "Deleting…";
+
+    try {
+      var result = await api("/teacher/announcements/" + item.id, { method: "DELETE" });
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        showMessage(announcementsMessage,
+          errorText(result.body, "Could not delete the announcement (" + result.response.status + ")."),
+          "error");
+        button.disabled = false;
+        button.textContent = "Delete";
+        return;
+      }
+
+      announcementRows = announcementRows.filter(function (entry) {
+        return entry.id !== item.id;
+      });
+      article.remove();
+      if (announcementRows.length === 0) renderAnnouncements();
+      showMessage(announcementsMessage, "Deleted “" + (item.title || "the announcement") + "”.", "success");
+    } catch (error) {
+      showMessage(announcementsMessage, "Could not delete the announcement. Check your connection.", "error");
+      button.disabled = false;
+      button.textContent = "Delete";
+    }
+  }
+
+  announcementForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    hideMessage(announcementPostMessage);
+
+    var title = document.getElementById("annTitle").value.trim();
+    var message = document.getElementById("annMessage").value.trim();
+    var year = document.getElementById("annYear").value;
+    var division = document.getElementById("annDivision").value;
+
+    if (!title) { showMessage(announcementPostMessage, "Enter a title.", "error"); return; }
+    if (!message) { showMessage(announcementPostMessage, "Write the announcement message.", "error"); return; }
+
+    // Omitted, not null: an absent restriction is what makes a post readable by
+    // every student.
+    var payload = { title: title, message: message };
+    if (year) payload.year = parseInt(year, 10);
+    if (division) payload.division = division;
+
+    busy(announcementBtn, announcementSpinner, announcementLabel, true, "Posting…");
+
+    try {
+      var result = await api("/teacher/announcements", { method: "POST", json: payload });
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        showMessage(announcementPostMessage,
+          errorText(result.body, "Could not post the announcement (" + result.response.status + ")."),
+          "error");
+        return;
+      }
+
+      announcementForm.reset();
+      var saved = result.body && result.body.id ? result.body : payload;
+      var audience = audienceLabel(saved);
+      showMessage(announcementPostMessage,
+        "Posted “" + (saved.title || title) + "” to " +
+          (audience === "Everyone" ? "everyone" : audience) + ".",
+        "success");
+      loadAnnouncements();
+    } catch (error) {
+      showMessage(announcementPostMessage, "Could not post the announcement. Check your connection.", "error");
+    } finally {
+      busy(announcementBtn, announcementSpinner, announcementLabel, false, "Post announcement");
+    }
+  });
+
+  refreshAnnouncementsBtn.addEventListener("click", loadAnnouncements);
 
   // ---------------------------------------------------------------- profile
   function renderProfile() {
