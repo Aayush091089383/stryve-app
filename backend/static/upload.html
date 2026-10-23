@@ -4,27 +4,32 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="dark" />
-<title>Stryve · Upload Portal</title>
+<meta name="robots" content="noindex, nofollow" />
+<title>Stryve · Portal</title>
 <style>
   :root {
     --bg: #060a15;
     --bg-soft: #0b1224;
     --surface: rgba(18, 27, 47, 0.78);
     --surface-solid: #111a2e;
+    --sidebar: rgba(10, 16, 30, 0.82);
     --border: rgba(148, 174, 255, 0.14);
+    --border-strong: rgba(148, 174, 255, 0.32);
     --text: #eaf0ff;
     --muted: #93a3c4;
     --accent: #4f8cff;
     --accent-soft: rgba(79, 140, 255, 0.16);
     --success: #4ade80;
+    --success-soft: rgba(74, 222, 128, 0.14);
     --danger: #ff7a85;
+    --danger-soft: rgba(255, 90, 106, 0.12);
     --warning: #fbbf24;
     --radius: 18px;
   }
 
   * { box-sizing: border-box; }
 
-  html, body { height: 100%; }
+  html, body { min-height: 100%; }
 
   body {
     margin: 0;
@@ -35,21 +40,27 @@
       radial-gradient(900px 520px at 100% 0%, rgba(122, 92, 255, 0.14), transparent 55%),
       linear-gradient(180deg, #070c18 0%, var(--bg) 55%, #04070f 100%);
     background-attachment: fixed;
-    min-height: 100%;
+    min-height: 100vh;
   }
 
-  .wrap {
-    width: 100%;
-    max-width: 760px;
-    margin: 0 auto;
-    padding: 32px 20px 56px;
+  [hidden] { display: none !important; }
+
+  /* ---------------------------------------------------------------- login */
+  .login-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 18px;
   }
+
+  .login-box { width: 100%; max-width: 440px; }
 
   header.brand {
     display: flex;
     align-items: center;
     gap: 14px;
-    margin-bottom: 28px;
+    margin-bottom: 22px;
   }
 
   .mark {
@@ -64,6 +75,7 @@
     color: #fff;
     background: linear-gradient(140deg, #5b95ff, #3b6bff 55%, #6d5bff);
     box-shadow: 0 10px 24px rgba(59, 107, 255, 0.35);
+    flex: none;
   }
 
   .brand h1 {
@@ -79,36 +91,227 @@
     color: var(--muted);
   }
 
+  /* ---------------------------------------------------------------- shell */
+  .app {
+    display: grid;
+    grid-template-columns: 272px minmax(0, 1fr);
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 24px 18px 22px;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  .sidebar .brand { margin-bottom: 0; }
+
+  .user-card {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(8, 13, 25, 0.55);
+    min-width: 0;
+  }
+
+  .avatar {
+    width: 38px;
+    height: 38px;
+    flex: none;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(140deg, #5b95ff, #6d5bff);
+    letter-spacing: 0.5px;
+  }
+
+  .user-meta { min-width: 0; flex: 1; }
+
+  .user-meta strong {
+    display: block;
+    font-size: 13.5px;
+    font-weight: 650;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .user-meta span {
+    display: block;
+    margin-top: 2px;
+    font-size: 11.5px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .role-pill {
+    flex: none;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: 999px;
+    color: #cfe0ff;
+    background: var(--accent-soft);
+    border: 1px solid rgba(79, 140, 255, 0.35);
+  }
+
+  .nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .nav-label {
+    margin: 0 0 6px 10px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: rgba(147, 163, 196, 0.6);
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .nav-item svg { width: 18px; height: 18px; flex: none; }
+
+  .nav-item:hover { color: var(--text); background: rgba(148, 174, 255, 0.08); }
+
+  .nav-item.active {
+    color: #fff;
+    background: var(--accent-soft);
+    border-color: rgba(79, 140, 255, 0.38);
+  }
+
+  .nav-item .badge {
+    margin-left: auto;
+    min-width: 21px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    color: #fff;
+    background: rgba(79, 140, 255, 0.55);
+  }
+
+  .sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+
+  .foot-note {
+    margin: 0;
+    padding: 0 4px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: rgba(147, 163, 196, 0.72);
+  }
+
+  /* ---------------------------------------------------------------- main */
+  .main { min-width: 0; padding: 26px 30px 56px; }
+
+  .main-inner { max-width: 1180px; margin: 0 auto; }
+
+  .topbar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 22px;
+  }
+
+  .page-title { margin: 0; font-size: 23px; font-weight: 680; letter-spacing: 0.2px; }
+
+  .page-sub { margin: 5px 0 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+  .panel { display: none; }
+  .panel.active { display: block; animation: fade 0.18s ease-out; }
+
+  @keyframes fade {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* ---------------------------------------------------------------- cards */
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 26px;
+    padding: 24px;
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.38);
   }
 
   .card + .card { margin-top: 18px; }
 
-  .card h2 {
-    margin: 0 0 6px;
-    font-size: 17px;
-    font-weight: 650;
-  }
+  .card h2 { margin: 0 0 6px; font-size: 16.5px; font-weight: 650; }
 
   .card .hint {
-    margin: 0 0 20px;
-    font-size: 13px;
-    line-height: 1.5;
+    margin: 0 0 18px;
+    font-size: 12.5px;
+    line-height: 1.55;
     color: var(--muted);
   }
 
-  .field { margin-bottom: 16px; }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: 18px;
+    align-items: start;
+  }
+
+  @media (max-width: 1120px) {
+    .grid-2 { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  .section-head h2 { margin: 0; }
+
+  /* ---------------------------------------------------------------- forms */
+  .field { margin-bottom: 15px; }
 
   .field label {
     display: block;
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.35px;
     text-transform: uppercase;
@@ -124,12 +327,12 @@
   select,
   textarea {
     width: 100%;
-    padding: 12px 14px;
-    font-size: 15px;
+    padding: 11px 13px;
+    font-size: 14.5px;
     color: var(--text);
     background: rgba(8, 13, 25, 0.72);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 11px;
     outline: none;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
     font-family: inherit;
@@ -142,76 +345,95 @@
 
   input[type="date"] { color-scheme: dark; }
 
-  .row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
-  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
   .file-drop {
     border: 1px dashed rgba(148, 174, 255, 0.35);
-    border-radius: 12px;
-    padding: 16px;
+    border-radius: 11px;
+    padding: 14px;
     background: rgba(8, 13, 25, 0.45);
   }
 
   .file-drop input[type="file"] {
     width: 100%;
-    font-size: 13.5px;
+    font-size: 13px;
     color: var(--muted);
   }
 
   .file-drop input[type="file"]::file-selector-button {
     margin-right: 12px;
-    padding: 9px 14px;
-    border-radius: 10px;
+    padding: 8px 13px;
+    border-radius: 9px;
     border: 1px solid var(--border);
     background: var(--accent-soft);
     color: var(--text);
     font-weight: 600;
-    font-size: 13px;
+    font-size: 12.5px;
     cursor: pointer;
   }
 
-  .file-note {
-    margin: 10px 0 0;
-    font-size: 12.5px;
-    color: var(--muted);
-  }
+  .file-note { margin: 9px 0 0; font-size: 12px; color: var(--muted); }
 
+  /* ---------------------------------------------------------------- buttons */
   button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    width: 100%;
-    padding: 13px 18px;
-    margin-top: 6px;
-    font-size: 15px;
+    gap: 8px;
+    padding: 10px 16px;
+    font-family: inherit;
+    font-size: 13.5px;
     font-weight: 650;
     color: #fff;
     background: linear-gradient(135deg, #5b95ff, #3b6bff);
-    border: none;
-    border-radius: 12px;
+    border: 1px solid transparent;
+    border-radius: 11px;
     cursor: pointer;
-    transition: transform 0.08s ease, filter 0.15s ease, opacity 0.15s ease;
+    transition: transform 0.08s ease, filter 0.15s ease, opacity 0.15s ease, background 0.15s ease;
   }
 
   button:hover:not(:disabled) { filter: brightness(1.08); }
   button:active:not(:disabled) { transform: translateY(1px); }
-  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  button.secondary {
-    width: auto;
-    margin: 0;
-    padding: 8px 14px;
-    font-size: 13px;
+  button.block { width: 100%; padding: 12px 18px; font-size: 14.5px; }
+
+  button.ghost {
     background: transparent;
-    border: 1px solid var(--border);
+    border-color: var(--border);
     color: var(--muted);
   }
 
-  button.secondary:hover:not(:disabled) { color: var(--text); border-color: rgba(148, 174, 255, 0.4); }
+  button.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--border-strong); filter: none; }
+
+  button.soft-success {
+    background: var(--success-soft);
+    border-color: rgba(74, 222, 128, 0.38);
+    color: #d9ffe8;
+  }
+
+  button.soft-danger {
+    background: var(--danger-soft);
+    border-color: rgba(255, 90, 106, 0.35);
+    color: #ffd9dd;
+  }
+
+  button.small { padding: 7px 12px; font-size: 12.5px; border-radius: 9px; }
+
+  button.icon-btn {
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    flex: none;
+  }
+
+  button.icon-btn:hover:not(:disabled) { color: var(--text); border-color: var(--border-strong); filter: none; }
+  button.icon-btn[aria-pressed="true"] { color: #cfe0ff; border-color: rgba(79, 140, 255, 0.45); background: var(--accent-soft); }
+  button.icon-btn svg { width: 15px; height: 15px; }
 
   .spinner {
     width: 15px;
@@ -224,12 +446,13 @@
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* ---------------------------------------------------------------- messages */
   .message {
     display: none;
-    margin-top: 16px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    font-size: 13.5px;
+    margin-top: 15px;
+    padding: 11px 13px;
+    border-radius: 11px;
+    font-size: 13px;
     line-height: 1.5;
     border: 1px solid transparent;
     white-space: pre-wrap;
@@ -241,29 +464,31 @@
   .message.success { color: #d6ffe6; background: rgba(74, 222, 128, 0.10); border-color: rgba(74, 222, 128, 0.32); }
   .message.info { color: #dbe7ff; background: rgba(79, 140, 255, 0.10); border-color: rgba(79, 140, 255, 0.3); }
 
-  .session-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    padding-bottom: 18px;
-    margin-bottom: 22px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .session-bar strong { font-size: 14.5px; }
-  .session-bar span { display: block; margin-top: 3px; font-size: 12.5px; color: var(--muted); }
-
   .note {
     margin: 14px 0 0;
-    padding: 11px 13px;
-    border-radius: 11px;
-    font-size: 12.5px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 12px;
     line-height: 1.55;
     color: #ffe6b3;
     background: rgba(251, 191, 36, 0.08);
     border: 1px solid rgba(251, 191, 36, 0.22);
   }
+
+  /* ---------------------------------------------------------------- lists */
+  .state {
+    margin: 0;
+    padding: 22px 14px;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--muted);
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    background: rgba(8, 13, 25, 0.35);
+  }
+
+  .state.error { color: #ffd7db; border-color: rgba(255, 90, 106, 0.3); }
 
   .assignment-row {
     display: flex;
@@ -282,7 +507,7 @@
 
   .assignment-info strong {
     display: block;
-    font-size: 14.5px;
+    font-size: 14px;
     font-weight: 650;
     overflow-wrap: anywhere;
   }
@@ -290,7 +515,7 @@
   .assignment-info span {
     display: block;
     margin-top: 3px;
-    font-size: 12.5px;
+    font-size: 12px;
     color: var(--muted);
   }
 
@@ -302,176 +527,561 @@
     width: 100%;
   }
 
-  .edit-form input[type="text"] { flex: 2 1 220px; }
-  .edit-form input[type="date"] { flex: 1 1 150px; }
+  .edit-form input[type="text"] { flex: 2 1 200px; }
+  .edit-form input[type="date"] { flex: 1 1 145px; }
 
-  /* The global button rule is full width; the inline actions are not. */
-  .edit-form button {
-    width: auto;
-    margin: 0;
-    padding: 10px 16px;
+  /* ---------------------------------------------------------------- pending */
+  .pending-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    background: rgba(8, 13, 25, 0.45);
+  }
+
+  .pending-row + .pending-row { margin-top: 10px; }
+
+  .pending-info { min-width: 0; }
+
+  .pending-info strong {
+    display: block;
+    font-size: 14.5px;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+
+  .pending-info span {
+    display: block;
+    margin-top: 3px;
+    font-size: 12.5px;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+
+  .pending-actions { display: flex; gap: 8px; flex-wrap: wrap; flex: none; }
+
+  .reject-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  .reject-form input { flex: 1 1 220px; }
+
+  /* ---------------------------------------------------------------- tables */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 13px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 720px;
     font-size: 13px;
   }
 
-  .section-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 6px;
+  th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: rgba(8, 13, 25, 0.55);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
   }
 
-  .section-head h2 { margin: 0; }
+  td {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(148, 174, 255, 0.08);
+    vertical-align: middle;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  td .cell-name { display: block; font-weight: 650; font-size: 13.5px; }
+  td .cell-sub { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+
+  .you-tag {
+    margin-left: 7px;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 999px;
+    color: #cfe0ff;
+    background: var(--accent-soft);
+    vertical-align: middle;
+  }
+
+  .status-cell { display: flex; align-items: center; gap: 9px; }
+  .status-text { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  .switch {
+    position: relative;
+    width: 42px;
+    height: 24px;
+    flex: none;
+    padding: 0;
+    border-radius: 999px;
+    background: rgba(148, 174, 255, 0.16);
+    border: 1px solid var(--border);
+  }
+
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #c9d6f5;
+    transition: transform 0.16s ease, background 0.16s ease;
+  }
+
+  .switch[aria-checked="true"] { background: rgba(74, 222, 128, 0.28); border-color: rgba(74, 222, 128, 0.5); }
+  .switch[aria-checked="true"]::after { transform: translateX(18px); background: var(--success); }
+  .switch[aria-checked="true"] + .status-text { color: #baf7d2; }
+
+  .pw-cell { display: flex; align-items: center; gap: 8px; }
+
+  .pw {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    word-break: break-all;
+  }
+
+  .pw.revealed { color: var(--text); }
+
+  .approval-tag {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 650;
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .approval-tag.on {
+    color: #cfe0ff;
+    background: var(--accent-soft);
+    border-color: rgba(79, 140, 255, 0.35);
+  }
+
+  /* ---------------------------------------------------------------- profile */
+  .profile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
+    margin-top: 4px;
+  }
+
+  .profile-item {
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(8, 13, 25, 0.45);
+    min-width: 0;
+  }
+
+  .profile-item dt {
+    margin: 0;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .profile-item dd {
+    margin: 6px 0 0;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+  }
 
   footer {
     margin-top: 26px;
     text-align: center;
-    font-size: 12px;
-    color: rgba(147, 163, 196, 0.72);
+    font-size: 11.5px;
+    color: rgba(147, 163, 196, 0.62);
   }
 
-  [hidden] { display: none !important; }
+  /* ---------------------------------------------------------------- narrow */
+  @media (max-width: 900px) {
+    .app { grid-template-columns: minmax(0, 1fr); }
 
-  @media (max-width: 520px) {
-    .wrap { padding: 22px 14px 40px; }
-    .card { padding: 20px; }
+    .sidebar {
+      position: static;
+      height: auto;
+      padding: 18px 16px;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      gap: 14px;
+    }
+
+    .sidebar .brand { display: none; }
+
+    .nav { flex-direction: row; flex-wrap: wrap; }
+
+    .nav-label { display: none; }
+
+    .nav-item { width: auto; padding: 8px 11px; font-size: 13px; }
+
+    .sidebar-foot { margin-top: 0; }
+
+    .main { padding: 20px 16px 44px; }
+
+    .page-title { font-size: 20px; }
+
+    .card { padding: 18px; }
+
     .row { grid-template-columns: 1fr; }
-    .session-bar { flex-direction: column; align-items: flex-start; }
+
+    .pending-row { flex-direction: column; align-items: stretch; }
+
+    .pending-actions { justify-content: flex-start; }
   }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="brand">
-    <div class="mark" aria-hidden="true">S</div>
-    <div>
-      <h1>Stryve Portal</h1>
-      <p>Upload assignments for Division D from any laptop or phone</p>
-    </div>
-  </header>
 
-  <!-- ------------------------------------------------ sign in -->
-  <section class="card" id="loginCard">
-    <h2>Sign in</h2>
-    <p class="hint">Teacher and admin accounts only. Students cannot use this portal.</p>
-
-    <form id="loginForm" novalidate>
-      <div class="field">
-        <label for="email">Email</label>
-        <input id="email" name="email" type="email" autocomplete="username"
-               inputmode="email" placeholder="you@campus.edu" required autofocus />
-      </div>
-
-      <div class="field">
-        <label for="password">Password</label>
-        <input id="password" name="password" type="password"
-               autocomplete="current-password" placeholder="Your password" required />
-      </div>
-
-      <button id="loginBtn" type="submit">
-        <span class="spinner" id="loginSpinner" hidden></span>
-        <span id="loginLabel">Sign in</span>
-      </button>
-    </form>
-
-    <div id="loginMessage" class="message" role="status" aria-live="polite"></div>
-
-    <p class="note">
-      An account has one active session. Signing in here signs out the same
-      account in the mobile app, and the next app login signs this browser out.
-    </p>
-  </section>
-
-  <!-- ------------------------------------------------ upload -->
-  <section class="card" id="uploadCard" hidden>
-    <div class="session-bar">
+<!-- ================================================================ login -->
+<div class="login-shell" id="loginView">
+  <div class="login-box">
+    <header class="brand">
+      <div class="mark" aria-hidden="true">S</div>
       <div>
-        <strong id="whoName">Signed in</strong>
-        <span id="whoRole"></span>
+        <h1>Stryve Portal</h1>
+        <p>Teacher and admin dashboard</p>
       </div>
-      <button class="secondary" id="logoutBtn" type="button">Sign out</button>
+    </header>
+
+    <section class="card">
+      <h2>Sign in</h2>
+      <p class="hint">Teacher and admin accounts only. Students cannot use this portal.</p>
+
+      <form id="loginForm" novalidate>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="username"
+                 inputmode="email" placeholder="you@campus.edu" required autofocus />
+        </div>
+
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password"
+                 autocomplete="current-password" placeholder="Your password" required />
+        </div>
+
+        <button id="loginBtn" class="block" type="submit">
+          <span class="spinner" id="loginSpinner" hidden></span>
+          <span id="loginLabel">Sign in</span>
+        </button>
+      </form>
+
+      <div id="loginMessage" class="message" role="status" aria-live="polite"></div>
+
+      <p class="note">
+        An account has one active session. Signing in here signs out the same
+        account in the mobile app, and the next app login signs this browser out.
+      </p>
+    </section>
+  </div>
+</div>
+
+<!-- ============================================================ dashboard -->
+<div class="app" id="app" hidden>
+  <aside class="sidebar">
+    <header class="brand">
+      <div class="mark" aria-hidden="true">S</div>
+      <div>
+        <h1>Stryve</h1>
+        <p>Campus portal</p>
+      </div>
+    </header>
+
+    <div class="user-card">
+      <div class="avatar" id="userAvatar" aria-hidden="true">–</div>
+      <div class="user-meta">
+        <strong id="userName">Signed in</strong>
+        <span id="userEmail"></span>
+      </div>
+      <span class="role-pill" id="userRole"></span>
     </div>
 
-    <h2>Upload an assignment</h2>
-    <p class="hint">
-      Every file is stored under a server-generated name and is only visible to
-      Division D students in the selected year.
-    </p>
+    <nav class="nav" aria-label="Dashboard sections">
+      <p class="nav-label">Workspace</p>
 
-    <form id="uploadForm" novalidate>
-      <div class="field">
-        <label for="subject">Subject</label>
-        <select id="subject" name="subject" required>
-          <option value="" disabled selected>Choose a subject</option>
-          <option>Engineering Mathematics-I</option>
-          <option>Engineering Physics</option>
-          <option>Basic Electrical Engineering</option>
-          <option>Engineering Graphics</option>
-          <option>Fundamentals of Programming Languages</option>
-          <option>Design Thinking &amp; Idea Lab</option>
-          <option>Professional Communication Skills</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label for="title">Title</label>
-        <input id="title" name="title" type="text" maxlength="200"
-               placeholder="e.g. Unit 3 — practice problems" required />
-      </div>
-
-      <div class="field">
-        <label for="description">Description / instructions (optional)</label>
-        <textarea id="description" name="description" rows="4" maxlength="2000"
-                  placeholder="Paste a YouTube or Google Drive link, or write the instructions…"></textarea>
-        <p class="file-note">Paste links on their own line — the app makes them tappable.</p>
-      </div>
-
-      <div class="row">
-        <div class="field">
-          <label for="dueDate">Due date</label>
-          <input id="dueDate" name="due_date" type="date" required />
-        </div>
-        <div class="field">
-          <label for="year">Year</label>
-          <input id="year" name="year" type="number" min="1" max="5" step="1" value="1" required />
-        </div>
-      </div>
-
-      <div class="field">
-        <label for="division">Division</label>
-        <input id="division" name="division" type="text" maxlength="8" value="D" required />
-      </div>
-
-      <div class="field">
-        <label for="file">Files</label>
-        <div class="file-drop">
-          <input id="file" name="file" type="file" multiple
-                 accept=".pdf,.mp4,.mov,.mkv,application/pdf,video/mp4,video/quicktime,video/x-matroska" required />
-          <p class="file-note">Select up to 10 files · PDF or video (MP4, MOV, MKV) · up to 100 MB each</p>
-        </div>
-      </div>
-
-      <button id="uploadBtn" type="submit">
-        <span class="spinner" id="uploadSpinner" hidden></span>
-        <span id="uploadLabel">Upload assignment</span>
+      <button class="nav-item active" type="button" data-tab="assignments">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5"/><path d="M10 16h5"/>
+        </svg>
+        <span>Assignments</span>
       </button>
-    </form>
 
-    <div id="uploadMessage" class="message" role="status" aria-live="polite"></div>
-  </section>
+      <button class="nav-item" type="button" data-tab="approvals" id="navApprovals" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="9"/><path d="M8 12.4l2.6 2.6L16.2 9.4"/>
+        </svg>
+        <span>Approvals</span>
+        <span class="badge" id="pendingBadge" hidden>0</span>
+      </button>
 
-  <!-- ------------------------------------------------ recent uploads -->
-  <section class="card" id="recentCard" hidden>
-    <div class="section-head">
-      <h2>Recent uploads</h2>
-      <button class="secondary" id="refreshMineBtn" type="button">Refresh</button>
+      <button class="nav-item" type="button" data-tab="teachers" id="navTeachers" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <circle cx="9" cy="8" r="3.2"/>
+          <path d="M3.5 19c0-3 2.5-4.8 5.5-4.8s5.5 1.8 5.5 4.8"/>
+          <path d="M16.2 5.6a3 3 0 0 1 0 5.6"/>
+          <path d="M17.2 14.7c1.9.5 3.3 1.9 3.3 4.3"/>
+        </svg>
+        <span>Teacher management</span>
+      </button>
+
+      <button class="nav-item" type="button" data-tab="profile">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c0-3.4 3.2-5.4 7.5-5.4s7.5 2 7.5 5.4"/>
+        </svg>
+        <span>Profile</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <button class="ghost block" type="button" id="logoutBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true" focusable="false">
+          <path d="M14 4H6v16h8"/><path d="M15 12h6"/><path d="M18 9l3 3-3 3"/>
+        </svg>
+        Sign out
+      </button>
+      <p class="foot-note">One active session per account. Signing in on the app signs this browser out.</p>
     </div>
-    <p class="hint">Your latest uploads. Editing the due date changes the order students see them in.</p>
-    <div id="recentList"></div>
-    <div id="recentMessage" class="message" role="status" aria-live="polite"></div>
-  </section>
+  </aside>
 
-  <footer>Stryve · served by the CampusSync backend</footer>
+  <main class="main">
+    <div class="main-inner">
+      <div class="topbar">
+        <div>
+          <h2 class="page-title" id="pageTitle">Assignments</h2>
+          <p class="page-sub" id="pageSub">Upload material and manage due dates for Division D.</p>
+        </div>
+      </div>
+
+      <div class="panels">
+        <!-- ------------------------------------------------- assignments -->
+        <section class="panel active" id="panel-assignments">
+          <div class="grid-2">
+            <section class="card">
+              <h2>Upload an assignment</h2>
+              <p class="hint">
+                Every file is stored under a server-generated name and is only visible to
+                Division D students in the selected year.
+              </p>
+
+              <form id="uploadForm" novalidate>
+                <div class="field">
+                  <label for="subject">Subject</label>
+                  <select id="subject" name="subject" required>
+                    <option value="" disabled selected>Choose a subject</option>
+                    <option>Engineering Mathematics-I</option>
+                    <option>Engineering Physics</option>
+                    <option>Basic Electrical Engineering</option>
+                    <option>Engineering Graphics</option>
+                    <option>Fundamentals of Programming Languages</option>
+                    <option>Design Thinking &amp; Idea Lab</option>
+                    <option>Professional Communication Skills</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label for="title">Title</label>
+                  <input id="title" name="title" type="text" maxlength="200"
+                         placeholder="e.g. Unit 3 — practice problems" required />
+                </div>
+
+                <div class="field">
+                  <label for="description">Description / instructions (optional)</label>
+                  <textarea id="description" name="description" rows="4" maxlength="2000"
+                            placeholder="Paste a YouTube or Google Drive link, or write the instructions…"></textarea>
+                  <p class="file-note">Paste links on their own line — the app makes them tappable.</p>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label for="dueDate">Due date</label>
+                    <input id="dueDate" name="due_date" type="date" required />
+                  </div>
+                  <div class="field">
+                    <label for="year">Year</label>
+                    <input id="year" name="year" type="number" min="1" max="5" step="1" value="1" required />
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="division">Division</label>
+                  <input id="division" name="division" type="text" maxlength="8" value="D" required />
+                </div>
+
+                <div class="field">
+                  <label for="file">Files</label>
+                  <div class="file-drop">
+                    <input id="file" name="file" type="file" multiple
+                           accept=".pdf,.mp4,.mov,.mkv,application/pdf,video/mp4,video/quicktime,video/x-matroska" required />
+                    <p class="file-note">Select up to 10 files · PDF or video (MP4, MOV, MKV) · up to 100 MB each</p>
+                  </div>
+                </div>
+
+                <button id="uploadBtn" class="block" type="submit">
+                  <span class="spinner" id="uploadSpinner" hidden></span>
+                  <span id="uploadLabel">Upload assignment</span>
+                </button>
+              </form>
+
+              <div id="uploadMessage" class="message" role="status" aria-live="polite"></div>
+            </section>
+
+            <section class="card">
+              <div class="section-head">
+                <h2>Recent uploads</h2>
+                <button class="ghost small" id="refreshMineBtn" type="button">Refresh</button>
+              </div>
+              <p class="hint">Your latest uploads. Editing the due date changes the order students see them in.</p>
+              <div id="recentList"></div>
+              <div id="recentMessage" class="message" role="status" aria-live="polite"></div>
+            </section>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------------- approvals -->
+        <section class="panel" id="panel-approvals">
+          <section class="card">
+            <div class="section-head">
+              <h2>Pending registrations</h2>
+              <button class="ghost small" id="refreshPendingBtn" type="button">Refresh</button>
+            </div>
+            <p class="hint">
+              Approving lets the student sign in to the app. Rejecting records the decision and
+              keeps the account out.
+            </p>
+            <div id="pendingList"></div>
+            <div id="pendingMessage" class="message" role="status" aria-live="polite"></div>
+          </section>
+        </section>
+
+        <!-- ----------------------------------------------------- teachers -->
+        <section class="panel" id="panel-teachers">
+          <section class="card">
+            <h2>Create an account</h2>
+            <p class="hint">Only admins can create teacher or admin accounts.</p>
+
+            <form id="createTeacherForm" novalidate>
+              <div class="row">
+                <div class="field">
+                  <label for="newName">Full name</label>
+                  <input id="newName" type="text" maxlength="120" placeholder="e.g. Mrs. S. M. Gangurde" required />
+                </div>
+                <div class="field">
+                  <label for="newEmail">Email</label>
+                  <input id="newEmail" type="email" maxlength="200" placeholder="name@campusync.edu" required />
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label for="newPassword">Temporary password</label>
+                  <input id="newPassword" type="password" autocomplete="new-password"
+                         placeholder="At least 8 characters" required />
+                  <p class="file-note">At least 8 characters, with a letter and a digit.</p>
+                </div>
+                <div class="field">
+                  <label for="newRole">Role</label>
+                  <select id="newRole">
+                    <option value="teacher" selected>Teacher</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+
+              <button id="createTeacherBtn" class="block" type="submit">
+                <span class="spinner" id="createTeacherSpinner" hidden></span>
+                <span id="createTeacherLabel">Create account</span>
+              </button>
+            </form>
+
+            <div id="createMessage" class="message" role="status" aria-live="polite"></div>
+          </section>
+
+          <section class="card">
+            <div class="section-head">
+              <h2>All accounts</h2>
+              <button class="ghost small" id="refreshTeachersBtn" type="button">Refresh</button>
+            </div>
+            <p class="hint">
+              Deactivating an account signs it out immediately. Provisioned passwords are
+              stored so you can hand them to the teacher — treat this table as sensitive.
+            </p>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Active</th>
+                    <th scope="col">Approvals</th>
+                    <th scope="col">Password</th>
+                  </tr>
+                </thead>
+                <tbody id="teachersBody">
+                  <tr><td colspan="6" class="state">Loading accounts…</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="teachersMessage" class="message" role="status" aria-live="polite"></div>
+          </section>
+        </section>
+
+        <!-- ------------------------------------------------------ profile -->
+        <section class="panel" id="panel-profile">
+          <section class="card">
+            <div class="section-head">
+              <h2>Your account</h2>
+              <button class="ghost small" id="refreshProfileBtn" type="button">Refresh</button>
+            </div>
+            <p class="hint">Details of the account signed in to this browser.</p>
+
+            <dl class="profile-grid" id="profileGrid"></dl>
+
+            <div id="profileMessage" class="message" role="status" aria-live="polite"></div>
+          </section>
+        </section>
+      </div>
+
+      <footer>Stryve · served by the CampusSync backend</footer>
+    </div>
+  </main>
 </div>
 
 <script>
@@ -485,29 +1095,83 @@
   var MAX_FILES = 10;
   var ALLOWED = [".pdf", ".mp4", ".mov", ".mkv"];
 
-  var loginCard = document.getElementById("loginCard");
-  var uploadCard = document.getElementById("uploadCard");
+  var TAB_META = {
+    assignments: {
+      title: "Assignments",
+      sub: "Upload material and manage due dates for Division D."
+    },
+    approvals: {
+      title: "Approvals",
+      sub: "Review student registrations waiting for a decision."
+    },
+    teachers: {
+      title: "Teacher management",
+      sub: "Create accounts, control access and read provisioned passwords."
+    },
+    profile: {
+      title: "Profile",
+      sub: "The account signed in to this browser."
+    }
+  };
+
+  var loginView = document.getElementById("loginView");
+  var app = document.getElementById("app");
   var loginForm = document.getElementById("loginForm");
-  var uploadForm = document.getElementById("uploadForm");
   var loginBtn = document.getElementById("loginBtn");
-  var uploadBtn = document.getElementById("uploadBtn");
   var loginSpinner = document.getElementById("loginSpinner");
-  var uploadSpinner = document.getElementById("uploadSpinner");
   var loginLabel = document.getElementById("loginLabel");
-  var uploadLabel = document.getElementById("uploadLabel");
   var loginMessage = document.getElementById("loginMessage");
-  var uploadMessage = document.getElementById("uploadMessage");
+
+  var userName = document.getElementById("userName");
+  var userEmail = document.getElementById("userEmail");
+  var userRole = document.getElementById("userRole");
+  var userAvatar = document.getElementById("userAvatar");
+  var pageTitle = document.getElementById("pageTitle");
+  var pageSub = document.getElementById("pageSub");
+  var navApprovals = document.getElementById("navApprovals");
+  var navTeachers = document.getElementById("navTeachers");
+  var pendingBadge = document.getElementById("pendingBadge");
   var logoutBtn = document.getElementById("logoutBtn");
-  var whoName = document.getElementById("whoName");
-  var whoRole = document.getElementById("whoRole");
-  var recentCard = document.getElementById("recentCard");
+
+  var uploadForm = document.getElementById("uploadForm");
+  var uploadBtn = document.getElementById("uploadBtn");
+  var uploadSpinner = document.getElementById("uploadSpinner");
+  var uploadLabel = document.getElementById("uploadLabel");
+  var uploadMessage = document.getElementById("uploadMessage");
   var recentList = document.getElementById("recentList");
   var recentMessage = document.getElementById("recentMessage");
   var refreshMineBtn = document.getElementById("refreshMineBtn");
-  var myAssignments = [];
 
+  var pendingList = document.getElementById("pendingList");
+  var pendingMessage = document.getElementById("pendingMessage");
+  var refreshPendingBtn = document.getElementById("refreshPendingBtn");
+
+  var teachersBody = document.getElementById("teachersBody");
+  var teachersMessage = document.getElementById("teachersMessage");
+  var refreshTeachersBtn = document.getElementById("refreshTeachersBtn");
+  var createTeacherForm = document.getElementById("createTeacherForm");
+  var createTeacherBtn = document.getElementById("createTeacherBtn");
+  var createTeacherSpinner = document.getElementById("createTeacherSpinner");
+  var createTeacherLabel = document.getElementById("createTeacherLabel");
+  var createMessage = document.getElementById("createMessage");
+
+  var profileGrid = document.getElementById("profileGrid");
+  var profileMessage = document.getElementById("profileMessage");
+  var refreshProfileBtn = document.getElementById("refreshProfileBtn");
+
+  var state = { me: null };
+  var myAssignments = [];
+  var pendingRows = [];
+  var teacherRows = [];
+  var activeTab = "assignments";
+
+  // ------------------------------------------------------------ primitives
   function token() {
     try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
+  }
+
+  function remember(key) {
+    try { return sessionStorage.getItem(key) || ""; } catch (e) { return ""; }
   }
 
   function saveSession(data) {
@@ -526,10 +1190,6 @@
     } catch (e) { /* nothing to clear */ }
   }
 
-  function remember(key) {
-    try { return sessionStorage.getItem(key) || ""; } catch (e) { return ""; }
-  }
-
   function showMessage(el, text, kind) {
     el.textContent = text;
     el.className = "message show " + (kind || "info");
@@ -542,8 +1202,15 @@
 
   function busy(button, spinner, label, working, text) {
     button.disabled = working;
-    spinner.hidden = !working;
-    label.textContent = text;
+    if (spinner) spinner.hidden = !working;
+    if (label) label.textContent = text;
+  }
+
+  function stateNode(text, kind) {
+    var node = document.createElement("p");
+    node.className = "state" + (kind ? " " + kind : "");
+    node.textContent = text;
+    return node;
   }
 
   // The backend answers errors as {"detail": ..., "code": ...}; `message` only
@@ -558,28 +1225,150 @@
     try { return await response.json(); } catch (e) { return {}; }
   }
 
-  function showUpload() {
-    loginCard.hidden = true;
-    uploadCard.hidden = false;
-    recentCard.hidden = false;
-    whoName.textContent = remember(NAME_KEY) || "Signed in";
-    var role = remember(ROLE_KEY);
-    whoRole.textContent = role ? role.charAt(0).toUpperCase() + role.slice(1) + " account" : "";
-    loadMine();
+  // One request helper: attaches the bearer token, serialises `json` bodies and
+  // never throws on a non-JSON answer (proxies and tunnels return HTML).
+  async function api(path, options) {
+    options = options || {};
+    var headers = {};
+    var key;
+    if (options.headers) {
+      for (key in options.headers) {
+        if (Object.prototype.hasOwnProperty.call(options.headers, key)) {
+          headers[key] = options.headers[key];
+        }
+      }
+    }
+    var current = token();
+    if (current) headers.Authorization = "Bearer " + current;
+
+    var init = { method: options.method || "GET", headers: headers };
+    if (options.form) {
+      init.body = options.form;
+    } else if (options.json !== undefined) {
+      headers["Content-Type"] = "application/json";
+      init.body = JSON.stringify(options.json);
+    }
+
+    var response = await fetch(path, init);
+    var body = await readJson(response);
+    return { response: response, body: body };
+  }
+
+  function expired() {
+    clearSession();
+    state.me = null;
+    myAssignments = [];
+    pendingRows = [];
+    teacherRows = [];
+    showLogin();
+    showMessage(loginMessage, "Your session ended. Sign in again.", "info");
+  }
+
+  function isAdmin() {
+    return !!state.me && state.me.role === "admin";
+  }
+
+  function canReview() {
+    if (!state.me) return false;
+    return state.me.role === "admin" ||
+      state.me.can_review_registrations === true ||
+      state.me.can_approve_registrations === true;
+  }
+
+  function initials(name) {
+    var parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "–";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+
+  function prettyRole(role) {
+    if (role === "admin") return "Admin";
+    if (role === "teacher") return "Teacher";
+    return role ? role.charAt(0).toUpperCase() + role.slice(1) : "Account";
+  }
+
+  // --------------------------------------------------------------- routing
+  function allowed(tab) {
+    if (tab === "teachers") return isAdmin();
+    if (tab === "approvals") return canReview();
+    return tab === "assignments" || tab === "profile";
+  }
+
+  function activate(tab) {
+    if (!allowed(tab)) tab = "assignments";
+    activeTab = tab;
+
+    var buttons = document.querySelectorAll(".nav-item");
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].classList.toggle("active", buttons[i].getAttribute("data-tab") === tab);
+    }
+
+    var panels = document.querySelectorAll(".panel");
+    for (var j = 0; j < panels.length; j++) {
+      panels[j].classList.toggle("active", panels[j].id === "panel-" + tab);
+    }
+
+    var meta = TAB_META[tab] || TAB_META.assignments;
+    pageTitle.textContent = meta.title;
+    pageSub.textContent = meta.sub;
+
+    if (tab === "assignments") loadMine();
+    if (tab === "approvals") loadPending();
+    if (tab === "teachers") loadTeachers();
+    if (tab === "profile") renderProfile();
+  }
+
+  // ---------------------------------------------------------------- session
+  function renderUser(me) {
+    var name = me.name || remember(NAME_KEY) || "Signed in";
+    userName.textContent = name;
+    userEmail.textContent = me.email || "";
+    userRole.textContent = prettyRole(me.role || remember(ROLE_KEY));
+    userAvatar.textContent = initials(name);
+    navTeachers.hidden = me.role !== "admin";
+    navApprovals.hidden = !canReview();
+
+    if (navApprovals.hidden) {
+      pendingBadge.hidden = true;
+    }
+  }
+
+  function enterDashboard(me) {
+    state.me = me;
+    loginView.hidden = true;
+    app.hidden = false;
+    renderUser(me);
+    hideMessage(uploadMessage);
+    hideMessage(teachersMessage);
+    showMessage(uploadMessage, "Signed in as " + (me.name || "your account") + ".", "info");
+    activate("assignments");
+    if (canReview()) loadPending(); // fills the Approvals badge
   }
 
   function showLogin() {
-    uploadCard.hidden = true;
-    recentCard.hidden = true;
-    loginCard.hidden = false;
+    app.hidden = true;
+    loginView.hidden = false;
     myAssignments = [];
+    pendingRows = [];
+    teacherRows = [];
     recentList.textContent = "";
+    pendingList.textContent = "";
+    teachersBody.textContent = "";
+    profileGrid.textContent = "";
     hideMessage(recentMessage);
+    hideMessage(uploadMessage);
+    hideMessage(pendingMessage);
+    hideMessage(teachersMessage);
+    hideMessage(createMessage);
+    hideMessage(profileMessage);
+    pendingBadge.hidden = true;
+    var password = document.getElementById("password");
+    if (password) password.value = "";
     var email = document.getElementById("email");
     if (email) email.focus();
   }
 
-  // ------------------------------------------------------------------ login
   loginForm.addEventListener("submit", async function (event) {
     event.preventDefault();
     hideMessage(loginMessage);
@@ -595,24 +1384,38 @@
     busy(loginBtn, loginSpinner, loginLabel, true, "Signing in…");
 
     try {
-      var response = await fetch("/teacher/login", {
+      var result = await api("/teacher/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email, password: password })
+        json: { email: email, password: password }
       });
-      var body = await readJson(response);
 
-      if (!response.ok) {
-        var wait = response.headers.get("Retry-After");
-        var text = errorText(body, "Sign-in failed (" + response.status + ").");
+      if (!result.response.ok) {
+        var wait = result.response.headers.get("Retry-After");
+        var text = errorText(result.body, "Sign-in failed (" + result.response.status + ").");
         showMessage(loginMessage, text + (wait ? " Try again in " + wait + "s." : ""), "error");
         return;
       }
 
-      saveSession(body);
+      saveSession(result.body);
       document.getElementById("password").value = "";
-      showUpload();
-      showMessage(uploadMessage, "Signed in as " + (body.name || email) + ".", "success");
+
+      // /teacher/me is the authority on the role badge, the permission flags and
+      // the account id (the token response only carries a role string).
+      var profile = {
+        id: result.body.teacher_id,
+        name: result.body.name || email,
+        email: result.body.email || email,
+        role: result.body.role || ""
+      };
+      try {
+        var meResult = await api("/teacher/me");
+        if (meResult.response.status === 401) { expired(); return; }
+        if (meResult.response.ok && meResult.body && meResult.body.id) profile = meResult.body;
+      } catch (meError) {
+        // Keep the token response; the dashboard still works and reloads later.
+      }
+
+      enterDashboard(profile);
     } catch (error) {
       showMessage(loginMessage, "Could not reach the server. Check your connection and try again.", "error");
     } finally {
@@ -620,7 +1423,6 @@
     }
   });
 
-  // ----------------------------------------------------------------- logout
   logoutBtn.addEventListener("click", async function () {
     var current = token();
     logoutBtn.disabled = true;
@@ -634,13 +1436,21 @@
     } catch (error) { /* clearing locally is what matters */ }
     clearSession();
     logoutBtn.disabled = false;
+    state.me = null;
     uploadForm.reset();
     hideMessage(uploadMessage);
     showLogin();
     showMessage(loginMessage, "Signed out.", "info");
   });
 
-  // ----------------------------------------------------------------- upload
+  var navButtons = document.querySelectorAll(".nav-item");
+  for (var navIndex = 0; navIndex < navButtons.length; navIndex++) {
+    navButtons[navIndex].addEventListener("click", function () {
+      activate(this.getAttribute("data-tab"));
+    });
+  }
+
+  // ------------------------------------------------------- upload / recent
   uploadForm.addEventListener("submit", async function (event) {
     event.preventDefault();
     hideMessage(uploadMessage);
@@ -705,12 +1515,9 @@
     busy(uploadBtn, uploadSpinner, uploadLabel, true, "Uploading…");
 
     try {
-      var response = await fetch("/teacher/assignments/upload", {
-        method: "POST",
-        headers: { Authorization: "Bearer " + current },
-        body: form
-      });
-      var body = await readJson(response);
+      var result = await api("/teacher/assignments/upload", { method: "POST", form: form });
+      var response = result.response;
+      var body = result.body;
 
       if (response.status === 201) {
         var attached = (body.attachments && body.attachments.length) || files.length;
@@ -728,9 +1535,7 @@
         document.getElementById("file").value = "";
         loadMine();
       } else if (response.status === 401) {
-        clearSession();
-        showLogin();
-        showMessage(loginMessage, "Your session ended. Sign in again.", "info");
+        expired();
       } else if (response.status === 403) {
         showMessage(uploadMessage, errorText(body, "This account is not allowed to upload."), "error");
       } else if (response.status === 429) {
@@ -745,35 +1550,29 @@
     }
   });
 
-  // ------------------------------------------------------- recent uploads
   async function loadMine() {
-    var current = token();
-    if (!current) return;
+    if (!token()) return;
     hideMessage(recentMessage);
     refreshMineBtn.disabled = true;
 
     try {
-      var response = await fetch("/teacher/assignments/mine", {
-        headers: { Authorization: "Bearer " + current }
-      });
+      var result = await api("/teacher/assignments/mine");
 
-      if (response.status === 401) {
-        clearSession();
-        showLogin();
-        showMessage(loginMessage, "Your session ended. Sign in again.", "info");
+      if (result.response.status === 401) { expired(); return; }
+      if (!result.response.ok) {
+        recentList.textContent = "";
+        recentList.appendChild(stateNode(
+          errorText(result.body, "Could not load your assignments (" + result.response.status + ")."),
+          "error"
+        ));
         return;
       }
 
-      var body = await readJson(response);
-      if (!response.ok) {
-        showMessage(recentMessage, errorText(body, "Could not load your assignments (" + response.status + ")."), "error");
-        return;
-      }
-
-      myAssignments = Array.isArray(body) ? body : [];
+      myAssignments = Array.isArray(result.body) ? result.body : [];
       renderRecent();
     } catch (error) {
-      showMessage(recentMessage, "Could not load your assignments. Check your connection.", "error");
+      recentList.textContent = "";
+      recentList.appendChild(stateNode("Could not load your assignments. Check your connection.", "error"));
     } finally {
       refreshMineBtn.disabled = false;
     }
@@ -783,10 +1582,7 @@
     recentList.textContent = "";
 
     if (myAssignments.length === 0) {
-      var empty = document.createElement("p");
-      empty.className = "hint";
-      empty.textContent = "No assignments uploaded yet.";
-      recentList.appendChild(empty);
+      recentList.appendChild(stateNode("No assignments uploaded yet. The first one will appear here."));
       return;
     }
 
@@ -810,7 +1606,7 @@
 
     var edit = document.createElement("button");
     edit.type = "button";
-    edit.className = "secondary";
+    edit.className = "ghost small";
     edit.textContent = "Edit";
     edit.addEventListener("click", function () {
       openEditor(row, item);
@@ -844,11 +1640,12 @@
 
     var save = document.createElement("button");
     save.type = "submit";
+    save.className = "small";
     save.textContent = "Save";
 
     var cancel = document.createElement("button");
     cancel.type = "button";
-    cancel.className = "secondary";
+    cancel.className = "ghost small";
     cancel.textContent = "Cancel";
     cancel.addEventListener("click", function () {
       row.replaceWith(buildRow(item));
@@ -871,31 +1668,21 @@
       save.textContent = "Saving…";
 
       try {
-        var response = await fetch("/teacher/assignments/" + item.id, {
+        var result = await api("/teacher/assignments/" + item.id, {
           method: "PATCH",
-          headers: {
-            Authorization: "Bearer " + token(),
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ title: newTitle, due_date: newDate })
+          json: { title: newTitle, due_date: newDate }
         });
-        var body = await readJson(response);
 
-        if (response.status === 401) {
-          clearSession();
-          showLogin();
-          showMessage(loginMessage, "Your session ended. Sign in again.", "info");
-          return;
-        }
+        if (result.response.status === 401) { expired(); return; }
 
-        if (!response.ok) {
-          showMessage(recentMessage, errorText(body, "Could not save the changes (" + response.status + ")."), "error");
+        if (!result.response.ok) {
+          showMessage(recentMessage, errorText(result.body, "Could not save the changes (" + result.response.status + ")."), "error");
           save.disabled = false;
           save.textContent = "Save";
           return;
         }
 
-        var updated = body && body.id ? body : Object.assign({}, item, {
+        var updated = result.body && result.body.id ? result.body : Object.assign({}, item, {
           title: newTitle,
           due_date: newDate
         });
@@ -916,22 +1703,575 @@
 
   refreshMineBtn.addEventListener("click", loadMine);
 
+  // ------------------------------------------------------------- approvals
+  function updatePendingBadge(count) {
+    if (navApprovals.hidden) {
+      pendingBadge.hidden = true;
+      return;
+    }
+    pendingBadge.textContent = String(count);
+    pendingBadge.hidden = count === 0;
+  }
+
+  async function loadPending() {
+    if (!state.me) return;
+    hideMessage(pendingMessage);
+    pendingList.textContent = "";
+    pendingList.appendChild(stateNode("Loading pending registrations…"));
+    refreshPendingBtn.disabled = true;
+
+    try {
+      var result = await api("/teacher/registrations/pending");
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        pendingList.textContent = "";
+        pendingList.appendChild(stateNode(
+          errorText(result.body, "Could not load pending registrations (" + result.response.status + ")."),
+          "error"
+        ));
+        return;
+      }
+
+      pendingRows = Array.isArray(result.body) ? result.body : [];
+      updatePendingBadge(pendingRows.length);
+      renderPending();
+    } catch (error) {
+      pendingList.textContent = "";
+      pendingList.appendChild(stateNode("Could not load pending registrations. Check your connection.", "error"));
+    } finally {
+      refreshPendingBtn.disabled = false;
+    }
+  }
+
+  function renderPending() {
+    pendingList.textContent = "";
+
+    if (pendingRows.length === 0) {
+      pendingList.appendChild(stateNode("No pending registrations. New sign-ups will appear here."));
+      return;
+    }
+
+    pendingRows.forEach(function (item) {
+      pendingList.appendChild(buildPendingRow(item));
+    });
+  }
+
+  function buildPendingRow(item) {
+    var row = document.createElement("div");
+    row.className = "pending-row";
+
+    var info = document.createElement("div");
+    info.className = "pending-info";
+
+    var name = document.createElement("strong");
+    name.textContent = item.name || "(no name)";
+
+    var contact = document.createElement("span");
+    contact.textContent = "Roll " + (item.roll_number || "—") + " · " + (item.email || "—");
+
+    var study = document.createElement("span");
+    var batch = item.batch ? " · Batch " + item.batch : "";
+    study.textContent = (item.branch || "—") + " · Year " + (item.year || "—") +
+      " · Division " + (item.division || "—") + batch;
+
+    info.appendChild(name);
+    info.appendChild(contact);
+    info.appendChild(study);
+
+    var actions = document.createElement("div");
+    actions.className = "pending-actions";
+
+    var approve = document.createElement("button");
+    approve.type = "button";
+    approve.className = "soft-success small";
+    approve.textContent = "Approve";
+    approve.addEventListener("click", function () {
+      decide("approve", item, row, approve, null);
+    });
+
+    var reject = document.createElement("button");
+    reject.type = "button";
+    reject.className = "soft-danger small";
+    reject.textContent = "Reject";
+    reject.addEventListener("click", function () {
+      openReject(row, item);
+    });
+
+    actions.appendChild(approve);
+    actions.appendChild(reject);
+
+    row.appendChild(info);
+    row.appendChild(actions);
+    return row;
+  }
+
+  function openReject(row, item) {
+    row.textContent = "";
+
+    var wrap = document.createElement("div");
+    wrap.className = "pending-info";
+    var name = document.createElement("strong");
+    name.textContent = "Reject " + (item.name || "this registration") + "?";
+    var hint = document.createElement("span");
+    hint.textContent = "The reason is optional and is shown to the student in the app.";
+    wrap.appendChild(name);
+    wrap.appendChild(hint);
+
+    var form = document.createElement("form");
+    form.className = "reject-form";
+
+    var reason = document.createElement("input");
+    reason.type = "text";
+    reason.maxLength = 300;
+    reason.placeholder = "Reason (optional)";
+    reason.setAttribute("aria-label", "Rejection reason");
+
+    var confirm = document.createElement("button");
+    confirm.type = "submit";
+    confirm.className = "soft-danger small";
+    confirm.textContent = "Reject registration";
+
+    var cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "ghost small";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", function () {
+      row.replaceWith(buildPendingRow(item));
+    });
+
+    form.appendChild(reason);
+    form.appendChild(confirm);
+    form.appendChild(cancel);
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      decide("reject", item, row, confirm, reason.value.trim() || null);
+    });
+
+    row.appendChild(wrap);
+    row.appendChild(form);
+    reason.focus();
+  }
+
+  async function decide(action, item, row, button, reason) {
+    var otherButtons = row.querySelectorAll("button");
+    var originalText = button.textContent;
+    for (var i = 0; i < otherButtons.length; i++) otherButtons[i].disabled = true;
+    button.textContent = action === "approve" ? "Approving…" : "Rejecting…";
+
+    var payload = action === "approve" ? {} : { reason: reason };
+    var label = action === "approve" ? "Approved" : "Rejected";
+
+    try {
+      var result = await api(
+        "/teacher/registrations/" + item.id + "/" + action,
+        { method: "POST", json: payload }
+      );
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        showMessage(pendingMessage,
+          errorText(result.body, "Could not " + action + " the registration (" + result.response.status + ")."),
+          "error");
+        resetPendingRow(item, row, button, originalText);
+        return;
+      }
+
+      pendingRows = pendingRows.filter(function (entry) { return entry.id !== item.id; });
+      updatePendingBadge(pendingRows.length);
+      row.remove();
+      if (pendingRows.length === 0) renderPending();
+      showMessage(pendingMessage, label + " " + (item.name || "the registration") +
+        " (" + (item.roll_number || item.email || "—") + ").", "success");
+    } catch (error) {
+      showMessage(pendingMessage, "Could not send the decision. Check your connection.", "error");
+      resetPendingRow(item, row, button, originalText);
+    }
+  }
+
+  function resetPendingRow(item, row, button, originalText) {
+    button.textContent = originalText;
+    var buttons = row.querySelectorAll("button");
+    for (var i = 0; i < buttons.length; i++) buttons[i].disabled = false;
+  }
+
+  refreshPendingBtn.addEventListener("click", loadPending);
+
+  // ------------------------------------------------------- teacher accounts
+  async function loadTeachers() {
+    if (!state.me) return;
+    hideMessage(teachersMessage);
+    refreshTeachersBtn.disabled = true;
+    teachersBody.textContent = "";
+    var loading = document.createElement("tr");
+    var loadingCell = document.createElement("td");
+    loadingCell.colSpan = 6;
+    loadingCell.className = "state";
+    loadingCell.textContent = "Loading accounts…";
+    loading.appendChild(loadingCell);
+    teachersBody.appendChild(loading);
+
+    try {
+      var result = await api("/teacher/list");
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        teachersBody.textContent = "";
+        var errorRow = document.createElement("tr");
+        var errorCell = document.createElement("td");
+        errorCell.colSpan = 6;
+        errorCell.className = "state error";
+        errorCell.textContent = errorText(result.body, "Could not load accounts (" + result.response.status + ").");
+        errorRow.appendChild(errorCell);
+        teachersBody.appendChild(errorRow);
+        return;
+      }
+
+      teacherRows = Array.isArray(result.body) ? result.body : [];
+      renderTeachers();
+    } catch (error) {
+      teachersBody.textContent = "";
+      var offlineRow = document.createElement("tr");
+      var offlineCell = document.createElement("td");
+      offlineCell.colSpan = 6;
+      offlineCell.className = "state error";
+      offlineCell.textContent = "Could not load accounts. Check your connection.";
+      offlineRow.appendChild(offlineCell);
+      teachersBody.appendChild(offlineRow);
+    } finally {
+      refreshTeachersBtn.disabled = false;
+    }
+  }
+
+  function renderTeachers() {
+    teachersBody.textContent = "";
+
+    if (teacherRows.length === 0) {
+      var emptyRow = document.createElement("tr");
+      var emptyCell = document.createElement("td");
+      emptyCell.colSpan = 6;
+      emptyCell.className = "state";
+      emptyCell.textContent = "No accounts yet. Create the first one above.";
+      emptyRow.appendChild(emptyCell);
+      teachersBody.appendChild(emptyRow);
+      return;
+    }
+
+    teacherRows.forEach(function (item) {
+      teachersBody.appendChild(buildTeacherRow(item));
+    });
+  }
+
+  function buildTeacherRow(item) {
+    var row = document.createElement("tr");
+
+    // name
+    var nameCell = document.createElement("td");
+    var name = document.createElement("span");
+    name.className = "cell-name";
+    name.textContent = item.name || "(no name)";
+    nameCell.appendChild(name);
+    if (state.me && item.id === state.me.id) {
+      var you = document.createElement("span");
+      you.className = "you-tag";
+      you.textContent = "you";
+      nameCell.appendChild(you);
+    }
+    if (item.short_code) {
+      var code = document.createElement("span");
+      code.className = "cell-sub";
+      code.textContent = "Faculty code " + item.short_code;
+      nameCell.appendChild(code);
+    }
+
+    // email
+    var emailCell = document.createElement("td");
+    emailCell.textContent = item.email || "—";
+
+    // role
+    var roleCell = document.createElement("td");
+    roleCell.textContent = prettyRole(item.role);
+
+    // status toggle
+    var statusCell = document.createElement("td");
+    var statusWrap = document.createElement("div");
+    statusWrap.className = "status-cell";
+
+    var toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "switch";
+    toggle.setAttribute("role", "switch");
+    toggle.setAttribute("aria-checked", item.is_active ? "true" : "false");
+    toggle.setAttribute("aria-label", "Active account");
+    var isSelf = !!(state.me && item.id === state.me.id);
+    if (isSelf) {
+      toggle.disabled = true;
+      toggle.title = "You cannot deactivate your own account";
+    }
+    toggle.addEventListener("click", function () {
+      toggleActive(item, toggle, statusText);
+    });
+
+    var statusText = document.createElement("span");
+    statusText.className = "status-text";
+    statusText.textContent = item.is_active ? "Active" : "Inactive";
+
+    statusWrap.appendChild(toggle);
+    statusWrap.appendChild(statusText);
+    statusCell.appendChild(statusWrap);
+
+    // approvals permission (read-only here; the app's admin panel edits it)
+    var approvalsCell = document.createElement("td");
+    var approvalTag = document.createElement("span");
+    approvalTag.className = "approval-tag";
+    if (item.role === "admin") {
+      approvalTag.classList.add("on");
+      approvalTag.textContent = "Admin";
+    } else if (item.can_approve_registrations) {
+      approvalTag.classList.add("on");
+      approvalTag.textContent = "Allowed";
+    } else {
+      approvalTag.textContent = "Not granted";
+    }
+    approvalsCell.appendChild(approvalTag);
+
+    // password
+    var passwordCell = document.createElement("td");
+    if (item.plain_password) {
+      var pwWrap = document.createElement("div");
+      pwWrap.className = "pw-cell";
+
+      var pw = document.createElement("span");
+      pw.className = "pw";
+      pw.textContent = "••••••••";
+
+      var reveal = document.createElement("button");
+      reveal.type = "button";
+      reveal.className = "icon-btn";
+      reveal.setAttribute("aria-pressed", "false");
+      reveal.setAttribute("aria-label", "Show password");
+      reveal.title = "Show password";
+      reveal.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+        '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/>' +
+        '<circle cx="12" cy="12" r="2.6"/></svg>';
+
+      reveal.addEventListener("click", function () {
+        var shown = reveal.getAttribute("aria-pressed") === "true";
+        if (shown) {
+          pw.textContent = "••••••••";
+          pw.classList.remove("revealed");
+          reveal.setAttribute("aria-pressed", "false");
+          reveal.setAttribute("aria-label", "Show password");
+          reveal.title = "Show password";
+        } else {
+          pw.textContent = item.plain_password;
+          pw.classList.add("revealed");
+          reveal.setAttribute("aria-pressed", "true");
+          reveal.setAttribute("aria-label", "Hide password");
+          reveal.title = "Hide password";
+        }
+      });
+
+      pwWrap.appendChild(pw);
+      pwWrap.appendChild(reveal);
+      passwordCell.appendChild(pwWrap);
+    } else {
+      var missing = document.createElement("span");
+      missing.className = "pw";
+      missing.textContent = "not stored";
+      passwordCell.appendChild(missing);
+    }
+
+    row.appendChild(nameCell);
+    row.appendChild(emailCell);
+    row.appendChild(roleCell);
+    row.appendChild(statusCell);
+    row.appendChild(approvalsCell);
+    row.appendChild(passwordCell);
+    return row;
+  }
+
+  async function toggleActive(item, toggle, statusText) {
+    var next = !item.is_active;
+    toggle.disabled = true;
+
+    try {
+      var result = await api("/teacher/" + item.id + "/status", {
+        method: "PATCH",
+        json: { is_active: next }
+      });
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        showMessage(teachersMessage,
+          errorText(result.body, "Could not change the account status (" + result.response.status + ")."),
+          "error");
+        return;
+      }
+
+      item.is_active = typeof result.body.is_active === "boolean" ? result.body.is_active : next;
+      toggle.setAttribute("aria-checked", item.is_active ? "true" : "false");
+      statusText.textContent = item.is_active ? "Active" : "Inactive";
+      showMessage(teachersMessage,
+        (item.name || "The account") + " is now " + (item.is_active ? "active." : "deactivated and signed out."),
+        "success");
+    } catch (error) {
+      showMessage(teachersMessage, "Could not change the account status. Check your connection.", "error");
+    } finally {
+      var isSelf = !!(state.me && item.id === state.me.id);
+      toggle.disabled = isSelf;
+    }
+  }
+
+  createTeacherForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    hideMessage(createMessage);
+
+    var name = document.getElementById("newName").value.trim();
+    var email = document.getElementById("newEmail").value.trim();
+    var password = document.getElementById("newPassword").value;
+    var role = document.getElementById("newRole").value;
+
+    if (!name) { showMessage(createMessage, "Enter the teacher's name.", "error"); return; }
+    if (!email) { showMessage(createMessage, "Enter an email address.", "error"); return; }
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+      showMessage(createMessage, "The password needs at least 8 characters, with a letter and a digit.", "error");
+      return;
+    }
+    if (role !== "teacher" && role !== "admin") {
+      showMessage(createMessage, "Choose a valid role.", "error");
+      return;
+    }
+
+    busy(createTeacherBtn, createTeacherSpinner, createTeacherLabel, true, "Creating…");
+
+    try {
+      var result = await api("/teacher/create", {
+        method: "POST",
+        json: { name: name, email: email, password: password, role: role }
+      });
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        showMessage(createMessage,
+          errorText(result.body, "Could not create the account (" + result.response.status + ")."),
+          "error");
+        return;
+      }
+
+      showMessage(createMessage,
+        "Created " + (result.body.name || name) + " as " + prettyRole(result.body.role || role).toLowerCase() +
+          ". Share the temporary password with them directly.", "success");
+      createTeacherForm.reset();
+      document.getElementById("newRole").value = "teacher";
+      loadTeachers();
+    } catch (error) {
+      showMessage(createMessage, "Could not create the account. Check your connection.", "error");
+    } finally {
+      busy(createTeacherBtn, createTeacherSpinner, createTeacherLabel, false, "Create account");
+    }
+  });
+
+  refreshTeachersBtn.addEventListener("click", loadTeachers);
+
+  // ---------------------------------------------------------------- profile
+  function renderProfile() {
+    profileGrid.textContent = "";
+    hideMessage(profileMessage);
+
+    if (!state.me) {
+      var missing = document.createElement("p");
+      missing.className = "state";
+      missing.textContent = "Not signed in.";
+      profileGrid.appendChild(missing);
+      return;
+    }
+
+    var me = state.me;
+    addProfileItem("Name", me.name || "—");
+    addProfileItem("Email", me.email || "—");
+    addProfileItem("Role", prettyRole(me.role));
+    addProfileItem("Status", me.is_active === false ? "Deactivated" : "Active");
+    addProfileItem("Approvals", (isAdmin() || me.can_approve_registrations) ? "Allowed" : "Not granted");
+    addProfileItem("Faculty code", me.short_code || "Not linked");
+    addProfileItem("Member since", formatDate(me.created_at));
+  }
+
+  function addProfileItem(label, value) {
+    var item = document.createElement("div");
+    item.className = "profile-item";
+    var term = document.createElement("dt");
+    term.textContent = label;
+    var detail = document.createElement("dd");
+    detail.textContent = value;
+    item.appendChild(term);
+    item.appendChild(detail);
+    profileGrid.appendChild(item);
+  }
+
+  function formatDate(value) {
+    if (!value) return "—";
+    var parsed = new Date(value);
+    if (isNaN(parsed.getTime())) return String(value);
+    return parsed.toLocaleString(undefined, {
+      year: "numeric", month: "short", day: "numeric",
+      hour: "2-digit", minute: "2-digit"
+    });
+  }
+
+  async function refreshProfile() {
+    if (!token()) return;
+    hideMessage(profileMessage);
+    refreshProfileBtn.disabled = true;
+
+    try {
+      var result = await api("/teacher/me");
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        showMessage(profileMessage, errorText(result.body, "Could not load your profile."), "error");
+        return;
+      }
+
+      if (result.body && result.body.id) {
+        state.me = result.body;
+        renderUser(state.me);
+        renderProfile();
+      }
+    } catch (error) {
+      showMessage(profileMessage, "Could not load your profile. Check your connection.", "error");
+    } finally {
+      refreshProfileBtn.disabled = false;
+    }
+  }
+
+  refreshProfileBtn.addEventListener("click", refreshProfile);
+
   // ------------------------------------------------------- restore session
   (async function restore() {
-    var current = token();
-    if (!current) { showLogin(); return; }
+    if (!token()) { showLogin(); return; }
     try {
-      var response = await fetch("/teacher/me", {
-        headers: { Authorization: "Bearer " + current }
-      });
-      if (response.ok) {
-        showUpload();
+      var result = await api("/teacher/me");
+      if (result.response.ok && result.body && result.body.id) {
+        enterDashboard(result.body);
       } else {
         clearSession();
         showLogin();
+        if (result.response.status !== 401) {
+          showMessage(loginMessage, "Your session ended. Sign in again.", "info");
+        }
       }
     } catch (error) {
-      // Offline: keep the sign-in card rather than showing a broken form.
+      // Offline: keep the sign-in card rather than showing a broken dashboard.
       showLogin();
     }
   })();
