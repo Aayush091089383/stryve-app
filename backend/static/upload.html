@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark" />
+<title>Stryve · Upload Portal</title>
+<style>
+  :root {
+    --bg: #060a15;
+    --bg-soft: #0b1224;
+    --surface: rgba(18, 27, 47, 0.78);
+    --surface-solid: #111a2e;
+    --border: rgba(148, 174, 255, 0.14);
+    --text: #eaf0ff;
+    --muted: #93a3c4;
+    --accent: #4f8cff;
+    --accent-soft: rgba(79, 140, 255, 0.16);
+    --success: #4ade80;
+    --danger: #ff7a85;
+    --warning: #fbbf24;
+    --radius: 18px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    background:
+      radial-gradient(1100px 600px at 12% -10%, rgba(79, 140, 255, 0.20), transparent 60%),
+      radial-gradient(900px 520px at 100% 0%, rgba(122, 92, 255, 0.14), transparent 55%),
+      linear-gradient(180deg, #070c18 0%, var(--bg) 55%, #04070f 100%);
+    background-attachment: fixed;
+    min-height: 100%;
+  }
+
+  .wrap {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 20px 56px;
+  }
+
+  header.brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+
+  .mark {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 20px;
+    letter-spacing: 0.5px;
+    color: #fff;
+    background: linear-gradient(140deg, #5b95ff, #3b6bff 55%, #6d5bff);
+    box-shadow: 0 10px 24px rgba(59, 107, 255, 0.35);
+  }
+
+  .brand h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 650;
+    letter-spacing: 0.2px;
+  }
+
+  .brand p {
+    margin: 2px 0 0;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 26px;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  }
+
+  .card + .card { margin-top: 18px; }
+
+  .card h2 {
+    margin: 0 0 6px;
+    font-size: 17px;
+    font-weight: 650;
+  }
+
+  .card .hint {
+    margin: 0 0 20px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .field { margin-bottom: 16px; }
+
+  .field label {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.35px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 7px;
+  }
+
+  input[type="email"],
+  input[type="password"],
+  input[type="text"],
+  input[type="date"],
+  input[type="number"],
+  select,
+  textarea {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 15px;
+    color: var(--text);
+    background: rgba(8, 13, 25, 0.72);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    font-family: inherit;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: rgba(79, 140, 255, 0.75);
+    box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.18);
+  }
+
+  input[type="date"] { color-scheme: dark; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .file-drop {
+    border: 1px dashed rgba(148, 174, 255, 0.35);
+    border-radius: 12px;
+    padding: 16px;
+    background: rgba(8, 13, 25, 0.45);
+  }
+
+  .file-drop input[type="file"] {
+    width: 100%;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+
+  .file-drop input[type="file"]::file-selector-button {
+    margin-right: 12px;
+    padding: 9px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--accent-soft);
+    color: var(--text);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .file-note {
+    margin: 10px 0 0;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 13px 18px;
+    margin-top: 6px;
+    font-size: 15px;
+    font-weight: 650;
+    color: #fff;
+    background: linear-gradient(135deg, #5b95ff, #3b6bff);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.08s ease, filter 0.15s ease, opacity 0.15s ease;
+  }
+
+  button:hover:not(:disabled) { filter: brightness(1.08); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  button.secondary {
+    width: auto;
+    margin: 0;
+    padding: 8px 14px;
+    font-size: 13px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  button.secondary:hover:not(:disabled) { color: var(--text); border-color: rgba(148, 174, 255, 0.4); }
+
+  .spinner {
+    width: 15px;
+    height: 15px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .message {
+    display: none;
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    border: 1px solid transparent;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .message.show { display: block; }
+  .message.error { color: #ffd7db; background: rgba(255, 90, 106, 0.10); border-color: rgba(255, 90, 106, 0.35); }
+  .message.success { color: #d6ffe6; background: rgba(74, 222, 128, 0.10); border-color: rgba(74, 222, 128, 0.32); }
+  .message.info { color: #dbe7ff; background: rgba(79, 140, 255, 0.10); border-color: rgba(79, 140, 255, 0.3); }
+
+  .session-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding-bottom: 18px;
+    margin-bottom: 22px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .session-bar strong { font-size: 14.5px; }
+  .session-bar span { display: block; margin-top: 3px; font-size: 12.5px; color: var(--muted); }
+
+  .note {
+    margin: 14px 0 0;
+    padding: 11px 13px;
+    border-radius: 11px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: #ffe6b3;
+    background: rgba(251, 191, 36, 0.08);
+    border: 1px solid rgba(251, 191, 36, 0.22);
+  }
+
+  footer {
+    margin-top: 26px;
+    text-align: center;
+    font-size: 12px;
+    color: rgba(147, 163, 196, 0.72);
+  }
+
+  [hidden] { display: none !important; }
+
+  @media (max-width: 520px) {
+    .wrap { padding: 22px 14px 40px; }
+    .card { padding: 20px; }
+    .row { grid-template-columns: 1fr; }
+    .session-bar { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="brand">
+    <div class="mark" aria-hidden="true">S</div>
+    <div>
+      <h1>Stryve Portal</h1>
+      <p>Upload assignments for Division D from any laptop or phone</p>
+    </div>
+  </header>
+
+  <!-- ------------------------------------------------ sign in -->
+  <section class="card" id="loginCard">
+    <h2>Sign in</h2>
+    <p class="hint">Teacher and admin accounts only. Students cannot use this portal.</p>
+
+    <form id="loginForm" novalidate>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="username"
+               inputmode="email" placeholder="you@campus.edu" required autofocus />
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password"
+               autocomplete="current-password" placeholder="Your password" required />
+      </div>
+
+      <button id="loginBtn" type="submit">
+        <span class="spinner" id="loginSpinner" hidden></span>
+        <span id="loginLabel">Sign in</span>
+      </button>
+    </form>
+
+    <div id="loginMessage" class="message" role="status" aria-live="polite"></div>
+
+    <p class="note">
+      An account has one active session. Signing in here signs out the same
+      account in the mobile app, and the next app login signs this browser out.
+    </p>
+  </section>
+
+  <!-- ------------------------------------------------ upload -->
+  <section class="card" id="uploadCard" hidden>
+    <div class="session-bar">
+      <div>
+        <strong id="whoName">Signed in</strong>
+        <span id="whoRole"></span>
+      </div>
+      <button class="secondary" id="logoutBtn" type="button">Sign out</button>
+    </div>
+
+    <h2>Upload an assignment</h2>
+    <p class="hint">
+      The file is stored under a server-generated name and is only visible to
+      Division D students in the selected year.
+    </p>
+
+    <form id="uploadForm" novalidate>
+      <div class="field">
+        <label for="subject">Subject</label>
+        <select id="subject" name="subject" required>
+          <option value="" disabled selected>Choose a subject</option>
+          <option>Engineering Mathematics-I</option>
+          <option>Engineering Physics</option>
+          <option>Basic Electrical Engineering</option>
+          <option>Engineering Graphics</option>
+          <option>Fundamentals of Programming Languages</option>
+          <option>Design Thinking &amp; Idea Lab</option>
+          <option>Professional Communication Skills</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="title">Title</label>
+        <input id="title" name="title" type="text" maxlength="200"
+               placeholder="e.g. Unit 3 — practice problems" required />
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="dueDate">Due date</label>
+          <input id="dueDate" name="due_date" type="date" required />
+        </div>
+        <div class="field">
+          <label for="year">Year</label>
+          <input id="year" name="year" type="number" min="1" max="5" step="1" value="1" required />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="division">Division</label>
+        <input id="division" name="division" type="text" maxlength="8" value="D" required />
+      </div>
+
+      <div class="field">
+        <label for="file">File</label>
+        <div class="file-drop">
+          <input id="file" name="file" type="file"
+                 accept=".pdf,.mp4,.mov,.mkv,application/pdf,video/mp4,video/quicktime,video/x-matroska" required />
+          <p class="file-note">PDF or video (MP4, MOV, MKV) · up to 100 MB</p>
+        </div>
+      </div>
+
+      <button id="uploadBtn" type="submit">
+        <span class="spinner" id="uploadSpinner" hidden></span>
+        <span id="uploadLabel">Upload assignment</span>
+      </button>
+    </form>
+
+    <div id="uploadMessage" class="message" role="status" aria-live="polite"></div>
+  </section>
+
+  <footer>Stryve · served by the CampusSync backend</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var TOKEN_KEY = "stryve.portal.token";
+  var NAME_KEY = "stryve.portal.name";
+  var ROLE_KEY = "stryve.portal.role";
+  var MAX_BYTES = 100 * 1024 * 1024;
+  var ALLOWED = [".pdf", ".mp4", ".mov", ".mkv"];
+
+  var loginCard = document.getElementById("loginCard");
+  var uploadCard = document.getElementById("uploadCard");
+  var loginForm = document.getElementById("loginForm");
+  var uploadForm = document.getElementById("uploadForm");
+  var loginBtn = document.getElementById("loginBtn");
+  var uploadBtn = document.getElementById("uploadBtn");
+  var loginSpinner = document.getElementById("loginSpinner");
+  var uploadSpinner = document.getElementById("uploadSpinner");
+  var loginLabel = document.getElementById("loginLabel");
+  var uploadLabel = document.getElementById("uploadLabel");
+  var loginMessage = document.getElementById("loginMessage");
+  var uploadMessage = document.getElementById("uploadMessage");
+  var logoutBtn = document.getElementById("logoutBtn");
+  var whoName = document.getElementById("whoName");
+  var whoRole = document.getElementById("whoRole");
+
+  function token() {
+    try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
+  }
+
+  function saveSession(data) {
+    try {
+      sessionStorage.setItem(TOKEN_KEY, data.token || "");
+      sessionStorage.setItem(NAME_KEY, data.name || "");
+      sessionStorage.setItem(ROLE_KEY, data.role || "");
+    } catch (e) { /* private mode: the token still lives in this page */ }
+  }
+
+  function clearSession() {
+    try {
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(NAME_KEY);
+      sessionStorage.removeItem(ROLE_KEY);
+    } catch (e) { /* nothing to clear */ }
+  }
+
+  function remember(key) {
+    try { return sessionStorage.getItem(key) || ""; } catch (e) { return ""; }
+  }
+
+  function showMessage(el, text, kind) {
+    el.textContent = text;
+    el.className = "message show " + (kind || "info");
+  }
+
+  function hideMessage(el) {
+    el.textContent = "";
+    el.className = "message";
+  }
+
+  function busy(button, spinner, label, working, text) {
+    button.disabled = working;
+    spinner.hidden = !working;
+    label.textContent = text;
+  }
+
+  // The backend answers errors as {"detail": ..., "code": ...}; `message` only
+  // appears on success payloads, so read `detail` first.
+  function errorText(body, fallback) {
+    if (body && typeof body.detail === "string" && body.detail) return body.detail;
+    if (body && typeof body.message === "string" && body.message) return body.message;
+    return fallback;
+  }
+
+  async function readJson(response) {
+    try { return await response.json(); } catch (e) { return {}; }
+  }
+
+  function showUpload() {
+    loginCard.hidden = true;
+    uploadCard.hidden = false;
+    whoName.textContent = remember(NAME_KEY) || "Signed in";
+    var role = remember(ROLE_KEY);
+    whoRole.textContent = role ? role.charAt(0).toUpperCase() + role.slice(1) + " account" : "";
+  }
+
+  function showLogin() {
+    uploadCard.hidden = true;
+    loginCard.hidden = false;
+    var email = document.getElementById("email");
+    if (email) email.focus();
+  }
+
+  // ------------------------------------------------------------------ login
+  loginForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    hideMessage(loginMessage);
+
+    var email = document.getElementById("email").value.trim();
+    var password = document.getElementById("password").value;
+
+    if (!email || !password) {
+      showMessage(loginMessage, "Enter both your email and your password.", "error");
+      return;
+    }
+
+    busy(loginBtn, loginSpinner, loginLabel, true, "Signing in…");
+
+    try {
+      var response = await fetch("/teacher/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email, password: password })
+      });
+      var body = await readJson(response);
+
+      if (!response.ok) {
+        var wait = response.headers.get("Retry-After");
+        var text = errorText(body, "Sign-in failed (" + response.status + ").");
+        showMessage(loginMessage, text + (wait ? " Try again in " + wait + "s." : ""), "error");
+        return;
+      }
+
+      saveSession(body);
+      document.getElementById("password").value = "";
+      showUpload();
+      showMessage(uploadMessage, "Signed in as " + (body.name || email) + ".", "success");
+    } catch (error) {
+      showMessage(loginMessage, "Could not reach the server. Check your connection and try again.", "error");
+    } finally {
+      busy(loginBtn, loginSpinner, loginLabel, false, "Sign in");
+    }
+  });
+
+  // ----------------------------------------------------------------- logout
+  logoutBtn.addEventListener("click", async function () {
+    var current = token();
+    logoutBtn.disabled = true;
+    try {
+      if (current) {
+        await fetch("/teacher/logout", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + current }
+        });
+      }
+    } catch (error) { /* clearing locally is what matters */ }
+    clearSession();
+    logoutBtn.disabled = false;
+    uploadForm.reset();
+    hideMessage(uploadMessage);
+    showLogin();
+    showMessage(loginMessage, "Signed out.", "info");
+  });
+
+  // ----------------------------------------------------------------- upload
+  uploadForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    hideMessage(uploadMessage);
+
+    var current = token();
+    if (!current) {
+      showLogin();
+      showMessage(loginMessage, "Your session ended. Sign in again.", "info");
+      return;
+    }
+
+    var subject = document.getElementById("subject").value;
+    var title = document.getElementById("title").value.trim();
+    var dueDate = document.getElementById("dueDate").value;
+    var year = document.getElementById("year").value.trim();
+    var division = document.getElementById("division").value.trim();
+    var fileInput = document.getElementById("file");
+    var file = fileInput.files && fileInput.files[0];
+
+    if (!subject) { showMessage(uploadMessage, "Choose a subject.", "error"); return; }
+    if (!title) { showMessage(uploadMessage, "Enter a title.", "error"); return; }
+    if (!dueDate) { showMessage(uploadMessage, "Choose a due date.", "error"); return; }
+    if (!/^[1-5]$/.test(year)) { showMessage(uploadMessage, "Year must be 1 to 5.", "error"); return; }
+    if (!division) { showMessage(uploadMessage, "Enter a division.", "error"); return; }
+    if (!file) { showMessage(uploadMessage, "Choose a file to upload.", "error"); return; }
+
+    var lower = file.name.toLowerCase();
+    var suffix = lower.slice(lower.lastIndexOf("."));
+    if (ALLOWED.indexOf(suffix) === -1) {
+      showMessage(uploadMessage, "Only PDF, MP4, MOV or MKV files are accepted.", "error");
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      showMessage(uploadMessage, "That file is larger than 100 MB. Compress it or upload a smaller one.", "error");
+      return;
+    }
+
+    var form = new FormData();
+    form.append("subject", subject);
+    form.append("title", title);
+    form.append("due_date", dueDate);
+    form.append("year", year);
+    form.append("division", division.toUpperCase());
+    form.append("file", file, file.name);
+
+    busy(uploadBtn, uploadSpinner, uploadLabel, true, "Uploading…");
+
+    try {
+      var response = await fetch("/teacher/assignments/upload", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + current },
+        body: form
+      });
+      var body = await readJson(response);
+
+      if (response.status === 201) {
+        showMessage(
+          uploadMessage,
+          "Uploaded “" + (body.title || title) + "” for " + (body.subject || subject) +
+            ", due " + (body.due_date || dueDate) + ". Students in Year " +
+            (body.year || year) + " · Division " + (body.division || division.toUpperCase()) +
+            " can see it now.",
+          "success"
+        );
+        document.getElementById("title").value = "";
+        document.getElementById("file").value = "";
+      } else if (response.status === 401) {
+        clearSession();
+        showLogin();
+        showMessage(loginMessage, "Your session ended. Sign in again.", "info");
+      } else if (response.status === 403) {
+        showMessage(uploadMessage, errorText(body, "This account is not allowed to upload."), "error");
+      } else if (response.status === 429) {
+        showMessage(uploadMessage, errorText(body, "Too many attempts. Wait a minute."), "error");
+      } else {
+        showMessage(uploadMessage, errorText(body, "Upload failed (" + response.status + ")."), "error");
+      }
+    } catch (error) {
+      showMessage(uploadMessage, "Upload failed: the connection dropped. Try again.", "error");
+    } finally {
+      busy(uploadBtn, uploadSpinner, uploadLabel, false, "Upload assignment");
+    }
+  });
+
+  // ------------------------------------------------------- restore session
+  (async function restore() {
+    var current = token();
+    if (!current) { showLogin(); return; }
+    try {
+      var response = await fetch("/teacher/me", {
+        headers: { Authorization: "Bearer " + current }
+      });
+      if (response.ok) {
+        showUpload();
+      } else {
+        clearSession();
+        showLogin();
+      }
+    } catch (error) {
+      // Offline: keep the sign-in card rather than showing a broken form.
+      showLogin();
+    }
+  })();
+
+  // Today's date is a convenient default but never a floor: assignments are
+  // often recorded after the fact, so any past date is allowed.
+  (function defaultDueDate() {
+    var input = document.getElementById("dueDate");
+    if (!input.value) {
+      var now = new Date();
+      now.setDate(now.getDate() + 7);
+      input.value = now.toISOString().slice(0, 10);
+    }
+  })();
+})();
+</script>
+</body>
+</html>

@@ -6,7 +6,9 @@ FastAPI app, and this only has to slow down bulk scraping of an
 unauthenticated endpoint. State lives in memory, so it resets on restart and
 is per-process (see SECURITY.md for the limits of that).
 
-Only the public roll-number lookup uses it today.
+Two endpoints use it: the public roll-number lookup (every request counts) and
+teacher sign-in (only *failed* attempts count, so a legitimate user is never
+locked out by their own successful logins).
 """
 
 from __future__ import annotations
@@ -66,6 +68,32 @@ class SlidingWindowLimiter:
             if len(self._hits) > self._max_keys:
                 self._prune(cutoff)
             return True, 0
+
+    def blocked(self, key: str, now: Optional[float] = None) -> Tuple[bool, int]:
+        """Whether ``key`` has exhausted its allowance, without recording a hit.
+
+        Used where only failures should count: the caller asks before doing the
+        work, records a hit with :meth:`check` when the attempt fails, and
+        clears the key with :meth:`reset` after a success.
+        """
+        if self._limit <= 0:
+            return False, 0
+
+        current = time.monotonic() if now is None else now
+
+        with self._lock:
+            hits = self._hits.get(key)
+            if not hits:
+                return False, 0
+
+            cutoff = current - self._window
+            while hits and hits[0] <= cutoff:
+                hits.popleft()
+
+            if len(hits) >= self._limit:
+                retry_after = int(self._window - (current - hits[0])) + 1
+                return True, max(1, retry_after)
+            return False, 0
 
     def reset(self, key: Optional[str] = None) -> None:
         """Forget the recorded hits for ``key`` (or for every key)."""

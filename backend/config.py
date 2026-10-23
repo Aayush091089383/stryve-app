@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     # registration needs it), so it is rate limited and returns a masked name.
     LOOKUP_RATE_LIMIT_PER_MINUTE: int = 120
 
+    # Teacher sign-in: FAILED attempts allowed per minute per client IP before
+    # the caller is told to wait. Successful sign-ins are never counted, so a
+    # teacher cannot lock themselves out by using the portal normally. 0
+    # disables the limit.
+    TEACHER_LOGIN_RATE_LIMIT_PER_MINUTE: int = 5
+
     # Token Settings
     TOKEN_EXPIRATION_DAYS: int = 7
 

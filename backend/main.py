@@ -17,6 +17,7 @@ from fastapi import (
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pwdlib import PasswordHash
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
@@ -187,6 +188,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ------------------------------------------------------------------
+# Static assets and the browser upload portal
+# ------------------------------------------------------------------
+# Anchored to backend/ (never the working directory), because uvicorn may be
+# started from the repository root. StaticFiles is mounted under /static so a
+# future route can never shadow a file by accident; /portal is the one stable
+# address a teacher needs to remember.
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/portal", include_in_schema=False)
+def serve_upload_portal():
+    """The teacher/admin upload page.
+
+    Plain HTML is served from the same origin as the API, so the page's
+    relative fetch() calls work unchanged on localhost, the ngrok tunnel and
+    any other host the backend is reached through. Access control is the
+    teacher login itself: without a valid bearer token the page can render but
+    every call it makes is rejected.
+    """
+    return FileResponse(
+        STATIC_DIR / "upload.html",
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
 
 # ------------------------------------------------------------------
 # Exception handlers
@@ -505,12 +534,56 @@ def logout_student(
     return {"message": "Logged out"}
 
 
+# Brute-force brake for the one endpoint that accepts a password from the
+# public portal. Only FAILED attempts are recorded (see ratelimit.py), so a
+# teacher's own successful sign-ins never use up the allowance, and the key is
+# the forwarded client address when a proxy supplies one - behind the ngrok
+# tunnel every request arrives from the agent's 127.0.0.1, which would
+# otherwise put every teacher in one shared bucket.
+teacher_login_limiter = SlidingWindowLimiter(
+    settings.TEACHER_LOGIN_RATE_LIMIT_PER_MINUTE
+)
+
+
+def _login_client_key(request: Request) -> str:
+    """Client address for the sign-in limiter.
+
+    ngrok appends the address it actually saw to ``X-Forwarded-For``; taking
+    the LAST hop uses that value and ignores anything the caller made up.
+    Without a proxy the direct peer address is used.
+    """
+    forwarded = request.headers.get("x-forwarded-for", "")
+    hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+    return hops[-1] if hops else _client_ip(request)
+
+
+def teacher_login_rate_limit(request: Request) -> str:
+    """Reject further attempts once a client has failed too often; returns key."""
+    key = _login_client_key(request)
+    blocked, retry_after = teacher_login_limiter.blocked(key)
+    if blocked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Too many failed sign-in attempts. Wait a minute and try again."
+            ),
+            headers={"Retry-After": str(retry_after)},
+        )
+    return key
+
+
 @app.post("/teacher/login", response_model=TeacherTokenResponse)
-def login_teacher(teacher: TeacherLogin, db: Session = Depends(get_db)):
+def login_teacher(
+    teacher: TeacherLogin,
+    db: Session = Depends(get_db),
+    login_key: str = Depends(teacher_login_rate_limit),
+):
     """
     Authenticate a teacher/admin and return a session token.
 
-    Returns 200 with token on success, 401 if credentials are invalid.
+    Returns 200 with token on success, 401 if credentials are invalid, and 429
+    once one client has failed too many times in a minute. Successful sign-ins
+    are never counted against the limit.
     """
     # Find teacher by email, case-insensitively (see the student login above).
     existing_teacher = db.query(models.Teacher).filter(
@@ -519,6 +592,7 @@ def login_teacher(teacher: TeacherLogin, db: Session = Depends(get_db)):
 
     if not existing_teacher:
         from exceptions import AuthenticationError
+        teacher_login_limiter.check(login_key)
         raise AuthenticationError("Invalid email or password")
 
     # Verify password against stored hash
@@ -529,6 +603,7 @@ def login_teacher(teacher: TeacherLogin, db: Session = Depends(get_db)):
 
     if not password_correct:
         from exceptions import AuthenticationError
+        teacher_login_limiter.check(login_key)
         raise AuthenticationError("Invalid email or password")
 
     if not existing_teacher.is_active:
@@ -544,6 +619,10 @@ def login_teacher(teacher: TeacherLogin, db: Session = Depends(get_db)):
     existing_teacher.token = new_token
     existing_teacher.token_expires_at = token_expiration
     db.commit()
+
+    # A correct password proves this is the account owner; forgotten failures
+    # should not keep them out of the portal afterwards.
+    teacher_login_limiter.reset(login_key)
 
     return TeacherTokenResponse(
         message="Login successful",
