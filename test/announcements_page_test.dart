@@ -267,6 +267,62 @@ void main() {
       expect(find.text('Maths test'), findsOneWidget);
     });
 
+    testWidgets('pull-to-refresh applies a changed subject', (tester) async {
+      final feed = FeedClient(body: [announcementJson(id: 2, title: 'EG')]);
+      await pumpFeed(tester, feed);
+
+      final commonChip = find.byKey(
+        const ValueKey('announcement-filter-common'),
+      );
+      await tester.ensureVisible(commonChip);
+      await tester.pumpAndSettle();
+      await tester.tap(commonChip);
+      await tester.pumpAndSettle();
+
+      expect(find.text('EG'), findsOneWidget);
+      expect(find.text('1 announcement · Common'), findsOneWidget);
+
+      // The same announcement is now filed under a subject (the case the
+      // database update produced). A pull must replace the list, not keep the
+      // old null subject.
+      feed.body = [
+        announcementJson(id: 2, title: 'EG', subject: 'Engineering Graphics'),
+      ];
+
+      // A short feed must stay pullable; without AlwaysScrollableScrollPhysics
+      // a one-card list cannot overscroll and the pull silently does nothing.
+      expect(
+        tester.widget<ListView>(find.byType(ListView)).physics,
+        isA<AlwaysScrollableScrollPhysics>(),
+      );
+
+      // Drive the same callback the pull calls; a raw gesture varies with the
+      // test viewport, the refresh path itself is what matters here.
+      final refresh = tester.state<RefreshIndicatorState>(
+        find.byType(RefreshIndicator),
+      );
+      refresh.show();
+      await tester.pumpAndSettle();
+
+      expect(feed.paths.where((path) => path == '/announcements').length, 2);
+      expect(find.text('EG'), findsNothing);
+      expect(find.text('No Common announcements yet'), findsOneWidget);
+
+      final graphicsChip = find.byKey(
+        const ValueKey('announcement-filter-Engineering Graphics'),
+      );
+      await tester.ensureVisible(graphicsChip);
+      await tester.pumpAndSettle();
+      await tester.tap(graphicsChip);
+      await tester.pumpAndSettle();
+
+      expect(find.text('EG'), findsOneWidget);
+      expect(
+        find.text('1 announcement · Engineering Graphics'),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('a failed load shows an error, never the empty state', (
       tester,
     ) async {

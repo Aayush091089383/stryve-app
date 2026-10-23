@@ -62,9 +62,17 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
     super.dispose();
   }
 
-  Future<void> _fetchAnnouncements() async {
+  /// Load the feed again.
+  ///
+  /// [showFullLoading] is false for the pull gesture: the current list stays on
+  /// screen while the request runs, so the RefreshIndicator owns the progress
+  /// and a refresh visibly replaces the cards. A first load and "Try Again"
+  /// still use the full-page spinner.
+  Future<void> _fetchAnnouncements({bool showFullLoading = true}) async {
     setState(() {
-      _isLoading = true;
+      if (showFullLoading || _announcements.isEmpty) {
+        _isLoading = true;
+      }
       _errorMessage = null;
     });
 
@@ -302,8 +310,13 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
       key: const ValueKey('announcements-feed'),
       child: RefreshIndicator(
         color: GlassColors.primaryBlue,
-        onRefresh: _fetchAnnouncements,
+        onRefresh: () => _fetchAnnouncements(showFullLoading: false),
         child: ListView(
+          // RefreshIndicator only sees an overscroll when the list itself is
+          // scrollable. A feed of one short notice fits the screen, and without
+          // this the pull gesture silently did nothing - leaving the old
+          // subject on screen after a data change.
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.only(top: 16, bottom: 32),
           children: [
             _buildFilterChips(context),
