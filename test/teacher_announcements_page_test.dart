@@ -20,6 +20,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:stryve/teacher_announcements_page.dart';
+import 'package:stryve/teacher_assignments_page.dart'
+    show PickedAssignmentFile;
 import 'package:stryve/utils/linkified_text.dart';
 
 import 'support/theme_harness.dart';
@@ -74,6 +76,7 @@ Future<void> pumpPage(
   WidgetTester tester,
   http.Client client, {
   Map<String, String>? storage,
+  Future<List<PickedAssignmentFile>> Function()? pickFiles,
 }) async {
   FlutterSecureStorage.setMockInitialValues(storage ?? teacherStorage());
 
@@ -83,7 +86,9 @@ Future<void> pumpPage(
 
   await tester.pumpWidget(
     withThemeProvider(
-      MaterialApp(home: TeacherAnnouncementsPage(client: client)),
+      MaterialApp(
+        home: TeacherAnnouncementsPage(client: client, pickFiles: pickFiles),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -185,6 +190,45 @@ void main() {
       'Bearer $kToken',
     );
     expect(find.text('Announcement deleted'), findsOneWidget);
+  });
+
+  testWidgets('posting sends the picked file as multipart', (tester) async {
+    final recorded = Recorded();
+    await pumpPage(
+      tester,
+      MockClient((request) async {
+        recorded.requests.add(request);
+        if (request.method == 'POST') {
+          return jsonResponse({'detail': 'refused for the test'}, 422);
+        }
+        return jsonResponse(const []);
+      }),
+      pickFiles: () async => const [
+        PickedAssignmentFile(
+          name: 'unit-3.pdf',
+          bytes: [37, 80, 68, 70],
+        ),
+      ],
+    );
+
+    await tester.tap(find.text('CHOOSE PDFS OR VIDEOS (OPTIONAL)'));
+    await tester.pumpAndSettle();
+    expect(find.text('unit-3.pdf (0 KB)'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'With notes');
+    await tester.enterText(find.byType(TextFormField).at(1), 'See the file.');
+    await tester.tap(find.text('Post'));
+    await tester.pumpAndSettle();
+
+    final post = recorded.requests.firstWhere((r) => r.method == 'POST');
+    expect(post.url.path, '/teacher/announcements');
+    expect(post.headers['Authorization'], 'Bearer $kToken');
+    // Multipart fields and the file part both travel in the same request.
+    expect(post.body, contains('name="title"'));
+    expect(post.body, contains('With notes'));
+    expect(post.body, contains('name="files"'));
+    expect(post.body, contains('filename="unit-3.pdf"'));
+    expect(find.text('refused for the test'), findsOneWidget);
   });
 
   testWidgets('a refused delete is explained and the row stays', (

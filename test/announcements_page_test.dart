@@ -43,6 +43,7 @@ Map<String, dynamic> announcementJson({
   String createdAt = '2026-10-20T09:30:00',
   int? year,
   String? division,
+  List<Map<String, dynamic>> attachments = const [],
 }) => {
   'id': id,
   'title': title,
@@ -52,6 +53,7 @@ Map<String, dynamic> announcementJson({
   'created_at': createdAt,
   'year': year,
   'division': division,
+  'attachments': attachments,
 };
 
 http.Response jsonResponse(Object body, [int status = 200]) => http.Response(
@@ -129,6 +131,37 @@ void main() {
       // A college-wide post shows no audience line.
       expect(find.textContaining('Division D'), findsNothing);
       expect(find.text('No announcements yet'), findsNothing);
+    });
+
+    testWidgets('attachments show a name and the matching action', (
+      tester,
+    ) async {
+      final feed = FeedClient(
+        body: [
+          announcementJson(
+            attachments: const [
+              {
+                'id': 11,
+                'original_name': 'unit-3-notes.pdf',
+                'file_size': 2048,
+              },
+              {
+                'id': 12,
+                'original_name': 'practical-demo.mp4',
+                'file_size': 5 * 1024 * 1024,
+              },
+            ],
+          ),
+        ],
+      );
+      await pumpFeed(tester, feed);
+
+      expect(find.text('unit-3-notes.pdf'), findsOneWidget);
+      expect(find.text('2 KB'), findsOneWidget);
+      expect(find.text('READ PDF'), findsOneWidget);
+      expect(find.text('practical-demo.mp4'), findsOneWidget);
+      expect(find.text('5.0 MB'), findsOneWidget);
+      expect(find.text('PLAY VIDEO'), findsOneWidget);
     });
 
     testWidgets('a restricted post names its audience', (tester) async {

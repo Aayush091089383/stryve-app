@@ -109,11 +109,19 @@ class AssignmentPdfService {
     required this.token,
     this.baseUrl,
     this.attachmentId,
+    this.sourceUrl,
   });
 
   final http.Client? client;
   final String token;
   final String? baseUrl;
+
+  /// A complete authorized URL to read instead of the assignment routes.
+  ///
+  /// Used by announcement attachments, which live under
+  /// `/announcements/{id}/files/{file_id}`. Null keeps every assignment call
+  /// on the original path; the token and the backend's checks are unchanged.
+  final String? sourceUrl;
 
   /// One file of a multi-attachment assignment. Null reads the primary file
   /// through the legacy `/file` route, which is what every caller did before
@@ -133,9 +141,10 @@ class AssignmentPdfService {
   /// viewer. A Download is a separate, explicit action.
   Future<AssignmentPdfResult> load(int assignmentId) async {
     final uri = Uri.parse(
-      attachmentId == null
-          ? '$_baseUrl/assignments/$assignmentId/file'
-          : '$_baseUrl/assignments/$assignmentId/files/$attachmentId',
+      sourceUrl ??
+          (attachmentId == null
+              ? '$_baseUrl/assignments/$assignmentId/file'
+              : '$_baseUrl/assignments/$assignmentId/files/$attachmentId'),
     );
 
     http.Response response;

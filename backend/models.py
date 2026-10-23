@@ -556,7 +556,52 @@ class Announcement(Base):
 
     author = relationship("Teacher", foreign_keys=[author_id])
 
+    # Files posted with this announcement (PDF or video). They live in the same
+    # upload directory as assignment files and are only served through the
+    # authorized download route, never statically. Deleting the announcement
+    # removes its rows; the delete route also removes the files on disk.
+    attachments = relationship(
+        "AnnouncementAttachment",
+        backref="announcement",
+        cascade="all, delete-orphan",
+        order_by="AnnouncementAttachment.id",
+        lazy="selectin",
+    )
+
     @property
     def author_name(self) -> str:
         """The poster's name, or a neutral fallback if the account is gone."""
         return self.author.name if self.author is not None else "CampusSync"
+
+
+class AnnouncementAttachment(Base):
+    """One file attached to an announcement (a PDF or a video).
+
+    ``stored_name`` is the server-generated name inside the upload directory;
+    ``original_name`` is the uploader's own label, kept for display only. The
+    file is validated by the same magic-byte and size rules as an assignment
+    attachment.
+    """
+
+    __tablename__ = "announcement_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    announcement_id = Column(
+        Integer,
+        ForeignKey("announcements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    stored_name = Column(String, nullable=False)
+    original_name = Column(String, nullable=False)
+    file_size = Column(Integer, nullable=False)
+
+    @property
+    def is_video(self) -> bool:
+        return Path(self.stored_name or "").suffix.lower() in {
+            ".mp4",
+            ".mov",
+            ".mkv",
+        }

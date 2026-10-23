@@ -2,10 +2,18 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import 'announcement.dart';
 import 'config/environment.dart';
 import 'services/teacher_auth_service.dart';
+import 'teacher_assignments_page.dart'
+    show
+        AssignmentFilesPicker,
+        PickedAssignmentFile,
+        assignmentContentType,
+        defaultPickAssignmentFiles,
+        uploadFileName;
 import 'teacher_login_page.dart';
 import 'utils/glass_container.dart';
 import 'utils/linkified_text.dart';
@@ -23,10 +31,19 @@ import 'utils/teacher_api.dart';
 /// every post. It is exactly the set the delete route accepts, so this screen
 /// never offers a delete it would be refused.
 class TeacherAnnouncementsPage extends StatefulWidget {
-  const TeacherAnnouncementsPage({super.key, this.authService, this.client});
+  const TeacherAnnouncementsPage({
+    super.key,
+    this.authService,
+    this.client,
+    this.pickFiles,
+  });
 
   final TeacherAuthService? authService;
   final http.Client? client;
+
+  /// Injectable file chooser (production uses the platform picker), so widget
+  /// tests never open an OS dialog.
+  final AssignmentFilesPicker? pickFiles;
 
   @override
   State<TeacherAnnouncementsPage> createState() =>
@@ -46,6 +63,9 @@ class _TeacherAnnouncementsPageState extends State<TeacherAnnouncementsPage> {
   /// null = every year / every division.
   int? _year;
   String? _division;
+
+  /// The files picked for the next post; empty keeps it text-only.
+  List<PickedAssignmentFile> _files = const [];
 
   bool _posting = false;
   String? _error;
@@ -141,6 +161,64 @@ class _TeacherAnnouncementsPageState extends State<TeacherAnnouncementsPage> {
     }
   }
 
+  /// Choose the PDFs/videos to post with the notice.
+  ///
+  /// The backend re-checks every file (magic bytes and size) and is the
+  /// authority; these checks only keep an obviously wrong pick from spending a
+  /// slow upload.
+  Future<void> _pickFiles() async {
+    try {
+      final picked = await (widget.pickFiles ?? defaultPickAssignmentFiles)();
+      if (!mounted || picked.isEmpty) return;
+
+      const allowed = <String>{'.pdf', '.mp4', '.mov', '.mkv'};
+      const maxBytes = 100 * 1024 * 1024;
+
+      if (picked.length > 10) {
+        setState(() => _error = 'At most 10 files can be attached.');
+        return;
+      }
+
+      for (final file in picked) {
+        final lower = file.name.toLowerCase();
+        final dot = lower.lastIndexOf('.');
+        final extension = dot < 0 ? '' : lower.substring(dot);
+        if (!allowed.contains(extension)) {
+          setState(
+            () => _error = '"${file.name}" is not a PDF, MP4, MOV or MKV file.',
+          );
+          return;
+        }
+        if (file.sizeBytes > maxBytes) {
+          setState(
+            () => _error = '"${file.name}" is larger than 100 MB. Please '
+                'choose a smaller file.',
+          );
+          return;
+        }
+      }
+
+      setState(() {
+        _files = picked;
+        _error = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Could not read that file. Please try again.');
+    }
+  }
+
+  /// "CHOOSE PDFS OR VIDEOS (OPTIONAL)", "notes.pdf (820 KB)", "3 files".
+  String get _filesLabel {
+    if (_files.isEmpty) return 'CHOOSE PDFS OR VIDEOS (OPTIONAL)';
+    if (_files.length == 1) {
+      final file = _files.single;
+      final kb = (file.sizeBytes / 1024).toStringAsFixed(0);
+      return '${file.name} ($kb KB)';
+    }
+    return '${_files.length} FILES SELECTED';
+  }
+
   Future<void> _post() async {
     if (_posting) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
@@ -158,23 +236,37 @@ class _TeacherAnnouncementsPageState extends State<TeacherAnnouncementsPage> {
     });
 
     try {
-      final response = await _client
-          .post(
-            Uri.parse('${Environment.backendUrl}/teacher/announcements'),
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'title': _titleController.text.trim(),
-              'message': _messageController.text.trim(),
-              // Omitted rather than sent as null: an absent restriction is what
-              // makes the post readable by everyone.
-              if (_year != null) 'year': _year,
-              if (_division != null) 'division': _division,
-            }),
-          )
-          .timeout(const Duration(seconds: 20));
+      // Multipart, not JSON: the endpoint takes Form fields plus optional
+      // files. Unset restrictions are omitted, which is what makes the post
+      // readable by everyone.
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${Environment.backendUrl}/teacher/announcements'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.fields['title'] = _titleController.text.trim();
+      request.fields['message'] = _messageController.text.trim();
+      if (_year != null) request.fields['year'] = '$_year';
+      if (_division != null) request.fields['division'] = _division!;
+
+      for (final picked in _files) {
+        final name = uploadFileName(picked.name);
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'files',
+            picked.bytes,
+            filename: name,
+            contentType: MediaType.parse(assignmentContentType(name)),
+          ),
+        );
+      }
+
+      // Sent through the screen's client so widget tests can inspect the
+      // multipart body without a live backend.
+      final streamed = await _client.send(request).timeout(
+        const Duration(seconds: 60),
+      );
+      final response = await http.Response.fromStream(streamed);
 
       if (!mounted) return;
 
@@ -449,6 +541,56 @@ class _TeacherAnnouncementsPageState extends State<TeacherAnnouncementsPage> {
                               fontSize: 12,
                               color: GlassColors.secondaryTextOf(context),
                             ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'Attachments (optional)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: GlassColors.headingOf(context),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          GlassOutlinedButton(
+                            onPressed: _posting ? null : _pickFiles,
+                            height: 46,
+                            borderRadius: 12,
+                            child: Text(
+                              _filesLabel,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: GlassColors.primaryBlue,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'PDF or video · up to 10 files · 100 MB each',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: GlassColors.secondaryTextOf(context),
+                                  ),
+                                ),
+                              ),
+                              if (_files.isNotEmpty)
+                                TextButton(
+                                  onPressed: _posting
+                                      ? null
+                                      : () => setState(
+                                          () => _files = const [],
+                                        ),
+                                  child: const Text(
+                                    'Clear',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                            ],
                           ),
                           if (_error != null) ...[
                             const SizedBox(height: 16),

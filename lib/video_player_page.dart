@@ -23,6 +23,7 @@ class VideoPlayerPage extends StatefulWidget {
     this.assignments = const [],
     this.initialIndex = 0,
     this.attachmentId,
+    this.sourceUrl,
     this.baseUrl,
     this.surfaceFactory,
   });
@@ -32,6 +33,10 @@ class VideoPlayerPage extends StatefulWidget {
   /// One video of a multi-attachment assignment. Null streams the primary
   /// file through the legacy route.
   final int? attachmentId;
+
+  /// A complete authorized URL, used by announcement attachments. Null streams
+  /// through the assignment routes, exactly as before.
+  final String? sourceUrl;
 
   /// The video assignments the list was showing, for Previous/Next. Empty (the
   /// default) means "just this one".
@@ -108,6 +113,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   /// The same route the PDF reader uses, so a video is only readable by the
   /// students the backend says may see that assignment.
   String _urlFor(Assignment assignment, String host) {
+    if (widget.sourceUrl != null) return widget.sourceUrl!;
     final attachmentId = _attachmentId;
     return attachmentId == null || attachmentId <= 0
         ? '$host/assignments/${assignment.id}/file'

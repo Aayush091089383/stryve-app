@@ -40,6 +40,8 @@ class AssignmentPdfViewerPage extends StatefulWidget {
     this.assignments = const [],
     this.initialIndex = 0,
     this.attachmentId,
+    this.sourceUrl,
+    this.heading = 'Assignment',
     this.client,
     this.load,
     this.savePdf,
@@ -52,6 +54,14 @@ class AssignmentPdfViewerPage extends StatefulWidget {
   /// through the legacy route; Previous/Next always moves between assignments
   /// and opens their primary files.
   final int? attachmentId;
+
+  /// A complete authorized URL, used by announcement attachments. Null reads
+  /// through the assignment routes, exactly as before.
+  final String? sourceUrl;
+
+  /// App-bar label. Announcement attachments pass "Announcement"; every
+  /// assignment caller keeps the original wording.
+  final String heading;
 
   /// Every assignment the list showed, in its display order.
   ///
@@ -179,6 +189,7 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
       client: widget.client,
       token: widget.token,
       attachmentId: _attachmentId,
+      sourceUrl: widget.sourceUrl,
     );
     final loader = widget.load ?? nativeService.load;
 
@@ -314,7 +325,7 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
         extendBodyBehindAppBar: !_isFullScreen,
         appBar: _isFullScreen
             ? null
-            : const GlassAppBar(title: Text('Assignment')),
+            : GlassAppBar(title: Text(widget.heading)),
         body: GlassBackground(
           child: SafeArea(
             // In full screen the document runs to the very top edge; the exit

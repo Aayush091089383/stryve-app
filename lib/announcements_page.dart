@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'announcement.dart';
+import 'assignment.dart';
+import 'assignment_pdf_viewer_page.dart';
 import 'config/environment.dart';
 import 'role_selection_page.dart';
 import 'services/auth_service.dart';
@@ -11,6 +13,7 @@ import 'student.dart';
 import 'utils/glass_container.dart';
 import 'utils/linkified_text.dart';
 import 'utils/motion.dart';
+import 'video_player_page.dart';
 
 /// The student's announcements feed: everything a teacher or admin posted for
 /// this student's class group, newest first.
@@ -174,7 +177,10 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
             for (final announcement in _announcements)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: _AnnouncementCard(announcement: announcement),
+                child: _AnnouncementCard(
+                  announcement: announcement,
+                  token: widget.student.token,
+                ),
               ),
           ],
         ),
@@ -279,9 +285,52 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
 
 /// One announcement, rendered as a glass card.
 class _AnnouncementCard extends StatelessWidget {
-  const _AnnouncementCard({required this.announcement});
+  const _AnnouncementCard({required this.announcement, required this.token});
 
   final Announcement announcement;
+
+  /// The student's bearer token, used only by the attachment readers - the
+  /// backend still decides whether this student may read the file.
+  final String token;
+
+  /// A stand-in [Assignment] so the existing PDF reader and video player can
+  /// open an announcement file without a parallel viewer. Its id is the
+  /// announcement's, and [sourceUrl] on the pages is what actually names the
+  /// file route.
+  Assignment _asAssignment(AssignmentAttachment file) {
+    return Assignment(
+      id: announcement.id,
+      subject: 'Announcement',
+      title: announcement.title,
+      description: announcement.message,
+      dueDate: announcement.postedLabel,
+      hasAttachment: true,
+      attachmentName: file.name,
+      attachments: [file],
+    );
+  }
+
+  void _openAttachment(
+    BuildContext context,
+    AssignmentAttachment file,
+  ) {
+    final assignment = _asAssignment(file);
+    final url = '${Environment.backendUrl}${announcement.filePath(file)}';
+    final Widget page = file.isVideo
+        ? VideoPlayerPage(
+            assignment: assignment,
+            token: token,
+            sourceUrl: url,
+          )
+        : AssignmentPdfViewerPage(
+            assignment: assignment,
+            token: token,
+            sourceUrl: url,
+            heading: 'Announcement',
+          );
+
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -353,6 +402,17 @@ class _AnnouncementCard extends StatelessWidget {
             ),
             linkStyle: const TextStyle(fontWeight: FontWeight.w600),
           ),
+          if (announcement.hasAttachments) ...[
+            const SizedBox(height: 12),
+            for (final file in announcement.attachments)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _AnnouncementAttachmentRow(
+                  file: file,
+                  onOpen: () => _openAttachment(context, file),
+                ),
+              ),
+          ],
           const SizedBox(height: 14),
           Row(
             children: [
@@ -386,4 +446,93 @@ class _AnnouncementCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// One attached file inside an announcement card: icon, name, size and the
+/// button that opens it in the matching reader.
+class _AnnouncementAttachmentRow extends StatelessWidget {
+  const _AnnouncementAttachmentRow({required this.file, required this.onOpen});
+
+  final AssignmentAttachment file;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final isVideo = file.isVideo;
+
+    return GlassContainer(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      margin: EdgeInsets.zero,
+      borderRadius: 12,
+      blurStrength: 8,
+      opacity: 0.6,
+      borderOpacity: 0.35,
+      child: Row(
+        children: [
+          Icon(
+            isVideo
+                ? Icons.play_circle_outline_rounded
+                : Icons.picture_as_pdf_outlined,
+            size: 22,
+            color: GlassColors.primaryBlue,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  file.name.isEmpty ? 'Attached file' : file.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: GlassColors.headingOf(context),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  formatAttachmentSize(file.fileSize),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: GlassColors.secondaryTextOf(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 108,
+            child: GlassOutlinedButton(
+              onPressed: onOpen,
+              height: 36,
+              borderRadius: 10,
+              borderColor: GlassColors.primaryBlue,
+              textColor: GlassColors.primaryBlue,
+              child: Text(
+                isVideo ? 'PLAY VIDEO' : 'READ PDF',
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  color: GlassColors.primaryBlue,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "824 KB", "8.1 MB", or "0 B" for the legacy rows that carried no size.
+String formatAttachmentSize(int bytes) {
+  if (bytes >= 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+  if (bytes >= 1024) return '${(bytes / 1024).round()} KB';
+  return '$bytes B';
 }

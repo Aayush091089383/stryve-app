@@ -1941,7 +1941,7 @@ announce_url = f"{BASE}/teacher/announcements"
 
 teacher_notice = requests.post(
     announce_url,
-    json={"title": "Delete me", "message": "Details at https://example.com/notice"},
+    data={"title": "Delete me", "message": "Details at https://example.com/notice"},
     headers=auth(plain_token),
     timeout=10,
 )
@@ -1999,7 +1999,7 @@ check(
 
 admin_notice = requests.post(
     announce_url,
-    json={"title": "Admin notice", "message": "Posted by a teacher"},
+    data={"title": "Admin notice", "message": "Posted by a teacher"},
     headers=auth(plain_token),
     timeout=10,
 )

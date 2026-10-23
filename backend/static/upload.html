@@ -619,7 +619,103 @@
 
   .announcement-body a { color: #9dbfff; text-decoration: underline; }
 
+  .announcement-files {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .announcement-file {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: rgba(8, 13, 25, 0.42);
+  }
+
+  .announcement-file svg { width: 16px; height: 16px; flex: none; color: #9dbfff; }
+
+  .announcement-file-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 12.5px;
+    overflow-wrap: anywhere;
+  }
+
+  .announcement-file-size {
+    flex: none;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
   .announcement-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+
+  /* In-page file viewer: a popup would be blocked often enough that the
+     attachment buttons would look broken. */
+  .file-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(3, 7, 15, 0.82);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+
+  .file-modal-card {
+    width: min(1000px, 100%);
+    max-height: calc(100vh - 48px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface-solid);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  }
+
+  .file-modal-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .file-modal-head strong {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+  }
+
+  .file-modal-body { flex: 1; min-height: 0; background: #05080f; }
+
+  .file-modal-body iframe,
+  .file-modal-body video {
+    display: block;
+    width: 100%;
+    height: min(76vh, 820px);
+    border: 0;
+    background: #000;
+  }
+
+  @media (max-width: 640px) {
+    .file-modal { padding: 10px; }
+    .file-modal-card { max-height: calc(100vh - 20px); }
+    .announcement-file { flex-wrap: wrap; }
+    .announcement-file-name { flex: 1 1 100%; }
+    .announcement-file-size { display: none; }
+  }
 
   .icon-btn.danger:hover:not(:disabled) {
     color: #ffc3c9;
@@ -1077,6 +1173,15 @@
                   </div>
                 </div>
 
+                <div class="field">
+                  <label for="annFiles">Attachments (optional)</label>
+                  <div class="file-drop">
+                    <input id="annFiles" type="file" multiple
+                           accept=".pdf,.mp4,.mov,.mkv,application/pdf,video/mp4,video/quicktime,video/x-matroska" />
+                    <p class="file-note">Up to 10 files · PDF or video (MP4, MOV, MKV) · up to 100 MB each</p>
+                  </div>
+                </div>
+
                 <button id="postAnnouncementBtn" class="block" type="submit">
                   <span class="spinner" id="postAnnouncementSpinner" hidden></span>
                   <span id="postAnnouncementLabel">Post announcement</span>
@@ -1213,6 +1318,16 @@
   </main>
 </div>
 
+<div class="file-modal" id="fileModal" hidden role="dialog" aria-modal="true" aria-labelledby="fileModalTitle">
+  <div class="file-modal-card">
+    <div class="file-modal-head">
+      <strong id="fileModalTitle"></strong>
+      <button class="ghost small" id="fileModalClose" type="button">Close</button>
+    </div>
+    <div class="file-modal-body" id="fileModalBody"></div>
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
@@ -1296,6 +1411,11 @@
   var announcementsList = document.getElementById("announcementsList");
   var announcementsMessage = document.getElementById("announcementsMessage");
   var refreshAnnouncementsBtn = document.getElementById("refreshAnnouncementsBtn");
+  var fileModal = document.getElementById("fileModal");
+  var fileModalTitle = document.getElementById("fileModalTitle");
+  var fileModalBody = document.getElementById("fileModalBody");
+  var fileModalClose = document.getElementById("fileModalClose");
+  var previewUrl = null;
 
   var profileGrid = document.getElementById("profileGrid");
   var profileMessage = document.getElementById("profileMessage");
@@ -2476,8 +2596,142 @@
     head.appendChild(actions);
     article.appendChild(head);
     article.appendChild(body);
+
+    if (Array.isArray(item.attachments) && item.attachments.length > 0) {
+      article.appendChild(buildAnnouncementFiles(item));
+    }
     return article;
   }
+
+  function buildAnnouncementFiles(item) {
+    var wrap = document.createElement("div");
+    wrap.className = "announcement-files";
+
+    item.attachments.forEach(function (attachment) {
+      var row = document.createElement("div");
+      row.className = "announcement-file";
+
+      var isVideo = /\.(mp4|mov|mkv)$/i.test(attachment.original_name || "");
+      var icon = document.createElement("span");
+      icon.innerHTML = isVideo
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+          'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+          '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+          'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+          '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 13h5"/><path d="M10 16h5"/></svg>';
+
+      var name = document.createElement("span");
+      name.className = "announcement-file-name";
+      name.textContent = attachment.original_name || "Attached file";
+
+      var size = document.createElement("span");
+      size.className = "announcement-file-size";
+      size.textContent = formatBytes(attachment.file_size);
+
+      var open = document.createElement("button");
+      open.type = "button";
+      open.className = "ghost small";
+      open.textContent = isVideo ? "Watch video" : "View PDF";
+      open.addEventListener("click", function () {
+        openAnnouncementFile(item, attachment, open);
+      });
+
+      row.appendChild(icon);
+      row.appendChild(name);
+      row.appendChild(size);
+      row.appendChild(open);
+      wrap.appendChild(row);
+    });
+
+    return wrap;
+  }
+
+  function formatBytes(bytes) {
+    var value = Number(bytes) || 0;
+    if (value >= 1024 * 1024) return (value / (1024 * 1024)).toFixed(1) + " MB";
+    if (value >= 1024) return Math.round(value / 1024) + " KB";
+    return value + " B";
+  }
+
+  // The download route requires the bearer token, so the file is fetched into a
+  // blob and shown in this page - the token never goes in a link, nothing is
+  // written to the server, and a popup blocker cannot break the button.
+  async function openAnnouncementFile(item, attachment, button) {
+    button.disabled = true;
+
+    try {
+      var response = await fetch(
+        "/announcements/" + item.id + "/files/" + attachment.id,
+        { headers: { Authorization: "Bearer " + token() } }
+      );
+
+      if (response.status === 401) { expired(); return; }
+
+      if (!response.ok) {
+        var body = await readJson(response);
+        showMessage(announcementsMessage,
+          errorText(body, "Could not open that file (" + response.status + ")."),
+          "error");
+        return;
+      }
+
+      var blob = await response.blob();
+      showFilePreview(attachment, blob);
+    } catch (error) {
+      showMessage(announcementsMessage, "Could not open that file. Check your connection.", "error");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function showFilePreview(attachment, blob) {
+    closeFilePreview();
+    previewUrl = URL.createObjectURL(blob);
+
+    var name = attachment.original_name || "Attached file";
+    fileModalTitle.textContent = name;
+    fileModalBody.textContent = "";
+
+    var isVideo = (blob.type || "").indexOf("video/") === 0 ||
+      /\.(mp4|mov|mkv)$/i.test(name);
+
+    var node;
+    if (isVideo) {
+      node = document.createElement("video");
+      node.controls = true;
+      node.autoplay = true;
+      node.src = previewUrl;
+    } else {
+      node = document.createElement("iframe");
+      node.src = previewUrl;
+      node.title = name;
+    }
+
+    fileModalBody.appendChild(node);
+    fileModal.hidden = false;
+    document.body.style.overflow = "hidden";
+    fileModalClose.focus();
+  }
+
+  function closeFilePreview() {
+    if (!fileModal || fileModal.hidden) return;
+    fileModal.hidden = true;
+    fileModalBody.textContent = "";
+    document.body.style.overflow = "";
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      previewUrl = null;
+    }
+  }
+
+  fileModalClose.addEventListener("click", closeFilePreview);
+  fileModal.addEventListener("click", function (event) {
+    if (event.target === fileModal) closeFilePreview();
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") closeFilePreview();
+  });
 
   // Deletion is permanent, so the trash icon turns into an inline confirmation
   // instead of removing the post on the first click.
@@ -2545,20 +2799,45 @@
     var message = document.getElementById("annMessage").value.trim();
     var year = document.getElementById("annYear").value;
     var division = document.getElementById("annDivision").value;
+    var fileInput = document.getElementById("annFiles");
+    var files = fileInput.files ? Array.prototype.slice.call(fileInput.files) : [];
 
     if (!title) { showMessage(announcementPostMessage, "Enter a title.", "error"); return; }
     if (!message) { showMessage(announcementPostMessage, "Write the announcement message.", "error"); return; }
+    if (files.length > MAX_FILES) {
+      showMessage(announcementPostMessage, "At most " + MAX_FILES + " files can be attached (you selected " + files.length + ").", "error");
+      return;
+    }
 
-    // Omitted, not null: an absent restriction is what makes a post readable by
-    // every student.
-    var payload = { title: title, message: message };
-    if (year) payload.year = parseInt(year, 10);
-    if (division) payload.division = division;
+    for (var index = 0; index < files.length; index++) {
+      var candidate = files[index];
+      var candidateLower = candidate.name.toLowerCase();
+      var candidateSuffix = candidateLower.slice(candidateLower.lastIndexOf("."));
+      if (ALLOWED.indexOf(candidateSuffix) === -1) {
+        showMessage(announcementPostMessage, "“" + candidate.name + "” is not a PDF, MP4, MOV or MKV file.", "error");
+        return;
+      }
+      if (candidate.size > MAX_BYTES) {
+        showMessage(announcementPostMessage, "“" + candidate.name + "” is larger than 100 MB. Compress it or choose a smaller file.", "error");
+        return;
+      }
+    }
+
+    // Multipart, not JSON: the endpoint takes Form fields plus optional files.
+    // Omitted restrictions mean "everyone", so they are only appended when set.
+    var form = new FormData();
+    form.append("title", title);
+    form.append("message", message);
+    if (year) form.append("year", year);
+    if (division) form.append("division", division);
+    for (var position = 0; position < files.length; position++) {
+      form.append("files", files[position], files[position].name);
+    }
 
     busy(announcementBtn, announcementSpinner, announcementLabel, true, "Posting…");
 
     try {
-      var result = await api("/teacher/announcements", { method: "POST", json: payload });
+      var result = await api("/teacher/announcements", { method: "POST", form: form });
 
       if (result.response.status === 401) { expired(); return; }
 
@@ -2570,7 +2849,9 @@
       }
 
       announcementForm.reset();
-      var saved = result.body && result.body.id ? result.body : payload;
+      var saved = result.body && result.body.id
+        ? result.body
+        : { title: title, year: year ? parseInt(year, 10) : null, division: division || null };
       var audience = audienceLabel(saved);
       showMessage(announcementPostMessage,
         "Posted “" + (saved.title || title) + "” to " +

@@ -68,7 +68,6 @@ from schemas import (
     AssignmentOut,
     AssignmentUpdate,
     NotificationOut,
-    AnnouncementCreate,
     AnnouncementOut,
     DeviceTokenRegister,
     DeviceTokenOut,
@@ -1053,31 +1052,120 @@ def mark_notification_read(
     status_code=status.HTTP_201_CREATED,
 )
 def create_announcement(
-    payload: AnnouncementCreate,
+    title: str = Form(...),
+    message: str = Form(...),
+    year: int | None = Form(None),
+    division: str = Form(""),
+    files: list[UploadFile] = File(default=[]),
     teacher: models.Teacher = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
-    """Post an announcement to the student feed.
+    """Post an announcement to the student feed, with optional files.
 
     Any active teacher or admin account may post - this is a normal part of
     teaching here, so there is no separate permission to grant. The author is
     the authenticated account, never a client-supplied id.
 
     ``year``/``division`` are optional restrictions: leaving both out posts to
-    every student, leaving one out keeps the other.
+    every student, leaving one out keeps the other. Attachments use the same
+    directory, magic-byte check and per-file size limit as assignment uploads;
+    a file that fails anywhere is not stored, and a later failure removes the
+    files already written.
     """
+    clean_title = title.strip()
+    if not clean_title or len(clean_title) > 200:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Title is required and must be at most 200 characters",
+        )
+
+    clean_message = message.strip()
+    if not clean_message or len(clean_message) > 5000:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Message is required and must be at most 5000 characters",
+        )
+
+    if year is not None and not 1 <= year <= 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Year must be between 1 and 5, or omitted",
+        )
+
+    clean_division = division.strip().upper()
+    if len(clean_division) > 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Division must be at most 8 characters, or omitted",
+        )
+
+    uploads = [item for item in (files or []) if item is not None]
+    if len(uploads) > MAX_ASSIGNMENT_ATTACHMENTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "At most "
+                f"{MAX_ASSIGNMENT_ATTACHMENTS} files can be attached to one "
+                "announcement"
+            ),
+        )
+
+    max_bytes = max(1, settings.MAX_ASSIGNMENT_FILE_MB) * 1024 * 1024
+    upload_dir = settings.upload_path
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    # (path, stored name, display name, size) for every file already written.
+    # Any failure below removes them again, so a refused post leaves nothing
+    # behind and no announcement without its files is saved.
+    stored_files: list[tuple[Path, str, str, int]] = []
+    try:
+        for upload in uploads:
+            data, media_kind = _validated_upload_bytes(upload, max_bytes)
+            stored_name = f"{uuid.uuid4().hex}{_MEDIA_EXTENSIONS[media_kind]}"
+            (upload_dir / stored_name).write_bytes(data)
+            stored_files.append(
+                (
+                    upload_dir / stored_name,
+                    stored_name,
+                    _safe_display_name(upload.filename),
+                    len(data),
+                )
+            )
+    except HTTPException:
+        for path, *_ in stored_files:
+            path.unlink(missing_ok=True)
+        raise
+
     announcement = models.Announcement(
-        title=payload.title,
-        message=payload.message,
+        title=clean_title,
+        message=clean_message,
         author_id=teacher.id,
         created_at=datetime.utcnow(),
-        year=payload.year,
-        division=payload.division,
+        year=year,
+        division=clean_division or None,
     )
+    announcement.attachments = [
+        models.AnnouncementAttachment(
+            stored_name=stored_name,
+            original_name=original_name,
+            file_size=size,
+        )
+        for _stored_path, stored_name, original_name, size in stored_files
+    ]
 
-    db.add(announcement)
-    db.commit()
-    db.refresh(announcement)
+    try:
+        db.add(announcement)
+        db.commit()
+        db.refresh(announcement)
+    except IntegrityError:
+        db.rollback()
+        for path, *_ in stored_files:
+            path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not save the announcement - please try again",
+        )
+
     return announcement
 
 
@@ -1132,9 +1220,89 @@ def delete_announcement(
             detail="You can only delete announcements you posted",
         )
 
+    # The notice and its files go together: deleting the row must not leave
+    # unreachable PDFs/videos behind on disk.
+    for attachment in announcement.attachments:
+        (settings.upload_path / attachment.stored_name).unlink(missing_ok=True)
+
     db.delete(announcement)
     db.commit()
     return {"message": "Announcement deleted", "announcement_id": announcement_id}
+
+
+@app.get("/announcements/{announcement_id}/files/{file_id}")
+def download_announcement_attachment(
+    announcement_id: int,
+    file_id: int,
+    actor: tuple = Depends(get_current_actor),
+    db: Session = Depends(get_db),
+):
+    """Download one file attached to an announcement.
+
+    The file id alone grants nothing: the attachment must belong to the
+    announcement, and the caller must be allowed to read that notice. Students
+    follow the feed's audience rule (year/division); a teacher may read a file
+    only from their own post, an admin from any. The stored name is a
+    server-generated flat name and is never taken from the client.
+    """
+    role, account = actor
+
+    announcement = db.query(models.Announcement).filter(
+        models.Announcement.id == announcement_id
+    ).first()
+    if not announcement:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Announcement not found",
+        )
+
+    attachment = next(
+        (row for row in announcement.attachments if row.id == file_id),
+        None,
+    )
+    if attachment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This announcement has no file with that id",
+        )
+
+    if role == "student":
+        allowed = (
+            (announcement.year is None or announcement.year == account.year)
+            and (
+                not announcement.division
+                or (announcement.division or "").upper()
+                == (account.division or "").upper()
+            )
+        )
+    else:
+        allowed = account.role == "admin" or announcement.author_id == account.id
+
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not permitted to download this announcement file",
+        )
+
+    stored_name = attachment.stored_name
+    if Path(stored_name).name != stored_name:
+        # Defensive: a stored name must never be a path.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Invalid stored file"
+        )
+
+    path = settings.upload_path / stored_name
+    if not path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The stored file is no longer available",
+        )
+
+    return _file_response(
+        path,
+        attachment.original_name
+        or f"announcement-{announcement.id}{path.suffix.lower()}",
+    )
 
 
 @app.get("/announcements", response_model=list[AnnouncementOut])

@@ -1,3 +1,5 @@
+import 'assignment.dart';
+
 /// One announcement as the student feed and the poster's confirmation see it.
 ///
 /// The model lives on its own so the student feed ([AnnouncementsPage]) and the
@@ -23,6 +25,10 @@ class Announcement {
   final int? year;
   final String? division;
 
+  /// PDFs/videos posted with the notice, in upload order. Empty for a text-only
+  /// announcement, which is what every post was before files were supported.
+  final List<AssignmentAttachment> attachments;
+
   const Announcement({
     required this.id,
     required this.title,
@@ -32,9 +38,11 @@ class Announcement {
     required this.createdAt,
     this.year,
     this.division,
+    this.attachments = const [],
   });
 
   factory Announcement.fromJson(Map<String, dynamic> json) {
+    final raw = json['attachments'];
     return Announcement(
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: (json['title'] as String?) ?? '',
@@ -44,8 +52,30 @@ class Announcement {
       createdAt: (json['created_at'] as String?) ?? '',
       year: (json['year'] as num?)?.toInt(),
       division: json['division'] as String?,
+      attachments: raw is List
+          ? raw
+                .whereType<Map<String, dynamic>>()
+                .map(AssignmentAttachment.fromJson)
+                .toList()
+          : const [],
     );
   }
+
+  /// True when at least one PDF or video is attached.
+  bool get hasAttachments => attachments.isNotEmpty;
+
+  /// The first file, or null when the notice is text-only.
+  AssignmentAttachment? get primaryFile =>
+      attachments.isEmpty ? null : attachments.first;
+
+  /// The kind of the first attachment, mirroring [Assignment]. The feed still
+  /// checks each file individually, because one notice can carry both kinds.
+  bool get isVideo => primaryFile?.isVideo ?? false;
+  bool get isPdf => primaryFile?.isPdf ?? false;
+
+  /// Authorized download path for one of this notice's files.
+  String filePath(AssignmentAttachment file) =>
+      '/announcements/$id/files/${file.id}';
 
   /// True when the post is limited to one year or one division.
   bool get isRestricted => year != null || division != null;
