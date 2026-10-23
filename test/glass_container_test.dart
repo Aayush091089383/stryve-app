@@ -7,8 +7,12 @@
 //   halo around the pill, biased towards the bottom edge;
 // * the default (no shadowColor override) still draws both layers, so the fix
 //   cannot silently flatten every other glass surface in the app;
-// * `useBlur: false` drops the backdrop filter but keeps the painted surface,
-//   which is how Profile's six cards give up the filter without going flat.
+// * no surface runs a backdrop filter: the faux-glass gradient replaced it in
+//   both themes, and a nested tile behind a card no longer costs a second
+//   clip + blur pass;
+// * the light fill is the faux-glass gradient (white 0.85 -> 0.65), and
+//   `useBlur: false` still paints that surface without changing the shadow
+//   contract.
 //
 // Safety: pure widget test, no backend, no database.
 
@@ -60,7 +64,7 @@ void main() {
     expect(decoration.border, isNotNull);
   });
 
-  testWidgets('a nested surface does not blur the already-blurred parent', (
+  testWidgets('neither a parent nor a nested surface runs a backdrop filter', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -75,27 +79,26 @@ void main() {
 
     final surfaces = find.byType(GlassContainer);
     expect(surfaces, findsNWidgets(2));
+    expect(find.byType(BackdropFilter), findsNothing);
 
-    // The parent card filters the backdrop exactly once...
-    expect(
-      find.descendant(
-        of: surfaces.first,
-        matching: find.byType(BackdropFilter),
-      ),
-      findsOneWidget,
-    );
-    // ...and the inner chip, sitting on that already-blurred surface, adds no
-    // second filter (it used to: a full clip + blur pass each).
-    expect(
-      find.descendant(
-        of: surfaces.last,
-        matching: find.byType(BackdropFilter),
-      ),
-      findsNothing,
-    );
+    // Both paint the faux-glass fill, so the inner tile still reads as glass.
+    for (var index = 0; index < 2; index++) {
+      final container = tester.widget<Container>(
+        find
+            .descendant(
+              of: surfaces.at(index),
+              matching: find.byType(Container),
+            )
+            .first,
+      );
+      expect(
+        (container.decoration! as BoxDecoration).gradient,
+        isA<LinearGradient>(),
+      );
+    }
   });
 
-  testWidgets('a standalone surface still blurs its own backdrop', (
+  testWidgets('the light fill is a white faux-glass gradient', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -106,7 +109,17 @@ void main() {
       ),
     );
 
-    expect(find.byType(BackdropFilter), findsOneWidget);
+    expect(find.byType(BackdropFilter), findsNothing);
+
+    final gradient = glassDecoration(tester).gradient! as LinearGradient;
+    expect(gradient.begin, Alignment.topLeft);
+    expect(gradient.end, Alignment.bottomRight);
+    expect(gradient.colors, hasLength(3));
+    // White at 85% down to 65%: bright enough for the navy text to stay
+    // readable, faint enough to keep the page gradient behind it.
+    expect(gradient.colors.first, Colors.white.withValues(alpha: 0.85));
+    expect(gradient.colors.last, Colors.white.withValues(alpha: 0.65));
+    expect(gradient.colors[1].a, inInclusiveRange(0.65, 0.85));
   });
 
   testWidgets('the default surface still draws both shadow layers', (
@@ -145,7 +158,7 @@ void main() {
 
     expect(find.byType(BackdropFilter), findsNothing);
     final decoration = glassDecoration(tester);
-    expect(decoration.gradient, isNotNull);
+    expect(decoration.gradient, isA<LinearGradient>());
     expect(decoration.border, isNotNull);
     expect(decoration.boxShadow, hasLength(2));
   });

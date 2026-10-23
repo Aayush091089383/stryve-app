@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'dart:ui';
-
 import 'motion.dart';
 
 /// Color constants for the light-blue glassmorphism theme.
@@ -40,24 +38,12 @@ class GlassColors {
       Theme.of(context).brightness == Brightness.dark ? darkBorder : border;
 }
 
-/// Marks the content painted *on top of* a glass surface.
-///
-/// The engine can perform one shared backdrop blur for several [BackdropFilter]
-/// widgets that use the same backdrop key, but filters that overlap each other
-/// must not share a key: the overlapping region would then be filtered only
-/// once. [GlassContainer] is used nested - a small glass tile inside a glass
-/// card - so each surface marks its own child here. A nested surface therefore
-/// keeps its own private blur, exactly as it always had, while the sibling
-/// surfaces around it can share one.
-class _NestedGlass extends InheritedWidget {
-  const _NestedGlass({required super.child});
-
-  @override
-  bool updateShouldNotify(_NestedGlass oldWidget) => false;
-}
-
 /// A reusable glassmorphism container with configurable properties.
-/// Provides frosted-glass blur, thin borders, rounded corners, and subtle shadows.
+///
+/// The frosted look is painted, not filtered: a near-white gradient provides
+/// the milky depth of glass without a per-frame [BackdropFilter], so a screen
+/// full of these surfaces scrolls smoothly on modest hardware. Thin borders,
+/// rounded corners and subtle shadows complete the material.
 class GlassContainer extends StatelessWidget {
   const GlassContainer({
     super.key,
@@ -94,22 +80,13 @@ class GlassContainer extends StatelessWidget {
   final VoidCallback? onTap;
   final BorderRadiusGeometry? borderRadiusGeometry;
 
-  /// Render this surface's cut-out in its own save layer, which collapses the
-  /// fill edge and the clip edge into one antialiased edge (see the note in
-  /// [build]). Costs an extra offscreen pass per frame, so it is off by default
-  /// and only the surfaces whose edge reads as a border ask for it.
+  /// Retained for source compatibility: the surface no longer clips a backdrop
+  /// filter, so there is no cut-out to render in a save layer.
   final bool useSaveLayer;
 
-  /// Filter the backdrop behind this surface.
-  ///
-  /// A [BackdropFilter] is a full blur pass over the surface's area every
-  /// frame, and its cost grows with the sigma squared. On a screen made of
-  /// several large cards that is the difference between one vsync and two or
-  /// three once the GPU clocks down, so a page may trade the filter for a flat
-  /// tint: with `useBlur: false` the surface paints its gradient, border and
-  /// shadow exactly as before and simply never filters what is behind it.
-  ///
-  /// Defaults to true, so surfaces keep blurring unless their screen opts out.
+  /// Retained for source compatibility. Every surface used to run a
+  /// [BackdropFilter]; the faux-glass fill replaced it, so this flag no longer
+  /// changes what is painted.
   final bool useBlur;
 
   @override
@@ -128,9 +105,11 @@ class GlassContainer extends StatelessWidget {
             ? Colors.black.withValues(alpha: 0.35)
             : GlassColors.heading.withValues(alpha: 0.08));
 
-    // Light mode keeps the translucent gradient. Dark mode paints one solid
-    // tint: a dark gradient at these alphas is visually indistinguishable from
-    // a flat colour, but it still costs a shader fill on every surface.
+    // Light mode paints the faux-glass fill: a near-white gradient that keeps
+    // the milky depth of frosted glass without filtering the backdrop. The
+    // endpoints are fixed (white 0.85 -> 0.65) so every card has the same
+    // readable base; the caller's [opacity] only shades the middle stop. Dark
+    // mode paints its solid tint exactly as before.
     final effectiveGradient =
         gradient ??
         (isDark
@@ -139,119 +118,58 @@ class GlassContainer extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  GlassColors.surface.withValues(alpha: opacity + 0.1),
-                  GlassColors.surface.withValues(alpha: opacity),
-                  GlassColors.surface.withValues(alpha: opacity + 0.05),
+                  Colors.white.withValues(alpha: 0.85),
+                  Colors.white.withValues(
+                    alpha: opacity.clamp(0.65, 0.85).toDouble(),
+                  ),
+                  Colors.white.withValues(alpha: 0.65),
                 ],
               ));
     final effectiveFill = isDark ? GlassColors.darkSurface : null;
 
-    // Sibling glass surfaces - the cards of one scrolling list - can share a
-    // single backdrop blur instead of each filtering the backdrop again. A
-    // surface painted on top of another one must not: sharing the key would
-    // filter the overlapping part only once and change how it looks, so a
-    // nested surface keeps the private blur it has always used, via the marker
-    // [_NestedGlass] that every surface puts above its own content.
-    //
-    // `BackdropFilter.grouped` resolves the nearest [BackdropGroup] and falls
-    // back to a private blur when there is none, so a screen that has no group
-    // renders exactly as it did before this change.
-    final isNested =
-        context.dependOnInheritedWidgetOfExactType<_NestedGlass>() != null;
-    final blur = ImageFilter.blur(sigmaX: blurStrength, sigmaY: blurStrength);
-
-    final surface = _NestedGlass(
-      child: Container(
-        width: width,
-        height: height,
-        padding: padding,
-        margin: margin,
-        decoration: BoxDecoration(
-          borderRadius: effectiveBorderRadius,
-          color: effectiveFill,
-          gradient: effectiveGradient,
-          // A transparent border is not the same as no border: it still takes
-          // 1px of the surface, insets the gradient by it and leaves a ring
-          // where only the blurred backdrop shows - which reads as an outline
-          // on the floating nav pill (the two callers that pass
-          // `borderColor: Colors.transparent` mean "no outline at all").
-          border: effectiveBorderColor.a == 0
-              ? null
-              : Border.all(color: effectiveBorderColor, width: 1),
-          // When the caller passes a fully-transparent shadowColor, both shadow
-          // layers are skipped (otherwise the hardcoded secondary layer would
-          // still render, defeating the caller's intent).
-          boxShadow: effectiveShadowColor.a == 0
-              ? const <BoxShadow>[]
-              : [
-                  BoxShadow(
-                    color: effectiveShadowColor,
-                    blurRadius: 20,
-                    offset: const Offset(0, 4),
-                    spreadRadius: -2,
-                  ),
-                  BoxShadow(
-                    color: isDark
-                        ? Colors.black.withValues(alpha: 0.25)
-                        : GlassColors.heading.withValues(alpha: 0.04),
-                    blurRadius: 40,
-                    offset: const Offset(0, 8),
-                    spreadRadius: -4,
-                  ),
-                ],
-        ),
-        child: child,
-      ),
-    );
-
-    // A nested surface sits on top of an already-blurred parent card, so its
-    // own backdrop filter only re-blurs a blur - it changes nothing visible
-    // but costs a full clip + blur pass per surface (7 of Home's 15 filters
-    // were exactly this). Nested surfaces therefore paint their surface
-    // directly; the parent card still blurs everything behind it.
-    //
-    // The two clips are deliberate. A single ClipRRect makes the backdrop
-    // filter stop exactly on its antialiased edge, and those half-covered
-    // pixels let the *unblurred* backdrop through as a 1px seam that reads as
-    // a border on the nav pill and the cards. So the filter is clipped by an
-    // inner shape expanded by 2px - its own AA edge then falls outside the
-    // view - and the exact shape is cut by the outer ClipRRect.
-    //
-    // Cutting the surface out in its own save layer collapses the two edges
-    // into one antialiased edge, which is what removes the hairline: the fill
-    // and the clip are the *same* rounded rect, so with plain antialiasing both
-    // of their edges blend into the backdrop at the same pixels and no inner
-    // expansion can help - the two edges coincide whatever the radius. The
-    // extra layer is opt-in (`useSaveLayer`) because it is one offscreen render
-    // per surface per frame: only the surface whose edge is actually read as a
-    // border over scrolling content - the floating nav pill - pays for it, and
-    // the cards keep the cheaper exact clip.
-    //
-    // `useBlur: false` takes the same shortcut for a different reason: the
-    // page has asked for a flat tint, so there is no filter to run at all.
-    // Dark mode never runs the backdrop filter: the surfaces are opaque solid
-    // tints, so filtering what is behind them would be invisible work on every
-    // frame - exactly the cost the dark theme exists to avoid.
-    final glassWidget = isNested || !useBlur || isDark
-        ? surface
-        : ClipRRect(
-            clipBehavior: useSaveLayer
-                ? Clip.antiAliasWithSaveLayer
-                : Clip.antiAlias,
-            // Outer exact clip: masks the expanded inner clip.
-            borderRadius: effectiveBorderRadius,
-            child: ClipPath(
-              // Inner expanded clip: pushes the AA seam out of view.
-              clipper: ShapeBorderClipper(
-                shape: RoundedRectangleBorder(
-                  borderRadius: effectiveBorderRadius
-                      .resolve(TextDirection.ltr)
-                      .add(const BorderRadius.all(Radius.circular(2.0))),
+    final glassWidget = Container(
+      width: width,
+      height: height,
+      padding: padding,
+      margin: margin,
+      // Clips the child to the rounded surface, as the old backdrop-filter
+      // clip did. This is a plain antialiased clip, not an offscreen layer.
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: effectiveBorderRadius,
+        color: effectiveFill,
+        gradient: effectiveGradient,
+        // A transparent border is not the same as no border: it still takes
+        // 1px of the surface and insets the fill by it, which reads as an
+        // outline on the floating nav pill (the two callers that pass
+        // `borderColor: Colors.transparent` mean "no outline at all").
+        border: effectiveBorderColor.a == 0
+            ? null
+            : Border.all(color: effectiveBorderColor, width: 1),
+        // When the caller passes a fully-transparent shadowColor, both shadow
+        // layers are skipped (otherwise the hardcoded secondary layer would
+        // still render, defeating the caller's intent).
+        boxShadow: effectiveShadowColor.a == 0
+            ? const <BoxShadow>[]
+            : [
+                BoxShadow(
+                  color: effectiveShadowColor,
+                  blurRadius: 20,
+                  offset: const Offset(0, 4),
+                  spreadRadius: -2,
                 ),
-              ),
-              child: BackdropFilter.grouped(filter: blur, child: surface),
-            ),
-          );
+                BoxShadow(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.25)
+                      : GlassColors.heading.withValues(alpha: 0.04),
+                  blurRadius: 40,
+                  offset: const Offset(0, 8),
+                  spreadRadius: -4,
+                ),
+              ],
+      ),
+      child: child,
+    );
 
     if (onTap != null) {
       return _PressFeedback(
@@ -344,8 +262,7 @@ class GlassCard extends StatelessWidget {
   final VoidCallback? onTap;
   final BorderRadiusGeometry? borderRadiusGeometry;
 
-  /// See [GlassContainer.useBlur]: set false to paint a flat tint with no
-  /// backdrop filter, for the large repeated surfaces of one screen.
+  /// Retained for source compatibility; see [GlassContainer.useBlur].
   final bool useBlur;
 
   @override

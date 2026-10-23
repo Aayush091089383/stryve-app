@@ -180,7 +180,7 @@ void main() {
       );
     });
 
-    testWidgets('the light theme still blurs and keeps its gradient', (
+    testWidgets('the light theme paints faux glass and runs no blur', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -190,7 +190,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(BackdropFilter), findsOneWidget);
+      expect(find.byType(BackdropFilter), findsNothing);
       final context = tester.element(find.byType(GlassCard));
       expect(GlassColors.headingOf(context), GlassColors.heading);
       expect(
@@ -204,7 +204,11 @@ void main() {
                   .first,
             )
             .decoration,
-        isA<BoxDecoration>().having((d) => d.gradient, 'gradient', isNotNull),
+        isA<BoxDecoration>().having(
+          (d) => d.gradient,
+          'gradient',
+          isA<LinearGradient>(),
+        ),
       );
     });
   });
