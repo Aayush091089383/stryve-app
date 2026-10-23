@@ -265,6 +265,64 @@
     border: 1px solid rgba(251, 191, 36, 0.22);
   }
 
+  .assignment-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(8, 13, 25, 0.45);
+  }
+
+  .assignment-row + .assignment-row { margin-top: 10px; }
+
+  .assignment-info { min-width: 0; }
+
+  .assignment-info strong {
+    display: block;
+    font-size: 14.5px;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+
+  .assignment-info span {
+    display: block;
+    margin-top: 3px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .edit-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .edit-form input[type="text"] { flex: 2 1 220px; }
+  .edit-form input[type="date"] { flex: 1 1 150px; }
+
+  /* The global button rule is full width; the inline actions are not. */
+  .edit-form button {
+    width: auto;
+    margin: 0;
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  .section-head h2 { margin: 0; }
+
   footer {
     margin-top: 26px;
     text-align: center;
@@ -402,6 +460,17 @@
     <div id="uploadMessage" class="message" role="status" aria-live="polite"></div>
   </section>
 
+  <!-- ------------------------------------------------ recent uploads -->
+  <section class="card" id="recentCard" hidden>
+    <div class="section-head">
+      <h2>Recent uploads</h2>
+      <button class="secondary" id="refreshMineBtn" type="button">Refresh</button>
+    </div>
+    <p class="hint">Your latest uploads. Editing the due date changes the order students see them in.</p>
+    <div id="recentList"></div>
+    <div id="recentMessage" class="message" role="status" aria-live="polite"></div>
+  </section>
+
   <footer>Stryve · served by the CampusSync backend</footer>
 </div>
 
@@ -431,6 +500,11 @@
   var logoutBtn = document.getElementById("logoutBtn");
   var whoName = document.getElementById("whoName");
   var whoRole = document.getElementById("whoRole");
+  var recentCard = document.getElementById("recentCard");
+  var recentList = document.getElementById("recentList");
+  var recentMessage = document.getElementById("recentMessage");
+  var refreshMineBtn = document.getElementById("refreshMineBtn");
+  var myAssignments = [];
 
   function token() {
     try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
@@ -487,14 +561,20 @@
   function showUpload() {
     loginCard.hidden = true;
     uploadCard.hidden = false;
+    recentCard.hidden = false;
     whoName.textContent = remember(NAME_KEY) || "Signed in";
     var role = remember(ROLE_KEY);
     whoRole.textContent = role ? role.charAt(0).toUpperCase() + role.slice(1) + " account" : "";
+    loadMine();
   }
 
   function showLogin() {
     uploadCard.hidden = true;
+    recentCard.hidden = true;
     loginCard.hidden = false;
+    myAssignments = [];
+    recentList.textContent = "";
+    hideMessage(recentMessage);
     var email = document.getElementById("email");
     if (email) email.focus();
   }
@@ -646,6 +726,7 @@
         document.getElementById("title").value = "";
         document.getElementById("description").value = "";
         document.getElementById("file").value = "";
+        loadMine();
       } else if (response.status === 401) {
         clearSession();
         showLogin();
@@ -663,6 +744,177 @@
       busy(uploadBtn, uploadSpinner, uploadLabel, false, "Upload assignment");
     }
   });
+
+  // ------------------------------------------------------- recent uploads
+  async function loadMine() {
+    var current = token();
+    if (!current) return;
+    hideMessage(recentMessage);
+    refreshMineBtn.disabled = true;
+
+    try {
+      var response = await fetch("/teacher/assignments/mine", {
+        headers: { Authorization: "Bearer " + current }
+      });
+
+      if (response.status === 401) {
+        clearSession();
+        showLogin();
+        showMessage(loginMessage, "Your session ended. Sign in again.", "info");
+        return;
+      }
+
+      var body = await readJson(response);
+      if (!response.ok) {
+        showMessage(recentMessage, errorText(body, "Could not load your assignments (" + response.status + ")."), "error");
+        return;
+      }
+
+      myAssignments = Array.isArray(body) ? body : [];
+      renderRecent();
+    } catch (error) {
+      showMessage(recentMessage, "Could not load your assignments. Check your connection.", "error");
+    } finally {
+      refreshMineBtn.disabled = false;
+    }
+  }
+
+  function renderRecent() {
+    recentList.textContent = "";
+
+    if (myAssignments.length === 0) {
+      var empty = document.createElement("p");
+      empty.className = "hint";
+      empty.textContent = "No assignments uploaded yet.";
+      recentList.appendChild(empty);
+      return;
+    }
+
+    myAssignments.forEach(function (item) {
+      recentList.appendChild(buildRow(item));
+    });
+  }
+
+  function buildRow(item) {
+    var row = document.createElement("div");
+    row.className = "assignment-row";
+
+    var info = document.createElement("div");
+    info.className = "assignment-info";
+    var title = document.createElement("strong");
+    title.textContent = item.title || "(untitled)";
+    var meta = document.createElement("span");
+    meta.textContent = (item.subject || "Assignment") + " · due " + (item.due_date || "—");
+    info.appendChild(title);
+    info.appendChild(meta);
+
+    var edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "secondary";
+    edit.textContent = "Edit";
+    edit.addEventListener("click", function () {
+      openEditor(row, item);
+    });
+
+    row.appendChild(info);
+    row.appendChild(edit);
+    return row;
+  }
+
+  // Inline editor: title + due date only. Subject/year/division decide who can
+  // see the assignment and the backend does not accept them on PATCH.
+  function openEditor(row, item) {
+    row.textContent = "";
+
+    var form = document.createElement("form");
+    form.className = "edit-form";
+
+    var titleInput = document.createElement("input");
+    titleInput.type = "text";
+    titleInput.maxLength = 200;
+    titleInput.value = item.title || "";
+    titleInput.required = true;
+    titleInput.setAttribute("aria-label", "Assignment title");
+
+    var dateInput = document.createElement("input");
+    dateInput.type = "date";
+    dateInput.value = item.due_date || "";
+    dateInput.required = true;
+    dateInput.setAttribute("aria-label", "Due date");
+
+    var save = document.createElement("button");
+    save.type = "submit";
+    save.textContent = "Save";
+
+    var cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "secondary";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", function () {
+      row.replaceWith(buildRow(item));
+    });
+
+    form.appendChild(titleInput);
+    form.appendChild(dateInput);
+    form.appendChild(save);
+    form.appendChild(cancel);
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+
+      var newTitle = titleInput.value.trim();
+      var newDate = dateInput.value;
+      if (!newTitle) { showMessage(recentMessage, "Enter a title.", "error"); return; }
+      if (!newDate) { showMessage(recentMessage, "Choose a due date.", "error"); return; }
+
+      save.disabled = true;
+      save.textContent = "Saving…";
+
+      try {
+        var response = await fetch("/teacher/assignments/" + item.id, {
+          method: "PATCH",
+          headers: {
+            Authorization: "Bearer " + token(),
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ title: newTitle, due_date: newDate })
+        });
+        var body = await readJson(response);
+
+        if (response.status === 401) {
+          clearSession();
+          showLogin();
+          showMessage(loginMessage, "Your session ended. Sign in again.", "info");
+          return;
+        }
+
+        if (!response.ok) {
+          showMessage(recentMessage, errorText(body, "Could not save the changes (" + response.status + ")."), "error");
+          save.disabled = false;
+          save.textContent = "Save";
+          return;
+        }
+
+        var updated = body && body.id ? body : Object.assign({}, item, {
+          title: newTitle,
+          due_date: newDate
+        });
+        myAssignments = myAssignments.map(function (entry) {
+          return entry.id === updated.id ? updated : entry;
+        });
+        row.replaceWith(buildRow(updated));
+        showMessage(recentMessage, "Updated “" + updated.title + "”, due " + updated.due_date + ".", "success");
+      } catch (error) {
+        showMessage(recentMessage, "Could not save the changes. Check your connection.", "error");
+        save.disabled = false;
+        save.textContent = "Save";
+      }
+    });
+
+    row.appendChild(form);
+  }
+
+  refreshMineBtn.addEventListener("click", loadMine);
 
   // ------------------------------------------------------- restore session
   (async function restore() {

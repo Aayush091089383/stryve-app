@@ -248,6 +248,21 @@ class AssignmentOut(BaseModel):
         from_attributes = True
 
 
+class AssignmentUpdate(BaseModel):
+    """Fields a teacher may change on an assignment they uploaded.
+
+    Every field is optional so one PATCH can move only the due date. A field
+    that is present is validated by the endpoint with the same rules the upload
+    route uses: the subject, year, division, batch and files are deliberately
+    not editable here, so an edit never changes which students can see the
+    assignment.
+    """
+
+    title: str | None = None
+    description: str | None = None
+    due_date: str | None = None
+
+
 class NotificationOut(BaseModel):
     """One student-visible notification.
 

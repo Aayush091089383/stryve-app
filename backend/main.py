@@ -66,6 +66,7 @@ from schemas import (
     ApprovalActionResponse,
     TimetableEntryOut,
     AssignmentOut,
+    AssignmentUpdate,
     NotificationOut,
     AnnouncementCreate,
     AnnouncementOut,
@@ -2862,6 +2863,82 @@ def list_my_uploaded_assignments(
         .order_by(models.Assignment.id.desc())
         .all()
     )
+
+
+@app.patch("/teacher/assignments/{assignment_id}", response_model=AssignmentOut)
+def update_uploaded_assignment(
+    assignment_id: int,
+    payload: AssignmentUpdate,
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Change the title, instructions or due date of one assignment.
+
+    Only the account that uploaded it (or an admin) may edit it, exactly like
+    DELETE. A field left out of the body is not touched; a field that IS sent
+    is validated with the upload route's limits, so a PATCH cannot store a
+    title or instructions an upload would have refused.
+
+    Subject, year, division, batch and the files are not editable: changing
+    those would change which students can see the assignment (and the file it
+    serves), which is a different operation. Moving the due date is enough to
+    reorder the student's list, because the app sorts by due date.
+    """
+    assignment = db.query(models.Assignment).filter(
+        models.Assignment.id == assignment_id
+    ).first()
+
+    if not assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No uploaded assignment with that id",
+        )
+
+    if assignment.uploaded_by != teacher.id and teacher.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only edit assignments you uploaded",
+        )
+
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide at least one of title, description or due_date",
+        )
+
+    if "title" in changes:
+        clean_title = (changes["title"] or "").strip()
+        if not clean_title or len(clean_title) > 200:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Title is required and must be at most 200 characters",
+            )
+        assignment.title = clean_title
+
+    if "description" in changes:
+        clean_description = (changes["description"] or "").strip()
+        if len(clean_description) > 2000:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Instructions must be at most 2000 characters",
+            )
+        # Empty means "no instructions", matching what an upload stores.
+        assignment.description = clean_description or None
+
+    if "due_date" in changes:
+        if not (changes["due_date"] or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A due date is required",
+            )
+        assignment.due_date = _parse_date(changes["due_date"]).strftime(
+            "%Y-%m-%d"
+        )
+
+    db.commit()
+    db.refresh(assignment)
+    return assignment
 
 
 @app.delete("/teacher/assignments/{assignment_id}")

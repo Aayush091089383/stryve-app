@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -158,6 +160,7 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
   bool _isUploading = false;
   String? _loadError;
   int? _deletingId;
+  int? _editingId;
 
   @override
   void initState() {
@@ -392,6 +395,63 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
     }
   }
 
+  /// Change the title, instructions or due date of one of this teacher's
+  /// uploads. The backend enforces the same ownership rule as Remove; the
+  /// sheet only collects the three editable fields, so subject/year/division
+  /// (and therefore who can see the assignment) can never be changed here.
+  Future<void> _edit(AssignmentRecord assignment) async {
+    if (_editingId != null) return;
+
+    final payload = await showModalBottomSheet<_EditPayload>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _AssignmentEditSheet(assignment: assignment),
+    );
+
+    if (payload == null || !mounted) return;
+
+    final token = await widget.authService.getToken();
+    if (!mounted) return;
+    if (token == null) {
+      await _sessionLost();
+      return;
+    }
+
+    setState(() => _editingId = assignment.id);
+
+    try {
+      final response = await widget.client
+          .patch(
+            Uri.parse(
+              '${Environment.backendUrl}/teacher/assignments/${assignment.id}',
+            ),
+            headers: teacherHeaders(token),
+            body: jsonEncode({
+              'title': payload.title,
+              'description': payload.description,
+              'due_date': payload.dueDate,
+            }),
+          )
+          .timeout(kTeacherRequestTimeout);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        _showSnackBar('Assignment updated', color: GlassColors.success);
+        await _fetchMine(isRefresh: true);
+      } else if (response.statusCode == 401) {
+        await _sessionLost();
+      } else {
+        _showSnackBar(teacherMessageFromBody(response));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _showSnackBar(kTeacherUnreachableMessage);
+    } finally {
+      if (mounted) setState(() => _editingId = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -574,6 +634,7 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
 
   Widget _buildCard(AssignmentRecord assignment) {
     final isDeleting = _deletingId == assignment.id;
+    final isEditing = _editingId == assignment.id;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -599,6 +660,19 @@ class _TeacherAssignmentsViewState extends State<TeacherAssignmentsView> {
                     ),
                   ),
                 ),
+                if (assignment.hasAttachment)
+                  IconButton(
+                    onPressed: isEditing ? null : () => _edit(assignment),
+                    tooltip: 'Edit assignment',
+                    visualDensity: VisualDensity.compact,
+                    icon: isEditing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.edit_outlined, size: 20),
+                  ),
                 if (assignment.hasAttachment)
                   Icon(
                     // Same rule as the student screen: the file's extension
@@ -1000,6 +1074,187 @@ class _AssignmentUploadSheetState extends State<_AssignmentUploadSheet> {
               borderRadius: 14,
               child: const Text(
                 'UPLOAD',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The three editable fields, returned by the edit sheet.
+class _EditPayload {
+  const _EditPayload({
+    required this.title,
+    required this.description,
+    required this.dueDate,
+  });
+
+  final String title;
+  final String description;
+  final String dueDate;
+}
+
+/// Edit form for one uploaded assignment. Returns the new values, or null when
+/// cancelled.
+///
+/// Everything is pre-filled from the assignment. The subject, year, division,
+/// batch and files are shown read-only: they decide who can see the assignment,
+/// and the backend deliberately does not accept them on PATCH.
+class _AssignmentEditSheet extends StatefulWidget {
+  const _AssignmentEditSheet({required this.assignment});
+
+  final AssignmentRecord assignment;
+
+  @override
+  State<_AssignmentEditSheet> createState() => _AssignmentEditSheetState();
+}
+
+class _AssignmentEditSheetState extends State<_AssignmentEditSheet> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _instructionsController;
+  late DateTime _dueDate;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.assignment.title);
+    _instructionsController = TextEditingController(
+      text: widget.assignment.description ?? '',
+    );
+    final parsed = DateTime.tryParse(widget.assignment.dueDate);
+    _dueDate = parsed == null
+        ? DateTime.now()
+        : DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _instructionsController.dispose();
+    super.dispose();
+  }
+
+  DateTime get _lastAllowedDate {
+    final now = DateTime.now();
+    return DateTime(now.year + 1, now.month, now.day);
+  }
+
+  Future<void> _pickDate() async {
+    // Same range as the upload form: historical dates are the point of editing
+    // a due date, and the picker asserts if `initialDate` falls outside it.
+    final last = _lastAllowedDate;
+    var initial = _dueDate;
+    if (initial.isBefore(DateTime(2000))) initial = DateTime(2000);
+    if (initial.isAfter(last)) initial = last;
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2000),
+      lastDate: last,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _dueDate = picked);
+  }
+
+  String get _dueDateIso =>
+      '${_dueDate.year.toString().padLeft(4, '0')}-'
+      '${_dueDate.month.toString().padLeft(2, '0')}-'
+      '${_dueDate.day.toString().padLeft(2, '0')}';
+
+  void _submit() {
+    final title = _titleController.text.trim();
+    if (title.isEmpty) {
+      setState(() => _error = 'Please enter an assignment title.');
+      return;
+    }
+
+    Navigator.pop(
+      context,
+      _EditPayload(
+        title: title,
+        description: _instructionsController.text.trim(),
+        dueDate: _dueDateIso,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final assignment = widget.assignment;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Edit Assignment',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: GlassColors.headingOf(context),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${assignment.subject} • Year ${assignment.year} • '
+              'Division ${assignment.division} • ${assignment.batchLabel}',
+              style: TextStyle(
+                fontSize: 12,
+                color: GlassColors.secondaryTextOf(context),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _titleController,
+              maxLength: 200,
+              decoration: const InputDecoration(labelText: 'Assignment title'),
+            ),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _instructionsController,
+              maxLines: 4,
+              maxLength: 2000,
+              decoration: const InputDecoration(
+                labelText: 'Instructions (optional)',
+              ),
+            ),
+            const SizedBox(height: 4),
+            GlassOutlinedButton(
+              onPressed: _pickDate,
+              height: 56,
+              borderRadius: 14,
+              child: Text(
+                'Due $_dueDateIso',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: const TextStyle(fontSize: 13, color: GlassColors.error),
+              ),
+            ],
+            const SizedBox(height: 16),
+            GlassButton(
+              onPressed: _submit,
+              height: 50,
+              borderRadius: 14,
+              child: const Text(
+                'SAVE CHANGES',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ),
