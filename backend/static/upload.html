@@ -336,7 +336,7 @@
 
     <h2>Upload an assignment</h2>
     <p class="hint">
-      The file is stored under a server-generated name and is only visible to
+      Every file is stored under a server-generated name and is only visible to
       Division D students in the selected year.
     </p>
 
@@ -361,6 +361,13 @@
                placeholder="e.g. Unit 3 — practice problems" required />
       </div>
 
+      <div class="field">
+        <label for="description">Description / instructions (optional)</label>
+        <textarea id="description" name="description" rows="4" maxlength="2000"
+                  placeholder="Paste a YouTube or Google Drive link, or write the instructions…"></textarea>
+        <p class="file-note">Paste links on their own line — the app makes them tappable.</p>
+      </div>
+
       <div class="row">
         <div class="field">
           <label for="dueDate">Due date</label>
@@ -378,11 +385,11 @@
       </div>
 
       <div class="field">
-        <label for="file">File</label>
+        <label for="file">Files</label>
         <div class="file-drop">
-          <input id="file" name="file" type="file"
+          <input id="file" name="file" type="file" multiple
                  accept=".pdf,.mp4,.mov,.mkv,application/pdf,video/mp4,video/quicktime,video/x-matroska" required />
-          <p class="file-note">PDF or video (MP4, MOV, MKV) · up to 100 MB</p>
+          <p class="file-note">Select up to 10 files · PDF or video (MP4, MOV, MKV) · up to 100 MB each</p>
         </div>
       </div>
 
@@ -406,6 +413,7 @@
   var NAME_KEY = "stryve.portal.name";
   var ROLE_KEY = "stryve.portal.role";
   var MAX_BYTES = 100 * 1024 * 1024;
+  var MAX_FILES = 10;
   var ALLOWED = [".pdf", ".mp4", ".mov", ".mkv"];
 
   var loginCard = document.getElementById("loginCard");
@@ -566,37 +574,53 @@
 
     var subject = document.getElementById("subject").value;
     var title = document.getElementById("title").value.trim();
+    var description = document.getElementById("description").value.trim();
     var dueDate = document.getElementById("dueDate").value;
     var year = document.getElementById("year").value.trim();
     var division = document.getElementById("division").value.trim();
     var fileInput = document.getElementById("file");
-    var file = fileInput.files && fileInput.files[0];
+    var files = fileInput.files ? Array.prototype.slice.call(fileInput.files) : [];
 
     if (!subject) { showMessage(uploadMessage, "Choose a subject.", "error"); return; }
     if (!title) { showMessage(uploadMessage, "Enter a title.", "error"); return; }
+    if (description.length > 2000) { showMessage(uploadMessage, "The description must be 2000 characters or fewer.", "error"); return; }
     if (!dueDate) { showMessage(uploadMessage, "Choose a due date.", "error"); return; }
     if (!/^[1-5]$/.test(year)) { showMessage(uploadMessage, "Year must be 1 to 5.", "error"); return; }
     if (!division) { showMessage(uploadMessage, "Enter a division.", "error"); return; }
-    if (!file) { showMessage(uploadMessage, "Choose a file to upload.", "error"); return; }
-
-    var lower = file.name.toLowerCase();
-    var suffix = lower.slice(lower.lastIndexOf("."));
-    if (ALLOWED.indexOf(suffix) === -1) {
-      showMessage(uploadMessage, "Only PDF, MP4, MOV or MKV files are accepted.", "error");
+    if (files.length === 0) { showMessage(uploadMessage, "Choose at least one file to upload.", "error"); return; }
+    if (files.length > MAX_FILES) {
+      showMessage(uploadMessage, "At most " + MAX_FILES + " files can be attached (you selected " + files.length + ").", "error");
       return;
     }
-    if (file.size > MAX_BYTES) {
-      showMessage(uploadMessage, "That file is larger than 100 MB. Compress it or upload a smaller one.", "error");
-      return;
+
+    // Every file is checked, not just the first: the backend validates each one
+    // and rejects the whole upload, so catch the bad one before sending 100 MB.
+    for (var index = 0; index < files.length; index++) {
+      var candidate = files[index];
+      var candidateLower = candidate.name.toLowerCase();
+      var candidateSuffix = candidateLower.slice(candidateLower.lastIndexOf("."));
+      if (ALLOWED.indexOf(candidateSuffix) === -1) {
+        showMessage(uploadMessage, "“" + candidate.name + "” is not a PDF, MP4, MOV or MKV file.", "error");
+        return;
+      }
+      if (candidate.size > MAX_BYTES) {
+        showMessage(uploadMessage, "“" + candidate.name + "” is larger than 100 MB. Compress it or choose a smaller file.", "error");
+        return;
+      }
     }
 
     var form = new FormData();
     form.append("subject", subject);
     form.append("title", title);
+    if (description) form.append("description", description);
     form.append("due_date", dueDate);
     form.append("year", year);
     form.append("division", division.toUpperCase());
-    form.append("file", file, file.name);
+    // The backend accepts the multi-file field `files` (up to 10); `file` is
+    // only kept there for the older single-file clients.
+    for (var position = 0; position < files.length; position++) {
+      form.append("files", files[position], files[position].name);
+    }
 
     busy(uploadBtn, uploadSpinner, uploadLabel, true, "Uploading…");
 
@@ -609,15 +633,18 @@
       var body = await readJson(response);
 
       if (response.status === 201) {
+        var attached = (body.attachments && body.attachments.length) || files.length;
         showMessage(
           uploadMessage,
           "Uploaded “" + (body.title || title) + "” for " + (body.subject || subject) +
-            ", due " + (body.due_date || dueDate) + ". Students in Year " +
-            (body.year || year) + " · Division " + (body.division || division.toUpperCase()) +
-            " can see it now.",
+            ", due " + (body.due_date || dueDate) + " · " + attached +
+            (attached === 1 ? " file attached" : " files attached") +
+            ". Students in Year " + (body.year || year) + " · Division " +
+            (body.division || division.toUpperCase()) + " can see it now.",
           "success"
         );
         document.getElementById("title").value = "";
+        document.getElementById("description").value = "";
         document.getElementById("file").value = "";
       } else if (response.status === 401) {
         clearSession();
