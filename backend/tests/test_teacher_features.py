@@ -1997,6 +1997,61 @@ check(
     requests.delete(f"{announce_url}/{teacher_notice_id}", headers=auth(plain_token), timeout=10).status_code == 404,
 )
 
+# A notice may be filed under one of the seven official subjects. "Common" is
+# the absence of a subject in the request and is stored as NULL.
+subject_notice = requests.post(
+    announce_url,
+    data={
+        "title": "Physics tutorial",
+        "message": "Bring the lab manual on Friday.",
+        "subject": "Engineering Physics",
+    },
+    headers=auth(plain_token),
+    timeout=10,
+)
+check("a post can be filed under a subject", subject_notice.status_code == 201, subject_notice.text[:160])
+check(
+    "the created post returns its subject",
+    subject_notice.json().get("subject") == "Engineering Physics",
+    subject_notice.text[:200],
+)
+subject_notice_id = subject_notice.json().get("id")
+check(
+    "the student feed carries the subject",
+    "Engineering Physics" in {
+        a.get("subject") for a in requests.get(f"{BASE}/announcements", headers=auth(TOKENS["1"]), timeout=10).json()
+    },
+    "subject field missing from the student feed",
+)
+check(
+    "the filing is stored, not inferred from the title",
+    conn.execute("SELECT subject FROM announcements WHERE id=?", (subject_notice_id,)).fetchone()[0]
+    == "Engineering Physics",
+)
+check(
+    "a subject outside the seven is refused",
+    requests.post(
+        announce_url,
+        data={"title": "Not a subject", "message": "x", "subject": "Astrology"},
+        headers=auth(plain_token),
+        timeout=10,
+    ).status_code == 400,
+)
+common_notice = requests.post(
+    announce_url,
+    data={"title": "Common notice", "message": "No subject attached."},
+    headers=auth(plain_token),
+    timeout=10,
+)
+check("a post without a subject is accepted", common_notice.status_code == 201, common_notice.text[:160])
+check(
+    "a Common post is stored as NULL, not an empty string",
+    conn.execute("SELECT subject FROM announcements WHERE id=?", (common_notice.json().get("id"),)).fetchone()[0]
+    is None,
+)
+requests.delete(f"{announce_url}/{common_notice.json().get('id')}", headers=auth(plain_token), timeout=10)
+requests.delete(f"{announce_url}/{subject_notice_id}", headers=auth(plain_token), timeout=10)
+
 admin_notice = requests.post(
     announce_url,
     data={"title": "Admin notice", "message": "Posted by a teacher"},

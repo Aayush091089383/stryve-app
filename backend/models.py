@@ -554,6 +554,10 @@ class Announcement(Base):
     year = Column(Integer, nullable=True, index=True)
     division = Column(String, nullable=True)
 
+    # The official subject this notice is filed under; NULL means "Common"
+    # (a general notice that is not tied to one subject).
+    subject = Column(String, nullable=True)
+
     author = relationship("Teacher", foreign_keys=[author_id])
 
     # Files posted with this announcement (PDF or video). They live in the same

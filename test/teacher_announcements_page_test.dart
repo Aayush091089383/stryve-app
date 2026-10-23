@@ -46,6 +46,7 @@ Map<String, dynamic> announcementJson({
   String message = 'Return borrowed books by Friday.',
   String author = 'Dr. Meera Rao',
   int authorId = 5,
+  String? subject,
 }) => {
   'id': id,
   'title': title,
@@ -55,6 +56,7 @@ Map<String, dynamic> announcementJson({
   'created_at': '2026-10-20T12:46:28.980601',
   'year': null,
   'division': null,
+  'subject': subject,
 };
 
 http.Response jsonResponse(Object body, [int status = 200]) => http.Response(
@@ -229,6 +231,54 @@ void main() {
     expect(post.body, contains('name="files"'));
     expect(post.body, contains('filename="unit-3.pdf"'));
     expect(find.text('refused for the test'), findsOneWidget);
+  });
+
+  testWidgets('posting sends the chosen subject, Common sends none', (
+    tester,
+  ) async {
+    final recorded = Recorded();
+    await pumpPage(
+      tester,
+      MockClient((request) async {
+        recorded.requests.add(request);
+        if (request.method == 'POST') {
+          return jsonResponse({'detail': 'refused for the test'}, 422);
+        }
+        return jsonResponse([
+          announcementJson(subject: 'Engineering Physics'),
+        ]);
+      }),
+    );
+
+    // The managed list files the post under its subject.
+    expect(find.text('Engineering Physics'), findsWidgets);
+
+    // Common is the default: posting without touching the picker omits the
+    // field, which is how the backend stores a general notice.
+    await tester.enterText(find.byType(TextFormField).at(0), 'General');
+    await tester.enterText(find.byType(TextFormField).at(1), 'Everyone.');
+    await tester.ensureVisible(find.text('Post'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Post'));
+    await tester.pumpAndSettle();
+
+    var post = recorded.requests.lastWhere((r) => r.method == 'POST');
+    expect(post.body, isNot(contains('name="subject"')));
+
+    // Choose a subject and post again. The closed picker shows the current
+    // value, which is unique until the menu opens.
+    await tester.tap(find.text('Common (everyone)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Engineering Physics').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Post'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Post'));
+    await tester.pumpAndSettle();
+
+    post = recorded.requests.lastWhere((r) => r.method == 'POST');
+    expect(post.body, contains('name="subject"'));
+    expect(post.body, contains('Engineering Physics'));
   });
 
   testWidgets('a refused delete is explained and the row stays', (

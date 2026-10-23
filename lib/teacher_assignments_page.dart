@@ -9,6 +9,7 @@ import 'config/environment.dart';
 import 'services/teacher_auth_service.dart';
 import 'teacher_models.dart';
 import 'utils/glass_container.dart';
+import 'utils/official_subjects.dart';
 import 'utils/teacher_api.dart';
 
 /// A PDF the teacher picked from the device.
@@ -29,18 +30,11 @@ typedef AssignmentFilePicker = Future<PickedAssignmentFile?> Function();
 /// above stays for callers (and tests) that predate multiple attachments.
 typedef AssignmentFilesPicker = Future<List<PickedAssignmentFile>> Function();
 
-/// The seven subjects of Division D's first-year timetable, in the wording the
-/// official sheet uses. The backend replaces a subject's text-only row with the
-/// upload, so the label a teacher picks is the label stored on the assignment.
-const List<String> kAssignmentSubjects = <String>[
-  'Engineering Mathematics-I',
-  'Engineering Physics',
-  'Basic Electrical Engineering',
-  'Engineering Graphics',
-  'Fundamentals of Programming Languages',
-  'Design Thinking & Idea Lab',
-  'Professional Communication Skills',
-];
+/// The seven official subjects. Kept as an alias of [kOfficialSubjects] so the
+/// upload form and the announcement screens can never drift apart. The backend
+/// replaces a subject's text-only row with the upload, so the label a teacher
+/// picks is the label stored on the assignment.
+const List<String> kAssignmentSubjects = kOfficialSubjects;
 
 /// The attachment kinds a teacher may pick, and the type sent for each.
 ///

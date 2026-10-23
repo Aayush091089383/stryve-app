@@ -17,6 +17,7 @@ import 'teacher_assignments_page.dart'
 import 'teacher_login_page.dart';
 import 'utils/glass_container.dart';
 import 'utils/linkified_text.dart';
+import 'utils/official_subjects.dart';
 import 'utils/teacher_api.dart';
 
 /// Post an announcement to the student feed, and withdraw one you posted.
@@ -63,6 +64,9 @@ class _TeacherAnnouncementsPageState extends State<TeacherAnnouncementsPage> {
   /// null = every year / every division.
   int? _year;
   String? _division;
+
+  /// null = Common, a general notice tied to no single subject.
+  String? _subject;
 
   /// The files picked for the next post; empty keeps it text-only.
   List<PickedAssignmentFile> _files = const [];
@@ -246,6 +250,7 @@ class _TeacherAnnouncementsPageState extends State<TeacherAnnouncementsPage> {
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['title'] = _titleController.text.trim();
       request.fields['message'] = _messageController.text.trim();
+      if (_subject != null) request.fields['subject'] = _subject!;
       if (_year != null) request.fields['year'] = '$_year';
       if (_division != null) request.fields['division'] = _division!;
 
@@ -456,6 +461,34 @@ class _TeacherAnnouncementsPageState extends State<TeacherAnnouncementsPage> {
                               }
                               return null;
                             },
+                          ),
+                          const SizedBox(height: 20),
+                          DropdownButtonFormField<String?>(
+                            initialValue: _subject,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Subject',
+                              helperText:
+                                  'Common is a general notice that is not tied '
+                                  'to one subject.',
+                            ),
+                            items: [
+                              const DropdownMenuItem<String?>(
+                                value: null,
+                                child: Text('Common (everyone)'),
+                              ),
+                              for (final subject in kOfficialSubjects)
+                                DropdownMenuItem<String?>(
+                                  value: subject,
+                                  child: Text(
+                                    subject,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: _posting
+                                ? null
+                                : (value) => setState(() => _subject = value),
                           ),
                           const SizedBox(height: 20),
                           Text(
@@ -761,17 +794,17 @@ class _TeacherAnnouncementsPageState extends State<TeacherAnnouncementsPage> {
                       color: GlassColors.headingOf(context),
                     ),
                   ),
-                  if (audience != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      audience,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: GlassColors.primaryBlue,
-                      ),
+                  const SizedBox(height: 2),
+                  Text(
+                    audience == null
+                        ? announcement.subjectLabel
+                        : '${announcement.subjectLabel} · $audience',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: GlassColors.primaryBlue,
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),

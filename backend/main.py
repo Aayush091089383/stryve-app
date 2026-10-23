@@ -1046,6 +1046,20 @@ def mark_notification_read(
 # ==================================================================
 # Announcements - a teacher posts, the whole class group (or everyone) reads.
 # ==================================================================
+# The seven subjects of Division D's first-year sheet. The portal and the app
+# offer exactly these labels; an empty subject means "Common" and is stored as
+# NULL, which is also what every pre-subject row holds.
+ANNOUNCEMENT_SUBJECTS = (
+    "Engineering Mathematics-I",
+    "Engineering Physics",
+    "Basic Electrical Engineering",
+    "Engineering Graphics",
+    "Fundamentals of Programming Languages",
+    "Design Thinking & Idea Lab",
+    "Professional Communication Skills",
+)
+
+
 @app.post(
     "/teacher/announcements",
     response_model=AnnouncementOut,
@@ -1056,6 +1070,7 @@ def create_announcement(
     message: str = Form(...),
     year: int | None = Form(None),
     division: str = Form(""),
+    subject: str = Form(""),
     files: list[UploadFile] = File(default=[]),
     teacher: models.Teacher = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
@@ -1097,6 +1112,16 @@ def create_announcement(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Division must be at most 8 characters, or omitted",
+        )
+
+    clean_subject = subject.strip()
+    if clean_subject and clean_subject not in ANNOUNCEMENT_SUBJECTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Subject must be one of the seven official subjects, or "
+                "empty for Common"
+            ),
         )
 
     uploads = [item for item in (files or []) if item is not None]
@@ -1143,6 +1168,7 @@ def create_announcement(
         created_at=datetime.utcnow(),
         year=year,
         division=clean_division or None,
+        subject=clean_subject or None,
     )
     announcement.attachments = [
         models.AnnouncementAttachment(

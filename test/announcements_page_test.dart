@@ -43,6 +43,7 @@ Map<String, dynamic> announcementJson({
   String createdAt = '2026-10-20T09:30:00',
   int? year,
   String? division,
+  String? subject,
   List<Map<String, dynamic>> attachments = const [],
 }) => {
   'id': id,
@@ -53,6 +54,7 @@ Map<String, dynamic> announcementJson({
   'created_at': createdAt,
   'year': year,
   'division': division,
+  'subject': subject,
   'attachments': attachments,
 };
 
@@ -171,6 +173,98 @@ void main() {
       await pumpFeed(tester, feed);
 
       expect(find.text('Year 1 • Division D'), findsOneWidget);
+    });
+
+    testWidgets('a post without a subject reads as Common', (tester) async {
+      final feed = FeedClient(
+        body: [
+          announcementJson(title: 'General notice'),
+          announcementJson(
+            id: 2,
+            title: 'Physics lab',
+            subject: 'Engineering Physics',
+          ),
+        ],
+      );
+      await pumpFeed(tester, feed);
+
+      expect(find.text('Common'), findsWidgets);
+      expect(find.text('Engineering Physics'), findsWidgets);
+    });
+
+    testWidgets('subject chips filter the feed, and Common means no subject', (
+      tester,
+    ) async {
+      final feed = FeedClient(
+        body: [
+          announcementJson(id: 1, title: 'General notice'),
+          announcementJson(
+            id: 2,
+            title: 'Physics lab',
+            subject: 'Engineering Physics',
+          ),
+          announcementJson(
+            id: 3,
+            title: 'Maths test',
+            subject: 'Engineering Mathematics-I',
+          ),
+        ],
+      );
+      await pumpFeed(tester, feed);
+
+      expect(find.text('3 announcements'), findsOneWidget);
+      expect(find.text('Physics lab'), findsOneWidget);
+      expect(find.text('Maths test'), findsOneWidget);
+
+      final physicsChip = find.byKey(
+        const ValueKey('announcement-filter-Engineering Physics'),
+      );
+      await tester.ensureVisible(physicsChip);
+      await tester.pumpAndSettle();
+      await tester.tap(physicsChip);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Physics lab'), findsOneWidget);
+      expect(find.text('Maths test'), findsNothing);
+      expect(find.text('General notice'), findsNothing);
+      expect(find.text('1 announcement · Engineering Physics'), findsOneWidget);
+
+      final commonChip = find.byKey(
+        const ValueKey('announcement-filter-common'),
+      );
+      await tester.ensureVisible(commonChip);
+      await tester.pumpAndSettle();
+      await tester.tap(commonChip);
+      await tester.pumpAndSettle();
+
+      expect(find.text('General notice'), findsOneWidget);
+      expect(find.text('Physics lab'), findsNothing);
+      expect(find.text('1 announcement · Common'), findsOneWidget);
+
+      // A subject with no posts gets an empty state, not a blank feed. The row
+      // scrolls horizontally, so bring the chip on screen first.
+      final programmingChip = find.byKey(
+        const ValueKey(
+          'announcement-filter-Fundamentals of Programming Languages',
+        ),
+      );
+      await tester.ensureVisible(programmingChip);
+      await tester.pumpAndSettle();
+      await tester.tap(programmingChip);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('No Fundamentals of Programming Languages announcements yet'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('SHOW ALL'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('3 announcements'), findsOneWidget);
+      expect(find.text('General notice'), findsOneWidget);
+      expect(find.text('Physics lab'), findsOneWidget);
+      expect(find.text('Maths test'), findsOneWidget);
     });
 
     testWidgets('a failed load shows an error, never the empty state', (

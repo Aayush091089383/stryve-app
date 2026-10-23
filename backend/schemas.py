@@ -583,6 +583,9 @@ class AnnouncementOut(BaseModel):
     year: int | None = None
     division: str | None = None
 
+    # The official subject this notice is filed under; NULL = Common.
+    subject: str | None = None
+
     # PDFs/videos posted with the notice, in upload order. Empty for a
     # text-only announcement (every row from before files were supported).
     attachments: list[AnnouncementAttachmentOut] = []

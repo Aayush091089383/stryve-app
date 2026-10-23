@@ -13,6 +13,7 @@ import 'student.dart';
 import 'utils/glass_container.dart';
 import 'utils/linkified_text.dart';
 import 'utils/motion.dart';
+import 'utils/official_subjects.dart';
 import 'video_player_page.dart';
 
 /// The student's announcements feed: everything a teacher or admin posted for
@@ -40,6 +41,11 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
   bool _isLoading = true;
   String? _errorMessage;
   List<Announcement> _announcements = const [];
+
+  /// "all", "common", or one of [kOfficialSubjects]. Filtering is client-side:
+  /// the backend already scoped the feed to this student's class group, and the
+  /// subject only chooses which slice of that same feed to show.
+  String _subjectFilter = 'all';
 
   http.Client? _ownedClient;
   http.Client get _client => widget.client ?? (_ownedClient ??= http.Client());
@@ -154,34 +160,182 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
     return _buildFeed(context);
   }
 
+  /// The subject label for a chip value. [subjectLabel] on an announcement
+  /// already answers this for a post; this is for the chip row itself.
+  static String _filterLabel(String value) {
+    if (value == 'all') return 'All';
+    if (value == 'common') return 'Common';
+    return value;
+  }
+
+  /// The posts that match the selected chip. "Common" is the absence of a
+  /// subject, which is also how every pre-subject post was stored.
+  List<Announcement> get _visibleAnnouncements {
+    if (_subjectFilter == 'all') return _announcements;
+    if (_subjectFilter == 'common') {
+      return _announcements
+          .where((item) => (item.subject ?? '').trim().isEmpty)
+          .toList();
+    }
+    return _announcements
+        .where((item) => item.subject == _subjectFilter)
+        .toList();
+  }
+
+  Widget _buildFilterChip(
+    BuildContext context,
+    String value,
+    String label,
+  ) {
+    final selected = _subjectFilter == value;
+    final textColor = selected
+        ? Colors.white
+        : GlassColors.secondaryTextOf(context);
+
+    return Semantics(
+      key: ValueKey('announcement-filter-$value'),
+      button: true,
+      selected: selected,
+      label: label,
+      child: GlassContainer(
+        margin: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        borderRadius: 999,
+        blurStrength: 8,
+        opacity: selected ? 0.9 : 0.55,
+        borderOpacity: selected ? 1 : 0.4,
+        borderColor: selected ? GlassColors.primaryBlue : null,
+        gradient: selected
+            ? const LinearGradient(
+                colors: [GlassColors.primaryBlue, GlassColors.primaryBlue],
+              )
+            : null,
+        onTap: () {
+          if (_subjectFilter == value) return;
+          setState(() => _subjectFilter = value);
+        },
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: textColor,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChips(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          for (final value in <String>[
+            'all',
+            'common',
+            ...kOfficialSubjects,
+          ]) ...[
+            _buildFilterChip(context, value, _filterLabel(value)),
+            const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilteredEmpty(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(24),
+      margin: EdgeInsets.zero,
+      borderRadius: 16,
+      child: Column(
+        children: [
+          Icon(
+            Icons.filter_alt_off_outlined,
+            size: 30,
+            color: GlassColors.secondaryTextOf(context),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'No ${_filterLabel(_subjectFilter)} announcements yet',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: GlassColors.headingOf(context),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Switch to All to see every notice.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: GlassColors.secondaryTextOf(context),
+            ),
+          ),
+          const SizedBox(height: 14),
+          GlassOutlinedButton(
+            onPressed: () => setState(() => _subjectFilter = 'all'),
+            width: 150,
+            height: 42,
+            borderRadius: 12,
+            child: const Text(
+              'SHOW ALL',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFeed(BuildContext context) {
+    final visible = _visibleAnnouncements;
+    final countLabel = visible.length == 1
+        ? '1 announcement'
+        : '${visible.length} announcements';
+
     return KeyedSubtree(
       key: const ValueKey('announcements-feed'),
       child: RefreshIndicator(
         color: GlassColors.primaryBlue,
         onRefresh: _fetchAnnouncements,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          padding: const EdgeInsets.only(top: 16, bottom: 32),
           children: [
-            Text(
-              _announcements.length == 1
-                  ? '1 announcement'
-                  : '${_announcements.length} announcements',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: GlassColors.secondaryTextOf(context),
+            _buildFilterChips(context),
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                _subjectFilter == 'all'
+                    ? countLabel
+                    : '$countLabel · ${_filterLabel(_subjectFilter)}',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: GlassColors.secondaryTextOf(context),
+                ),
               ),
             ),
             const SizedBox(height: 12),
-            for (final announcement in _announcements)
+            if (visible.isEmpty)
               Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _AnnouncementCard(
-                  announcement: announcement,
-                  token: widget.student.token,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildFilteredEmpty(context),
+              )
+            else
+              for (final announcement in visible)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: _AnnouncementCard(
+                    announcement: announcement,
+                    token: widget.student.token,
+                  ),
                 ),
-              ),
           ],
         ),
       ),
@@ -374,17 +528,33 @@ class _AnnouncementCard extends StatelessWidget {
                         color: GlassColors.headingOf(context),
                       ),
                     ),
-                    if (audience != null) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        audience,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: GlassColors.primaryBlue,
+                    const SizedBox(height: 3),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 2,
+                      children: [
+                        // Filing the notice under a subject is what the chips
+                        // above filter on, so it is shown on every card - a
+                        // pre-subject post reads as "Common", which is true.
+                        Text(
+                          announcement.subjectLabel,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: GlassColors.primaryBlue,
+                          ),
                         ),
-                      ),
-                    ],
+                        if (audience != null)
+                          Text(
+                            audience,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: GlassColors.primaryBlue,
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),

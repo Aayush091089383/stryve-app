@@ -25,6 +25,10 @@ class Announcement {
   final int? year;
   final String? division;
 
+  /// The official subject this notice is filed under, or null for "Common" -
+  /// a general notice tied to no single subject. Older posts carry null too.
+  final String? subject;
+
   /// PDFs/videos posted with the notice, in upload order. Empty for a text-only
   /// announcement, which is what every post was before files were supported.
   final List<AssignmentAttachment> attachments;
@@ -38,11 +42,14 @@ class Announcement {
     required this.createdAt,
     this.year,
     this.division,
+    this.subject,
     this.attachments = const [],
   });
 
   factory Announcement.fromJson(Map<String, dynamic> json) {
     final raw = json['attachments'];
+    // An empty string and null both mean Common; the backend stores null.
+    final rawSubject = (json['subject'] as String?)?.trim() ?? '';
     return Announcement(
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: (json['title'] as String?) ?? '',
@@ -52,6 +59,7 @@ class Announcement {
       createdAt: (json['created_at'] as String?) ?? '',
       year: (json['year'] as num?)?.toInt(),
       division: json['division'] as String?,
+      subject: rawSubject.isEmpty ? null : rawSubject,
       attachments: raw is List
           ? raw
                 .whereType<Map<String, dynamic>>()
@@ -76,6 +84,13 @@ class Announcement {
   /// Authorized download path for one of this notice's files.
   String filePath(AssignmentAttachment file) =>
       '/announcements/$id/files/${file.id}';
+
+  /// The subject as the feed shows it: the official label, or "Common" when
+  /// the notice is not tied to one subject.
+  String get subjectLabel {
+    final value = (subject ?? '').trim();
+    return value.isEmpty ? 'Common' : value;
+  }
 
   /// True when the post is limited to one year or one division.
   bool get isRestricted => year != null || division != null;
