@@ -942,7 +942,14 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
           child: Dismissible(
             key: Key('attendance_card_${student.key}'),
             direction: DismissDirection.horizontal,
-            resizeDuration: const Duration(milliseconds: 180),
+            // Snappier than Flutter's defaults (200ms fly-off, 300ms collapse,
+            // 0.4 threshold): marking a class should keep up with the thumb.
+            movementDuration: const Duration(milliseconds: 120),
+            resizeDuration: const Duration(milliseconds: 120),
+            dismissThresholds: const {
+              DismissDirection.startToEnd: 0.25,
+              DismissDirection.endToStart: 0.25,
+            },
             background: _swipeBackground(
               alignment: Alignment.centerLeft,
               color: GlassColors.success,
