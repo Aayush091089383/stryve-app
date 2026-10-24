@@ -26,23 +26,31 @@ enum _AttendanceStage { setup, marking, review }
 
 class _ClassStudent {
   const _ClassStudent({
-    required this.id,
+    this.id,
     required this.name,
     required this.rollNumber,
     required this.batch,
+    this.isRegistered = true,
   });
 
-  final int id;
+  /// The account id, or null while this student is only on the class roster.
+  final int? id;
   final String name;
   final String rollNumber;
   final String batch;
+  final bool isRegistered;
+
+  /// The stable identity of a row: attendance is keyed on the roll number,
+  /// because that is the only thing that exists before a student registers.
+  String get key => rollNumber;
 
   factory _ClassStudent.fromJson(Map<String, dynamic> json) {
     return _ClassStudent(
-      id: json['id'] as int,
+      id: json['id'] as int?,
       name: (json['name'] as String?)?.trim() ?? '',
       rollNumber: (json['roll_number'] as String?)?.trim() ?? '',
       batch: (json['batch'] as String?)?.trim() ?? '',
+      isRegistered: (json['is_registered'] as bool?) ?? json['id'] is int,
     );
   }
 }
@@ -96,11 +104,11 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
 
   _AttendanceStage _stage = _AttendanceStage.setup;
 
-  /// Students still waiting to be swiped, in roll order.
-  final List<int> _queue = [];
+  /// Roll numbers still waiting to be swiped, in roll order.
+  final List<String> _queue = [];
 
-  /// studentId -> 'present' | 'absent'. A student in here is marked.
-  final Map<int, String> _marks = {};
+  /// Roll number -> 'present' | 'absent'. A student in here is marked.
+  final Map<String, String> _marks = {};
 
   bool _isLoading = true;
   bool _isLoadingRoster = false;
@@ -283,14 +291,14 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
             ..clear()
             ..addAll(
               students
-                  .map((student) => student.id)
-                  .where((id) => !saved.containsKey(id)),
+                  .map((student) => student.key)
+                  .where((key) => !saved.containsKey(key)),
             );
           _marks
             ..clear()
             ..addAll({
               for (final entry in saved.entries)
-                if (students.any((student) => student.id == entry.key))
+                if (students.any((student) => student.key == entry.key))
                   entry.key: entry.value,
             });
           _savedSessionCount = saved.isEmpty ? null : saved.length;
@@ -314,9 +322,9 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
     if (mounted) setState(() => _isLoadingRoster = false);
   }
 
-  /// What the server already holds for this lecture, as studentId -> status.
+  /// What the server already holds for this lecture, as roll number -> status.
   /// Any failure is an empty map: marking must still be possible.
-  Future<Map<int, String>> _fetchSavedSession(String token) async {
+  Future<Map<String, String>> _fetchSavedSession(String token) async {
     final subject = _subject;
     if (subject == null) return const {};
 
@@ -337,11 +345,13 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
 
       if (!mounted || response.statusCode != 200) return const {};
 
-      final saved = <int, String>{};
+      // Keyed by roll number: a lecture taken from the roster has no account
+      // id, so an id-keyed map would silently lose those marks.
+      final saved = <String, String>{};
       for (final row in teacherJsonList(response.body)) {
-        final id = row['student_id'];
+        final roll = row['roll_number'];
         final status = row['status'];
-        if (id is int && status is String) saved[id] = status;
+        if (roll is String && status is String) saved[roll] = status;
       }
       return saved;
     } catch (_) {
@@ -350,25 +360,27 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
   }
 
   void _mark(_ClassStudent student, String status) {
-    if (_marks.containsKey(student.id)) return;
+    if (_marks.containsKey(student.key)) return;
     setState(() {
-      _marks[student.id] = status;
-      _queue.remove(student.id);
+      _marks[student.key] = status;
+      _queue.remove(student.key);
       if (_queue.isEmpty) _stage = _AttendanceStage.review;
     });
   }
 
-  void _flip(int studentId) {
+  void _flip(String rollNumber) {
     setState(() {
-      _marks[studentId] = _marks[studentId] == 'present' ? 'absent' : 'present';
+      _marks[rollNumber] = _marks[rollNumber] == 'present'
+          ? 'absent'
+          : 'present';
     });
   }
 
   void _markAllRemainingPresent() {
     if (_queue.isEmpty) return;
     setState(() {
-      for (final id in _queue) {
-        _marks[id] = 'present';
+      for (final key in _queue) {
+        _marks[key] = 'present';
       }
       _queue.clear();
       _stage = _AttendanceStage.review;
@@ -413,8 +425,9 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
               'records': _students
                   .map(
                     (student) => {
-                      'student_id': student.id,
-                      'status': _marks[student.id] ?? 'present',
+                      'roll_number': student.rollNumber,
+                      if (student.id != null) 'student_id': student.id,
+                      'status': _marks[student.key] ?? 'present',
                     },
                   )
                   .toList(),
@@ -870,9 +883,9 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
     if (_students.isEmpty) return _buildEmptyRoster();
     if (_queue.isEmpty) return _buildEmptyRoster();
 
-    final student = _students.firstWhere((s) => s.id == _queue.first);
+    final student = _students.firstWhere((s) => s.key == _queue.first);
     final next = _queue.length > 1
-        ? _students.firstWhere((s) => s.id == _queue[1])
+        ? _students.firstWhere((s) => s.key == _queue[1])
         : null;
 
     return Column(
@@ -881,7 +894,7 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
         SizedBox(
           height: 240,
           child: Dismissible(
-            key: Key('attendance_card_${student.id}'),
+            key: Key('attendance_card_${student.key}'),
             direction: DismissDirection.horizontal,
             resizeDuration: const Duration(milliseconds: 180),
             background: _swipeBackground(
@@ -1062,10 +1075,10 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
 
   Widget _buildReview() {
     final absent = _students
-        .where((student) => _marks[student.id] == 'absent')
+        .where((student) => _marks[student.key] == 'absent')
         .toList();
     final unmarked = _students
-        .where((student) => !_marks.containsKey(student.id))
+        .where((student) => !_marks.containsKey(student.key))
         .toList();
 
     return Column(
@@ -1181,7 +1194,7 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
                     SizedBox(
                       width: 140,
                       child: GlassOutlinedButton(
-                        onPressed: () => _flip(student.id),
+                        onPressed: () => _flip(student.key),
                         height: 36,
                         borderRadius: 10,
                         child: const Text(
@@ -1225,19 +1238,19 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
                           ),
                         ),
                         TextButton(
-                          onPressed: () => _flip(student.id),
+                          onPressed: () => _flip(student.key),
                           child: Text(
-                            _marks[student.id] == 'present'
+                            _marks[student.key] == 'present'
                                 ? 'Present'
-                                : _marks[student.id] == 'absent'
+                                : _marks[student.key] == 'absent'
                                 ? 'Absent'
                                 : 'Unmarked',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: _marks[student.id] == 'present'
+                              color: _marks[student.key] == 'present'
                                   ? GlassColors.success
-                                  : _marks[student.id] == 'absent'
+                                  : _marks[student.key] == 'absent'
                                   ? GlassColors.error
                                   : GlassColors.warning,
                             ),

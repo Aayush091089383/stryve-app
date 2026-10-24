@@ -382,8 +382,55 @@ class TeacherAssignment(Base):
     )
 
 
+class ClassRoster(Base):
+    """The official class list, independent of who has registered yet.
+
+    A teacher marks attendance against this list, so a student who has not
+    created an account is still on the sheet. ``roll_number`` is the identity
+    that joins the roster to ``students`` and to ``attendance_records``: when
+    somebody registers with that roll number, the lectures already marked for
+    it are theirs, with no re-entry and no migration.
+
+    A roll number identifies one person inside one class group, so the unique
+    key is (year, division, roll_number) - not the batch, because a student
+    does not change identity when they move between practical batches.
+    """
+
+    __tablename__ = "class_roster"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    roll_number = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=False)
+
+    year = Column(Integer, nullable=False, default=1)
+    division = Column(String, nullable=False, default="D")
+
+    # "" means the whole division (no batch split), never NULL: an empty string
+    # keeps the unique key deterministic in SQLite.
+    batch = Column(String, nullable=False, default="")
+
+    created_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "year",
+            "division",
+            "roll_number",
+            name="uq_class_roster_roll",
+        ),
+    )
+
+
 class AttendanceRecord(Base):
     """One student's attendance for ONE lecture/session.
+
+    Attendance is keyed on the ROLL NUMBER, not on the account: a lecture can be
+    marked for a student who is on the class roster but has not registered yet.
+    ``student_id`` is filled in when that roll number belongs to an approved
+    account and stays NULL until then - so the same row becomes the student's
+    own history the moment they register, without copying anything.
 
     The unique constraint is what makes "no duplicate attendance for the same
     student and lecture" true at the database level, not just in the endpoint.
@@ -393,7 +440,11 @@ class AttendanceRecord(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
+    # Nullable on purpose: a roster entry with no account yet is still marked.
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=True, index=True)
+
+    # The stable identity of the person marked (see ClassRoster).
+    roll_number = Column(String, nullable=False, index=True)
 
     subject = Column(String, nullable=False)
     division = Column(String, nullable=False, default="D")
@@ -421,11 +472,11 @@ class AttendanceRecord(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "student_id",
+            "roll_number",
             "session_date",
             "slot_start",
             "subject",
-            name="uq_attendance_student_session",
+            name="uq_attendance_roll_session",
         ),
     )
 

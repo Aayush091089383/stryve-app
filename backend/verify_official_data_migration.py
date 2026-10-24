@@ -206,6 +206,7 @@ UNRELATED_TABLES = (
     "assignment_attachments",
     "fcm_tokens",
     "notifications",
+    "class_roster",
 )
 
 # Rows in these tables must survive exactly: no deletion, no insertion, no edit.

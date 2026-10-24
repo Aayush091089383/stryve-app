@@ -1,5 +1,5 @@
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
 from typing import ClassVar, Optional
 from datetime import datetime
 
@@ -356,14 +356,24 @@ class AttendanceClassStudentOut(BaseModel):
 
 
 class AttendanceSessionOut(BaseModel):
-    student_id: int
+    # None for a roster entry whose student has not registered yet.
+    student_id: Optional[int] = None
     name: str
     roll_number: str
     status: str
 
 
 class AttendanceMark(BaseModel):
-    student_id: int
+    """One student's mark on a lecture sheet.
+
+    ``roll_number`` is the identity the roster-based clients send, because it is
+    the only one that exists before a student registers. ``student_id`` stays
+    accepted so an existing client keeps working; the backend resolves either
+    one to a roll number before it writes anything.
+    """
+
+    roll_number: Optional[str] = None
+    student_id: Optional[int] = None
     status: str
 
     @field_validator("status")
@@ -373,6 +383,20 @@ class AttendanceMark(BaseModel):
         if cleaned not in {"present", "absent"}:
             raise ValueError("Status must be 'present' or 'absent'")
         return cleaned
+
+    @field_validator("roll_number")
+    @classmethod
+    def clean_roll_number(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        return cleaned or None
+
+    @model_validator(mode="after")
+    def identified(self):
+        if self.roll_number is None and self.student_id is None:
+            raise ValueError("Each record needs a roll_number or a student_id")
+        return self
 
 
 class AttendanceSaveRequest(BaseModel):
@@ -395,12 +419,87 @@ class AttendanceSaveResponse(BaseModel):
 
 
 class AttendanceStudentOut(BaseModel):
-    """One student in a class list, ordered by roll number by the endpoint."""
+    """One student in a class list, ordered by roll number by the endpoint.
 
-    id: int
+    ``id`` is the account id, or None for a roster entry whose student has not
+    registered yet; ``is_registered`` says which, so the client never has to
+    infer it from a null.
+    """
+
+    id: Optional[int] = None
     roll_number: str
     name: str
     batch: str
+    is_registered: bool = True
+
+
+# ======================================================================
+# Class roster
+# ======================================================================
+class RosterEntryIn(BaseModel):
+    """One class-list row, as an admin adds or imports it."""
+
+    roll_number: str
+    name: str
+    year: int = 1
+    division: str = "D"
+    batch: str = ""
+
+    @field_validator("roll_number", "name")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        cleaned = (v or "").strip()
+        if not cleaned:
+            raise ValueError("This field cannot be empty")
+        return cleaned
+
+    @field_validator("year")
+    @classmethod
+    def sane_year(cls, v: int) -> int:
+        if v < 1 or v > 5:
+            raise ValueError("Year must be between 1 and 5")
+        return v
+
+    @field_validator("division")
+    @classmethod
+    def clean_division(cls, v: str) -> str:
+        cleaned = (v or "").strip().upper()
+        if not cleaned:
+            raise ValueError("Division is required")
+        return cleaned
+
+    @field_validator("batch")
+    @classmethod
+    def valid_batch(cls, v: str) -> str:
+        cleaned = (v or "").strip().upper().replace(" ", "")
+        if cleaned in {"D1", "D_1"}:
+            cleaned = "D-1"
+        elif cleaned in {"D2", "D_2"}:
+            cleaned = "D-2"
+        elif cleaned in {"D3", "D_3"}:
+            cleaned = "D-3"
+        if cleaned and cleaned not in VALID_BATCHES:
+            raise ValueError(f"Batch must be one of {sorted(VALID_BATCHES)} or empty")
+        return cleaned
+
+
+class RosterEntryOut(BaseModel):
+    id: int
+    roll_number: str
+    name: str
+    year: int
+    division: str
+    batch: str
+    registered_student_id: Optional[int] = None
+    registered_as: Optional[str] = None
+
+
+class RosterImportResult(BaseModel):
+    message: str
+    added: int
+    updated: int
+    skipped: int
+    errors: list[str]
 
 
 class AttendanceSubmitRequest(BaseModel):

@@ -262,14 +262,58 @@ void main() {
     expect(body['subject'], 'M-1');
     expect(body['division'], 'D');
     expect(body['period'], '13:00-14:00');
+    // The roll number is always sent: it is the identity the backend keys
+    // attendance on, and the only one a roster student has.
     expect(body['records'], [
-      {'student_id': 1, 'status': 'absent'},
-      {'student_id': 2, 'status': 'present'},
+      {'roll_number': '1', 'student_id': 1, 'status': 'absent'},
+      {'roll_number': '2', 'student_id': 2, 'status': 'present'},
     ]);
 
     // Success returns to the lecture selector with a summary snackbar.
     expect(find.text('Attendance saved · 1 present, 1 absent'), findsOneWidget);
     expect(find.text('LOAD STUDENTS'), findsOneWidget);
+  });
+
+  testWidgets('a roster student who has not registered is marked by roll', (
+    tester,
+  ) async {
+    final backend = AttendanceBackend(
+      roster: [
+        {
+          'id': null,
+          'roll_number': '901',
+          'name': 'ROSTER ONLY STUDENT',
+          'batch': 'D-1',
+          'is_registered': false,
+        },
+        studentJson(id: 2, roll: '2', name: 'SIMNA AHAD AKIL'),
+      ],
+    );
+    await pumpAttendance(tester, backend);
+    await loadRoster(tester);
+
+    expect(find.byKey(const Key('attendance_card_901')), findsOneWidget);
+    expect(find.text('ROSTER ONLY STUDENT'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('attendance_mark_present')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('attendance_mark_present')));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('attendance_submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('attendance_submit')));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    final post = backend.requests
+        .where((request) => request.method == 'POST')
+        .single;
+    final body = jsonDecode(post.body) as Map<String, dynamic>;
+    expect(body['records'], [
+      {'roll_number': '901', 'status': 'present'},
+      {'roll_number': '2', 'student_id': 2, 'status': 'present'},
+    ]);
   });
 
   testWidgets('mark-all-remaining-present completes the sheet', (tester) async {

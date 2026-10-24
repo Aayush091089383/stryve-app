@@ -1,3 +1,5 @@
+import csv
+import io
 import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -19,6 +21,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError
 from pwdlib import PasswordHash
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
@@ -84,6 +87,9 @@ from schemas import (
     AttendanceStudentOut,
     AttendanceSubmitRequest,
     AttendanceSubmitResponse,
+    RosterEntryIn,
+    RosterEntryOut,
+    RosterImportResult,
     StudentAttendanceOut,
     SubjectAttendanceSummary,
     AttendanceLectureOut,
@@ -1920,15 +1926,26 @@ def get_attendance(
     out = []
     for row in rows:
         student = row.student
-        if student is None:
-            continue
-        if batch_filter and _normalise_batch(student.batch) != batch_filter:
+        if student is not None:
+            row_batch = _normalise_batch(student.batch)
+            roll = (student.roll_number or "").strip()
+            name = student.name
+        else:
+            # Marked from the class roster: this student has not registered yet.
+            roster = _roster_entry(
+                db, division=division, roll_number=row.roll_number, batch=batch
+            )
+            row_batch = _normalise_batch(roster.batch if roster else row.batch)
+            roll = (row.roll_number or "").strip()
+            name = roster.name if roster else f"Roll {roll}"
+
+        if batch_filter and row_batch and row_batch != batch_filter:
             continue
         out.append(
             AttendanceSessionOut(
-                student_id=student.id,
-                name=student.name,
-                roll_number=student.roll_number,
+                student_id=student.id if student is not None else None,
+                name=name,
+                roll_number=roll,
                 status=row.status,
             )
         )
@@ -1962,12 +1979,6 @@ def save_attendance(
             detail="At least one student record is required",
         )
 
-    if len({record.student_id for record in payload.records}) != len(payload.records):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The same student was submitted more than once",
-        )
-
     session_date = payload.session_date.strip()
     day_date = _parse_date(session_date)
 
@@ -1992,52 +2003,25 @@ def save_attendance(
         slot_start=payload.slot_start,
     )
 
-    student_ids = [record.student_id for record in payload.records]
-    students = {
-        student.id: student
-        for student in db.query(models.Student).filter(
-            models.Student.id.in_(student_ids)
-        )
-    }
-
-    for record in payload.records:
-        student = students.get(record.student_id)
-        if student is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Student {record.student_id} not found",
-            )
-        if student.status != "approved":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"{student.name} is not an approved student and cannot be marked"
-                ),
-            )
-        if student.division != payload.division:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"{student.name} is not in division {payload.division}",
-            )
-        if batch and _normalise_batch(student.batch) != batch:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"{student.name} is not in batch {batch}",
-            )
+    resolved = _resolve_attendance_marks(db, payload)
 
     now = datetime.utcnow()
     created = 0
     corrected = 0
 
-    for record in payload.records:
+    for record, roll, student in resolved:
         existing = db.query(models.AttendanceRecord).filter(
-            models.AttendanceRecord.student_id == record.student_id,
+            models.AttendanceRecord.roll_number == roll,
             models.AttendanceRecord.subject == subject,
             models.AttendanceRecord.session_date == session_date,
             models.AttendanceRecord.slot_start == payload.slot_start,
         ).first()
 
         if existing:
+            # Keep the account link current: a student who registers after the
+            # lecture was marked is attached on the next save of that lecture.
+            if student is not None and existing.student_id != student.id:
+                existing.student_id = student.id
             if existing.status != record.status:
                 existing.status = record.status
                 existing.updated_by = teacher.id
@@ -2050,7 +2034,8 @@ def save_attendance(
 
         db.add(
             models.AttendanceRecord(
-                student_id=record.student_id,
+                student_id=student.id if student is not None else None,
+                roll_number=roll,
                 subject=subject,
                 division=payload.division,
                 batch=batch,
@@ -2100,6 +2085,130 @@ def _roll_sort_key(roll_number: str):
     return (1, 0, text)
 
 
+def _roster_entry(
+    db: Session, *, division: str, roll_number: str, batch: str = ""
+) -> models.ClassRoster | None:
+    """The roster row for one roll number in one division, if there is one."""
+    rows = (
+        db.query(models.ClassRoster)
+        .filter(
+            models.ClassRoster.division == division,
+            models.ClassRoster.roll_number == (roll_number or "").strip(),
+        )
+        .all()
+    )
+    if not rows:
+        return None
+    wanted = _normalise_batch(batch)
+    if wanted:
+        for row in rows:
+            if _normalise_batch(row.batch) == wanted:
+                return row
+    return rows[0]
+
+
+def _resolve_attendance_marks(
+    db: Session, payload: "AttendanceSaveRequest"
+) -> list[tuple["AttendanceMark", str, models.Student | None]]:
+    """Resolve a lecture sheet to (mark, roll number, account or None).
+
+    The roll number is the identity that survives registration, so every mark is
+    resolved to one before anything is written. A mark is accepted when the roll
+    number belongs to an approved account in this division, or when it is on the
+    class roster - which is exactly what lets a teacher mark a student who has
+    not signed up yet. Anything else is refused, so a typo cannot invent a
+    student out of thin air.
+    """
+    ids = [r.student_id for r in payload.records if r.student_id is not None]
+    by_id = {}
+    if ids:
+        by_id = {
+            student.id: student
+            for student in db.query(models.Student).filter(models.Student.id.in_(ids))
+        }
+
+    rolls = [r.roll_number for r in payload.records if r.roll_number]
+    by_roll = {}
+    if rolls:
+        by_roll = {
+            (student.roll_number or "").strip(): student
+            for student in db.query(models.Student).filter(
+                models.Student.roll_number.in_(rolls)
+            )
+        }
+
+    resolved: list[tuple[AttendanceMark, str, models.Student | None]] = []
+    seen: set[str] = set()
+    batch = _normalise_batch(payload.batch)
+
+    for record in payload.records:
+        student = None
+        roll = record.roll_number
+
+        if record.student_id is not None:
+            student = by_id.get(record.student_id)
+            if student is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Student {record.student_id} not found",
+                )
+            roll = (student.roll_number or "").strip()
+        else:
+            student = by_roll.get(roll)
+
+        if not roll:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Every record needs a roll number",
+            )
+
+        if student is not None:
+            if student.status != "approved":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"{student.name} is not an approved student and cannot be marked"
+                    ),
+                )
+            if student.division != payload.division:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"{student.name} is not in division {payload.division}",
+                )
+            row_batch = _normalise_batch(student.batch)
+            label = student.name
+        else:
+            roster = _roster_entry(
+                db, division=payload.division, roll_number=roll, batch=payload.batch
+            )
+            if roster is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"Roll number {roll} is not on the class roster for "
+                        f"division {payload.division}"
+                    ),
+                )
+            row_batch = _normalise_batch(roster.batch)
+            label = roster.name
+
+        if batch and row_batch and row_batch != batch:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{label} is not in batch {batch}",
+            )
+
+        if roll in seen:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The same student was submitted more than once",
+            )
+        seen.add(roll)
+        resolved.append((record, roll, student))
+
+    return resolved
+
+
 @app.get("/teacher/attendance/students", response_model=list[AttendanceStudentOut])
 def list_attendance_students(
     year: int | None = Query(default=None, ge=1, le=5),
@@ -2108,38 +2217,70 @@ def list_attendance_students(
     teacher: models.Teacher = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
-    """Approved students of one class group, sorted by roll number ascending.
+    """The class list for one class group, sorted by roll number ascending.
 
-    A directory of who may be marked: it carries no credentials and no
-    attendance history. ``year`` is optional so a whole division can be listed
-    across years when it is not known.
+    The roster is the class list, so a student who has not registered is listed
+    too (``is_registered`` false, no account id) and can be marked. An approved
+    account that is missing from the roster is still added, so a student who
+    registered before the roster existed is never dropped from the sheet. The
+    response carries no credentials and no attendance history; ``year`` is
+    optional so a whole division can be listed across years when it is unknown.
     """
     normalised = _normalise_batch(batch)
 
-    query = db.query(models.Student).filter(
+    roster_query = db.query(models.ClassRoster).filter(
+        models.ClassRoster.division == division
+    )
+    if year is not None:
+        roster_query = roster_query.filter(models.ClassRoster.year == year)
+    if normalised:
+        roster_query = roster_query.filter(
+            or_(
+                models.ClassRoster.batch == normalised,
+                models.ClassRoster.batch == normalised.replace("-", ""),
+                models.ClassRoster.batch == "",
+            )
+        )
+
+    student_query = db.query(models.Student).filter(
         models.Student.division == division,
         models.Student.status == "approved",
     )
     if year is not None:
-        query = query.filter(models.Student.year == year)
+        student_query = student_query.filter(models.Student.year == year)
     if normalised:
-        query = query.filter(
+        student_query = student_query.filter(
             or_(
                 models.Student.batch == normalised,
                 models.Student.batch == normalised.replace("-", ""),
             )
         )
 
-    students = sorted(query.all(), key=lambda s: _roll_sort_key(s.roll_number))
-    return [
-        AttendanceStudentOut(
-            id=student.id,
-            roll_number=student.roll_number,
-            name=student.name,
-            batch=student.batch or "",
+    accounts = {
+        (student.roll_number or "").strip(): student
+        for student in student_query.all()
+    }
+
+    merged: dict[str, tuple[str, str]] = {}
+    for entry in roster_query.all():
+        merged[(entry.roll_number or "").strip()] = (entry.name, entry.batch or "")
+    for roll, student in accounts.items():
+        merged.setdefault(roll, (student.name, student.batch or ""))
+
+    out: list[AttendanceStudentOut] = []
+    for roll in sorted(merged, key=_roll_sort_key):
+        roster_name, roster_batch = merged[roll]
+        student = accounts.get(roll)
+        out.append(
+            AttendanceStudentOut(
+                id=student.id if student is not None else None,
+                roll_number=roll,
+                name=student.name if student is not None else roster_name,
+                batch=(student.batch or "") if student is not None else roster_batch,
+                is_registered=student is not None,
+            )
         )
-        for student in students
-    ]
+    return out
 
 
 @app.post("/teacher/attendance/submit", response_model=AttendanceSubmitResponse)
@@ -2278,13 +2419,24 @@ def my_attendance(
 ):
     """The signed-in student's own attendance, broken down by subject.
 
-    Only the caller's rows are read - the student id comes from the session,
-    never from a query parameter - and only subjects with at least one recorded
+    Only the caller's rows are read - the identity comes from the session, never
+    from a query parameter - and only subjects with at least one recorded
     lecture are listed. Lectures are newest first; subjects are alphabetical.
+
+    Rows are matched on the roll number, so lectures marked from the class
+    roster before this account existed are already part of the history. The
+    account id is also matched, which keeps any row written by an older client
+    that only knew the id from disappearing.
     """
+    roll_number = (student.roll_number or "").strip()
     rows = (
         db.query(models.AttendanceRecord)
-        .filter(models.AttendanceRecord.student_id == student.id)
+        .filter(
+            or_(
+                models.AttendanceRecord.roll_number == roll_number,
+                models.AttendanceRecord.student_id == student.id,
+            )
+        )
         .all()
     )
 
@@ -2331,6 +2483,276 @@ def my_attendance(
         attended=attended,
         subjects=subjects_out,
     )
+
+
+# ==================================================================
+# Class roster (admin)
+# ============================================================
+def _registered_by_roll(
+    db: Session, *, year: int, division: str
+) -> dict[str, models.Student]:
+    """Registered accounts of one class group, keyed by roll number."""
+    return {
+        (student.roll_number or "").strip(): student
+        for student in db.query(models.Student)
+        .filter(
+            models.Student.year == year,
+            models.Student.division == division,
+            models.Student.status == "approved",
+        )
+        .all()
+    }
+
+
+def _roster_out(
+    entry: models.ClassRoster, accounts: dict[str, models.Student]
+) -> RosterEntryOut:
+    student = accounts.get((entry.roll_number or "").strip())
+    return RosterEntryOut(
+        id=entry.id,
+        roll_number=entry.roll_number,
+        name=entry.name,
+        year=entry.year,
+        division=entry.division,
+        batch=entry.batch or "",
+        registered_student_id=student.id if student is not None else None,
+        registered_as=student.name if student is not None else None,
+    )
+
+
+def _upsert_roster_entry(
+    db: Session, entry: RosterEntryIn
+) -> tuple[models.ClassRoster, bool]:
+    """Insert or update one roster row. Returns (row, created)."""
+    row = (
+        db.query(models.ClassRoster)
+        .filter(
+            models.ClassRoster.year == entry.year,
+            models.ClassRoster.division == entry.division,
+            models.ClassRoster.roll_number == entry.roll_number,
+        )
+        .first()
+    )
+    now = datetime.utcnow()
+
+    if row is None:
+        row = models.ClassRoster(
+            roll_number=entry.roll_number,
+            name=entry.name,
+            year=entry.year,
+            division=entry.division,
+            batch=entry.batch,
+            created_at=now,
+        )
+        db.add(row)
+        return row, True
+
+    row.name = entry.name
+    row.batch = entry.batch
+    row.updated_at = now
+    return row, False
+
+
+@app.get("/admin/roster", response_model=list[RosterEntryOut])
+def list_roster(
+    year: int | None = Query(default=None, ge=1, le=5),
+    division: str = "",
+    batch: str = "",
+    admin: models.Teacher = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """The class roster, sorted by class group then roll number.
+
+    ``registered_student_id`` says which entries already have an account, so an
+    admin can see at a glance who is still missing.
+    """
+    query = db.query(models.ClassRoster)
+    if year is not None:
+        query = query.filter(models.ClassRoster.year == year)
+    if division:
+        query = query.filter(
+            models.ClassRoster.division == division.strip().upper()
+        )
+    normalised = _normalise_batch(batch)
+    if normalised:
+        query = query.filter(
+            or_(
+                models.ClassRoster.batch == normalised,
+                models.ClassRoster.batch == "",
+            )
+        )
+
+    entries = sorted(
+        query.all(),
+        key=lambda entry: (
+            entry.year,
+            entry.division,
+            _roll_sort_key(entry.roll_number),
+        ),
+    )
+
+    cache: dict[tuple[int, str], dict[str, models.Student]] = {}
+    out: list[RosterEntryOut] = []
+    for entry in entries:
+        key = (entry.year, entry.division)
+        if key not in cache:
+            cache[key] = _registered_by_roll(
+                db, year=entry.year, division=entry.division
+            )
+        out.append(_roster_out(entry, cache[key]))
+    return out
+
+
+@app.post("/admin/roster/add", response_model=RosterEntryOut)
+def add_roster_entry(
+    payload: RosterEntryIn,
+    admin: models.Teacher = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Add one student to the class roster, or update the row already there."""
+    row, _created = _upsert_roster_entry(db, payload)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That roll number is already on this class roster",
+        )
+    db.refresh(row)
+    return _roster_out(
+        row, _registered_by_roll(db, year=row.year, division=row.division)
+    )
+
+
+@app.post("/admin/roster/upload", response_model=RosterImportResult)
+async def upload_roster(
+    file: UploadFile = File(...),
+    year: int = Form(1),
+    division: str = Form("D"),
+    batch: str = Form(""),
+    admin: models.Teacher = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Import a class roster from a CSV file.
+
+    Format: ``roll_number,name[,batch]`` per line, an optional header row, UTF-8.
+    Rows are upserted on (year, division, roll_number), so re-uploading a
+    corrected list updates names instead of duplicating students. A row that
+    does not parse is reported in ``errors`` and skipped - the rest still land.
+    """
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="The file is empty"
+        )
+    if len(raw) > 512 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That file is larger than 512 KB",
+        )
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The CSV must be UTF-8 text",
+        )
+
+    rows = [row for row in csv.reader(io.StringIO(text)) if any(c.strip() for c in row)]
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="The file has no rows"
+        )
+
+    first = [cell.strip().lower() for cell in rows[0]]
+    has_header = bool(first) and first[0] in {
+        "roll",
+        "roll no",
+        "rollno",
+        "roll number",
+        "roll_number",
+        "rollnumber",
+    }
+    data_rows = rows[1:] if has_header else rows
+
+    added = 0
+    updated = 0
+    skipped = 0
+    errors: list[str] = []
+
+    for offset, row in enumerate(data_rows, start=2 if has_header else 1):
+        cells = [cell.strip() for cell in row]
+        if len(cells) < 2 or not cells[0] or not cells[1]:
+            skipped += 1
+            errors.append(f"Line {offset}: expected roll_number,name")
+            continue
+
+        row_batch = cells[2] if len(cells) > 2 and cells[2] else batch
+        try:
+            entry = RosterEntryIn(
+                roll_number=cells[0],
+                name=cells[1],
+                year=year,
+                division=division,
+                batch=row_batch,
+            )
+        except ValidationError as exc:
+            skipped += 1
+            first_error = exc.errors()[0]
+            errors.append(
+                f"Line {offset}: {first_error.get('msg', 'invalid row')}"
+            )
+            continue
+
+        _row, created = _upsert_roster_entry(db, entry)
+        if created:
+            added += 1
+        else:
+            updated += 1
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The roster changed while the file was being imported",
+        )
+
+    return RosterImportResult(
+        message="Roster imported",
+        added=added,
+        updated=updated,
+        skipped=skipped,
+        errors=errors[:20],
+    )
+
+
+@app.delete("/admin/roster/{entry_id}")
+def delete_roster_entry(
+    entry_id: int,
+    admin: models.Teacher = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Remove one student from the class roster.
+
+    Attendance already marked for that roll number is kept: the lecture did
+    happen, and the record stays attributable to the roll number.
+    """
+    row = (
+        db.query(models.ClassRoster)
+        .filter(models.ClassRoster.id == entry_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="That roster entry no longer exists",
+        )
+    db.delete(row)
+    db.commit()
+    return {"message": f"Roll {row.roll_number} removed from the roster"}
 
 
 # ==================================================================

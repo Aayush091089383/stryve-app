@@ -1024,6 +1024,14 @@
         <span>Attendance</span>
       </button>
 
+      <button class="nav-item" type="button" data-tab="roster" id="navRoster" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M4 5h16v15H4z"/><path d="M4 10h16"/><path d="M9 3v4"/><path d="M15 3v4"/>
+        </svg>
+        <span>Class roster</span>
+      </button>
+
       <button class="nav-item" type="button" data-tab="approvals" id="navApprovals" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -1350,6 +1358,150 @@
           </div>
         </section>
 
+        <!-- -------------------------------------------------------- roster -->
+        <section class="panel" id="panel-roster">
+          <div class="grid-2">
+            <section class="card">
+              <h2>Add a student</h2>
+              <p class="hint">
+                The class roster is the attendance list. A student on it can be marked
+                before they register, and their lectures are waiting for them the moment
+                they sign up with the same roll number.
+              </p>
+
+              <form id="rosterForm" novalidate>
+                <div class="row">
+                  <div class="field">
+                    <label for="rosterRoll">Roll number</label>
+                    <input id="rosterRoll" type="text" inputmode="numeric" placeholder="e.g. 71" required />
+                  </div>
+                  <div class="field">
+                    <label for="rosterName">Full name</label>
+                    <input id="rosterName" type="text" placeholder="As printed on the sheet" required />
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label for="rosterYear">Year</label>
+                    <select id="rosterYear">
+                      <option value="1" selected>Year 1</option>
+                      <option value="2">Year 2</option>
+                      <option value="3">Year 3</option>
+                      <option value="4">Year 4</option>
+                      <option value="5">Year 5</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="rosterDivision">Division</label>
+                    <select id="rosterDivision">
+                      <option value="D" selected>Division D</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="rosterBatch">Batch</label>
+                  <select id="rosterBatch">
+                    <option value="" selected>Whole division</option>
+                    <option value="D-1">D-1</option>
+                    <option value="D-2">D-2</option>
+                    <option value="D-3">D-3</option>
+                  </select>
+                </div>
+
+                <button id="addRosterBtn" class="block" type="button">
+                  <span class="spinner" id="addRosterSpinner" hidden></span>
+                  <span id="addRosterLabel">Add to roster</span>
+                </button>
+              </form>
+
+              <div id="rosterMessage" class="message" role="status" aria-live="polite"></div>
+
+              <h2>Bulk upload</h2>
+              <p class="hint">
+                CSV with one student per line: <code>roll_number,name,batch</code>.
+                A header row is optional. Re-uploading a corrected list updates names
+                instead of creating duplicates.
+              </p>
+
+              <div class="field">
+                <label for="rosterFile">CSV file</label>
+                <input id="rosterFile" type="file" accept=".csv,text/csv" />
+                <p class="file-note">Rows that cannot be read are reported and skipped; the rest are imported.</p>
+              </div>
+
+              <button id="uploadRosterBtn" class="block" type="button" disabled>
+                <span class="spinner" id="uploadRosterSpinner" hidden></span>
+                <span id="uploadRosterLabel">Import CSV</span>
+              </button>
+
+              <div id="rosterUploadMessage" class="message" role="status" aria-live="polite"></div>
+            </section>
+
+            <section class="card">
+              <div class="section-head">
+                <h2>Class roster</h2>
+                <span class="hint" id="rosterCount">Not loaded</span>
+              </div>
+              <p class="hint">
+                “Registered” means the student has an account. Everyone else can still
+                be marked; their record links up when they register.
+              </p>
+
+              <div class="row">
+                <div class="field">
+                  <label for="rosterFilterYear">Year</label>
+                  <select id="rosterFilterYear">
+                    <option value="" selected>All years</option>
+                    <option value="1">Year 1</option>
+                    <option value="2">Year 2</option>
+                    <option value="3">Year 3</option>
+                    <option value="4">Year 4</option>
+                    <option value="5">Year 5</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="rosterFilterDivision">Division</label>
+                  <select id="rosterFilterDivision">
+                    <option value="D" selected>Division D</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="rosterFilterBatch">Batch</label>
+                  <select id="rosterFilterBatch">
+                    <option value="" selected>All batches</option>
+                    <option value="D-1">D-1</option>
+                    <option value="D-2">D-2</option>
+                    <option value="D-3">D-3</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="row">
+                <button class="ghost small" id="refreshRosterBtn" type="button">Refresh</button>
+              </div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Roll</th>
+                      <th scope="col">Name</th>
+                      <th scope="col">Batch</th>
+                      <th scope="col">Registered</th>
+                      <th scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rosterBody">
+                    <tr><td colspan="5" class="state">Open this tab to load the roster.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
         <!-- ---------------------------------------------------- approvals -->
         <section class="panel" id="panel-approvals">
           <section class="card">
@@ -1496,6 +1648,10 @@
       title: "Attendance",
       sub: "Mark present or absent for a lecture you are assigned to teach."
     },
+    roster: {
+      title: "Class roster",
+      sub: "Who is in the class, including students who have not registered yet."
+    },
     approvals: {
       title: "Approvals",
       sub: "Review student registrations waiting for a decision."
@@ -1580,6 +1736,29 @@
   var submitAttendanceLabel = document.getElementById("submitAttendanceLabel");
   var markAllPresentBtn = document.getElementById("markAllPresentBtn");
   var markAllAbsentBtn = document.getElementById("markAllAbsentBtn");
+
+  var navRoster = document.getElementById("navRoster");
+  var rosterForm = document.getElementById("rosterForm");
+  var rosterRoll = document.getElementById("rosterRoll");
+  var rosterName = document.getElementById("rosterName");
+  var rosterYear = document.getElementById("rosterYear");
+  var rosterDivision = document.getElementById("rosterDivision");
+  var rosterBatch = document.getElementById("rosterBatch");
+  var addRosterBtn = document.getElementById("addRosterBtn");
+  var addRosterSpinner = document.getElementById("addRosterSpinner");
+  var addRosterLabel = document.getElementById("addRosterLabel");
+  var rosterFile = document.getElementById("rosterFile");
+  var uploadRosterBtn = document.getElementById("uploadRosterBtn");
+  var uploadRosterSpinner = document.getElementById("uploadRosterSpinner");
+  var uploadRosterLabel = document.getElementById("uploadRosterLabel");
+  var rosterBody = document.getElementById("rosterBody");
+  var rosterMessage = document.getElementById("rosterMessage");
+  var rosterUploadMessage = document.getElementById("rosterUploadMessage");
+  var rosterCount = document.getElementById("rosterCount");
+  var rosterFilterYear = document.getElementById("rosterFilterYear");
+  var rosterFilterDivision = document.getElementById("rosterFilterDivision");
+  var rosterFilterBatch = document.getElementById("rosterFilterBatch");
+  var refreshRosterBtn = document.getElementById("refreshRosterBtn");
   var fileModal = document.getElementById("fileModal");
   var fileModalTitle = document.getElementById("fileModalTitle");
   var fileModalBody = document.getElementById("fileModalBody");
@@ -1749,6 +1928,7 @@
   // --------------------------------------------------------------- routing
   function allowed(tab) {
     if (tab === "teachers") return isAdmin();
+    if (tab === "roster") return isAdmin();
     if (tab === "approvals") return canReview();
     return tab === "assignments" || tab === "announcements" ||
       tab === "attendance" || tab === "profile";
@@ -1775,6 +1955,7 @@
     if (tab === "assignments") loadMine();
     if (tab === "announcements") loadAnnouncements();
     if (tab === "attendance") prepareAttendance();
+    if (tab === "roster") loadRoster();
     if (tab === "approvals") loadPending();
     if (tab === "teachers") loadTeachers();
     if (tab === "profile") renderProfile();
@@ -1788,6 +1969,7 @@
     userRole.textContent = prettyRole(me.role || remember(ROLE_KEY));
     userAvatar.textContent = initials(name);
     navTeachers.hidden = me.role !== "admin";
+    navRoster.hidden = me.role !== "admin";
     navApprovals.hidden = !canReview();
 
     if (navApprovals.hidden) {
@@ -1822,6 +2004,11 @@
     attendanceAssignments = null;
     if (typeof resetAttendanceSheet === "function") resetAttendanceSheet();
     if (typeof hideMessage === "function") hideMessage(attendanceMessage);
+    resetRosterTable("Open this tab to load the roster.");
+    rosterCount.textContent = "Not loaded";
+    if (rosterFile) rosterFile.value = "";
+    hideMessage(rosterMessage);
+    hideMessage(rosterUploadMessage);
     recentList.textContent = "";
     pendingList.textContent = "";
     teachersBody.textContent = "";
@@ -3287,7 +3474,11 @@
           "&slot_end=" + encodeURIComponent(pair[1])
         );
         if (existing.response.ok && Array.isArray(existing.body)) {
-          existing.body.forEach(function (row) { saved[row.student_id] = row.status; });
+          // Keyed by roll number, because a lecture marked from the roster has
+          // no account id to key on.
+          existing.body.forEach(function (row) {
+            if (row.roll_number) saved[row.roll_number] = row.status;
+          });
         }
       } catch (error) {
         // A failed read-back must not block marking a fresh lecture.
@@ -3298,7 +3489,8 @@
           id: student.id,
           roll: student.roll_number,
           name: student.name,
-          status: saved[student.id] === "absent" ? "absent" : "present"
+          registered: student.is_registered !== false,
+          status: saved[student.roll_number] === "absent" ? "absent" : "present"
         };
       });
       renderAttendanceRows();
@@ -3335,6 +3527,12 @@
 
       var name = document.createElement("td");
       name.textContent = row.name || "—";
+      if (!row.registered) {
+        var pendingLabel = document.createElement("span");
+        pendingLabel.className = "file-note";
+        pendingLabel.textContent = " · not registered yet";
+        name.appendChild(pendingLabel);
+      }
 
       var statusCell = document.createElement("td");
       var select = document.createElement("select");
@@ -3388,7 +3586,9 @@
           division: attDivision.value,
           batch: attBatch.value,
           records: attendanceRows.map(function (row) {
-            return { student_id: row.id, status: row.status };
+            var record = { roll_number: row.roll, status: row.status };
+            if (row.id) record.student_id = row.id;
+            return record;
           })
         }
       });
@@ -3432,6 +3632,258 @@
   attSubject.addEventListener("change", renderAttendanceBatches);
   attBatch.addEventListener("change", onAttendanceLectureChanged);
   attendanceForm.addEventListener("submit", function (event) { event.preventDefault(); });
+
+  // ----------------------------------------------------------- class roster
+  // Admin-only. The roster is the class list independent of registration, so a
+  // teacher can mark a student who has not signed up; the backend links the
+  // record by roll number the moment that student registers.
+  var rosterRows = [];
+
+  function resetRosterTable(message) {
+    rosterRows = [];
+    rosterBody.textContent = "";
+    var row = document.createElement("tr");
+    var cell = document.createElement("td");
+    cell.colSpan = 5;
+    cell.className = "state";
+    cell.textContent = message || "Open this tab to load the roster.";
+    row.appendChild(cell);
+    rosterBody.appendChild(row);
+  }
+
+  async function loadRoster() {
+    hideMessage(rosterMessage);
+    resetRosterTable("Loading the roster…");
+    rosterCount.textContent = "Loading…";
+
+    try {
+      var query = "/admin/roster?division=" +
+        encodeURIComponent(rosterFilterDivision.value);
+      if (rosterFilterYear.value) {
+        query += "&year=" + encodeURIComponent(rosterFilterYear.value);
+      }
+      if (rosterFilterBatch.value) {
+        query += "&batch=" + encodeURIComponent(rosterFilterBatch.value);
+      }
+
+      var result = await api(query);
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        resetRosterTable("Could not load the roster.");
+        rosterCount.textContent = "Not loaded";
+        showMessage(
+          rosterMessage,
+          errorText(result.body, "Could not load the roster (" + result.response.status + ")."),
+          "error"
+        );
+        return;
+      }
+
+      rosterRows = Array.isArray(result.body) ? result.body : [];
+      renderRoster();
+    } catch (error) {
+      resetRosterTable("Could not load the roster.");
+      rosterCount.textContent = "Not loaded";
+      showMessage(rosterMessage, "Could not load the roster. Check your connection.", "error");
+    }
+  }
+
+  function renderRoster() {
+    rosterBody.textContent = "";
+
+    if (rosterRows.length === 0) {
+      resetRosterTable("No students on this roster yet.");
+      rosterCount.textContent = "0 students";
+      return;
+    }
+
+    rosterRows.forEach(function (entry) {
+      var tr = document.createElement("tr");
+
+      var roll = document.createElement("td");
+      roll.textContent = entry.roll_number || "—";
+
+      var name = document.createElement("td");
+      name.textContent = entry.name || "—";
+
+      var batch = document.createElement("td");
+      batch.textContent = entry.batch || "Whole division";
+
+      var registered = document.createElement("td");
+      registered.textContent = entry.registered_student_id ? "✅ Yes" : "No";
+      if (entry.registered_as) registered.title = entry.registered_as;
+
+      var actions = document.createElement("td");
+      var remove = document.createElement("button");
+      remove.className = "ghost small";
+      remove.type = "button";
+      remove.textContent = "Delete";
+      remove.setAttribute(
+        "aria-label",
+        "Remove roll " + (entry.roll_number || "") + " from the roster"
+      );
+      remove.addEventListener("click", function () {
+        deleteRosterEntry(entry, remove);
+      });
+      actions.appendChild(remove);
+
+      tr.appendChild(roll);
+      tr.appendChild(name);
+      tr.appendChild(batch);
+      tr.appendChild(registered);
+      tr.appendChild(actions);
+      rosterBody.appendChild(tr);
+    });
+
+    var missing = rosterRows.filter(function (entry) {
+      return !entry.registered_student_id;
+    }).length;
+    rosterCount.textContent = rosterRows.length + " student(s) · " + missing + " not registered";
+  }
+
+  async function addRosterEntry() {
+    var roll = (rosterRoll.value || "").trim();
+    var name = (rosterName.value || "").trim();
+
+    if (!roll || !name) {
+      showMessage(rosterMessage, "A roll number and a name are both required.", "error");
+      return;
+    }
+
+    hideMessage(rosterMessage);
+    busy(addRosterBtn, addRosterSpinner, addRosterLabel, true, "Adding…");
+
+    try {
+      var result = await api("/admin/roster/add", {
+        method: "POST",
+        json: {
+          roll_number: roll,
+          name: name,
+          year: parseInt(rosterYear.value, 10),
+          division: rosterDivision.value,
+          batch: rosterBatch.value
+        }
+      });
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        showMessage(
+          rosterMessage,
+          errorText(result.body, "Could not add that student (" + result.response.status + ")."),
+          "error"
+        );
+        return;
+      }
+
+      rosterRoll.value = "";
+      rosterName.value = "";
+      showMessage(rosterMessage, "Roll " + roll + " is on the roster.", "success");
+      loadRoster();
+    } catch (error) {
+      showMessage(rosterMessage, "Could not add that student. Check your connection.", "error");
+    } finally {
+      busy(addRosterBtn, addRosterSpinner, addRosterLabel, false, "Add to roster");
+    }
+  }
+
+  async function uploadRosterCsv() {
+    var file = rosterFile.files && rosterFile.files[0];
+    if (!file) {
+      showMessage(rosterUploadMessage, "Choose a CSV file first.", "error");
+      return;
+    }
+
+    hideMessage(rosterUploadMessage);
+    busy(uploadRosterBtn, uploadRosterSpinner, uploadRosterLabel, true, "Importing…");
+
+    try {
+      var form = new FormData();
+      form.append("file", file, file.name);
+      form.append("year", rosterYear.value);
+      form.append("division", rosterDivision.value);
+      if (rosterBatch.value) form.append("batch", rosterBatch.value);
+
+      var result = await api("/admin/roster/upload", { method: "POST", form: form });
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        showMessage(
+          rosterUploadMessage,
+          errorText(result.body, "Could not import the file (" + result.response.status + ")."),
+          "error"
+        );
+        return;
+      }
+
+      var body = result.body || {};
+      var summary = (body.added || 0) + " added, " + (body.updated || 0) +
+        " updated, " + (body.skipped || 0) + " skipped.";
+      var problems = Array.isArray(body.errors) && body.errors.length > 0
+        ? " " + body.errors.join(" ")
+        : "";
+      showMessage(
+        rosterUploadMessage,
+        summary + problems,
+        (body.skipped || 0) > 0 ? "info" : "success"
+      );
+
+      rosterFile.value = "";
+      loadRoster();
+    } catch (error) {
+      showMessage(rosterUploadMessage, "Could not import the file. Check your connection.", "error");
+    } finally {
+      busy(uploadRosterBtn, uploadRosterSpinner, uploadRosterLabel, false, "Import CSV");
+    }
+  }
+
+  async function deleteRosterEntry(entry, button) {
+    var label = "Roll " + (entry.roll_number || "") + " (" + (entry.name || "") + ")";
+    if (!window.confirm("Remove " + label + " from the class roster?")) return;
+
+    button.disabled = true;
+    hideMessage(rosterMessage);
+
+    try {
+      var result = await api("/admin/roster/" + encodeURIComponent(entry.id), {
+        method: "DELETE"
+      });
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        showMessage(
+          rosterMessage,
+          errorText(result.body, "Could not remove that student (" + result.response.status + ")."),
+          "error"
+        );
+        button.disabled = false;
+        return;
+      }
+
+      showMessage(rosterMessage, label + " removed from the roster.", "success");
+      loadRoster();
+    } catch (error) {
+      showMessage(rosterMessage, "Could not remove that student. Check your connection.", "error");
+      button.disabled = false;
+    }
+  }
+
+  rosterForm.addEventListener("submit", function (event) { event.preventDefault(); });
+  addRosterBtn.addEventListener("click", addRosterEntry);
+  uploadRosterBtn.addEventListener("click", uploadRosterCsv);
+  refreshRosterBtn.addEventListener("click", loadRoster);
+  rosterFile.addEventListener("change", function () {
+    uploadRosterBtn.disabled = !(rosterFile.files && rosterFile.files.length > 0);
+  });
+  [rosterFilterYear, rosterFilterDivision, rosterFilterBatch].forEach(function (control) {
+    control.addEventListener("change", function () {
+      if (activeTab === "roster") loadRoster();
+    });
+  });
 
   // ---------------------------------------------------------------- profile
   function renderProfile() {

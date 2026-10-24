@@ -38,7 +38,7 @@ import sys
 import tempfile
 import threading
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -1034,6 +1034,334 @@ check(
 check(
     "a teacher token is not a student session -> 401",
     requests.get(f"{BASE}/student/attendance", headers=auth(smg_token), timeout=10).status_code == 401,
+)
+
+# ==========================================================================
+section("3b. Class roster: attendance before a student registers")
+# ==========================================================================
+check(
+    "only an admin may list the class roster -> 403 for a teacher",
+    requests.get(
+        f"{BASE}/admin/roster", headers=auth(smg_token), timeout=10
+    ).status_code == 403,
+)
+check(
+    # Admin routes answer 401 to a student session (get_current_teacher), the
+    # same as every other admin endpoint; 403 is reserved for a real teacher
+    # without the role.
+    "a student token cannot read the class roster -> 401",
+    requests.get(
+        f"{BASE}/admin/roster", headers=auth(TOKENS["1"]), timeout=10
+    ).status_code == 401,
+)
+
+listed = requests.get(
+    f"{BASE}/admin/roster?year=1&division=D", headers=auth(admin_token), timeout=10
+)
+check("an admin can list the class roster", listed.status_code == 200, listed.text[:160])
+check(
+    "the throwaway roster starts empty",
+    listed.json() == [],
+    str(listed.json())[:160],
+)
+
+roster_payload = {
+    "roll_number": "8801",
+    "name": "ROSTER ONLY STUDENT",
+    "year": 1,
+    "division": "D",
+    "batch": "D-1",
+}
+added_entry = requests.post(
+    f"{BASE}/admin/roster/add", json=roster_payload, headers=auth(admin_token), timeout=10
+)
+check("a roster entry can be added", added_entry.status_code == 200, added_entry.text[:200])
+check(
+    "a new roster entry has no account",
+    added_entry.json().get("registered_student_id") is None,
+    str(added_entry.json()),
+)
+check(
+    "re-adding the same roll updates instead of duplicating",
+    requests.post(
+        f"{BASE}/admin/roster/add",
+        json={**roster_payload, "name": "ROSTER ONLY STUDENT (FIXED)"},
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code == 200,
+)
+check(
+    "one roster row per roll number",
+    conn.execute("SELECT COUNT(*) FROM class_roster WHERE roll_number='8801'").fetchone()[0] == 1,
+)
+check(
+    "the corrected name is stored",
+    conn.execute("SELECT name FROM class_roster WHERE roll_number='8801'").fetchone()[0]
+    == "ROSTER ONLY STUDENT (FIXED)",
+)
+check(
+    "an unknown batch is refused",
+    requests.post(
+        f"{BASE}/admin/roster/add",
+        json={**roster_payload, "roll_number": "999", "batch": "D-9"},
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code == 422,
+)
+check(
+    "a blank roll number is refused",
+    requests.post(
+        f"{BASE}/admin/roster/add",
+        json={**roster_payload, "roll_number": "   "},
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code == 422,
+)
+
+sheet = requests.get(
+    f"{BASE}/teacher/attendance/students?year=1&division=D&batch=D-1",
+    headers=auth(smg_token),
+    timeout=10,
+)
+check("the class sheet answers for a teacher", sheet.status_code == 200, sheet.text[:160])
+sheet_rows = sheet.json()
+unregistered = [row for row in sheet_rows if row["roll_number"] == "8801"]
+check(
+    "the unregistered roster student is on the class sheet",
+    len(unregistered) == 1,
+    str([row["roll_number"] for row in sheet_rows]),
+)
+check(
+    "the roster student has no account id and says so",
+    unregistered
+    and unregistered[0]["id"] is None
+    and unregistered[0]["is_registered"] is False,
+    str(unregistered),
+)
+check(
+    "registered students are still listed and flagged as registered",
+    any(row["is_registered"] for row in sheet_rows),
+    str(sheet_rows)[:200],
+)
+check(
+    "the class sheet stays in roll order with the roster entry in place",
+    [row["roll_number"] for row in sheet_rows]
+    == sorted([row["roll_number"] for row in sheet_rows], key=int),
+    str([row["roll_number"] for row in sheet_rows]),
+)
+
+roster_mark = {
+    "class_date": MONDAY_STR,
+    "period": "13:00-14:00",
+    "subject": "M-1",
+    "division": "D",
+    "batch": "D-1",
+    "records": [{"roll_number": "8801", "status": "present"}],
+}
+marked = requests.post(
+    f"{BASE}/teacher/attendance/submit",
+    json=roster_mark,
+    headers=auth(admin_token),
+    timeout=10,
+)
+check(
+    "attendance can be marked for an unregistered roll number",
+    marked.status_code == 200,
+    marked.text[:200],
+)
+stored = conn.execute(
+    "SELECT student_id, roll_number, status FROM attendance_records "
+    "WHERE roll_number='8801' AND session_date=?",
+    (MONDAY_STR,),
+).fetchone()
+check(
+    "the row keeps the roll number with no account attached yet",
+    stored is not None and stored[0] is None and stored[1] == "8801" and stored[2] == "present",
+    str(stored),
+)
+check(
+    "an unknown roll number cannot be marked",
+    requests.post(
+        f"{BASE}/teacher/attendance/submit",
+        json={**roster_mark, "records": [{"roll_number": "8898", "status": "present"}]},
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code == 400,
+)
+check(
+    "the same roll number twice in one sheet is refused",
+    requests.post(
+        f"{BASE}/teacher/attendance/submit",
+        json={
+            **roster_mark,
+            "records": [
+                {"roll_number": "8801", "status": "present"},
+                {"roll_number": "8801", "status": "absent"},
+            ],
+        },
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code == 400,
+)
+
+read_back = requests.get(
+    f"{BASE}/teacher/attendance?subject=M-1&division=D&batch=D-1"
+    f"&session_date={MONDAY_STR}&slot_start=13:00&slot_end=14:00",
+    headers=auth(admin_token),
+    timeout=10,
+)
+check(
+    "a lecture marked from the roster reads back by roll number",
+    any(
+        row["roll_number"] == "8801" and row["status"] == "present"
+        for row in read_back.json()
+    ),
+    read_back.text[:200],
+)
+
+# A CSV import: one header row, two students, one unreadable line.
+roster_csv = (
+    "roll_number,name,batch\n"
+    "8802,CSV STUDENT ONE,D-2\n"
+    "8804,CSV STUDENT TWO,D-2\n"
+    "onlyarollnumber\n"
+)
+imported = requests.post(
+    f"{BASE}/admin/roster/upload",
+    files={"file": ("roster.csv", roster_csv.encode("utf-8"), "text/csv")},
+    data={"year": "1", "division": "D"},
+    headers=auth(admin_token),
+    timeout=10,
+)
+check("a CSV roster imports", imported.status_code == 200, imported.text[:200])
+check(
+    "the import reports what landed and what did not",
+    imported.json().get("added") == 2 and imported.json().get("skipped") == 1,
+    str(imported.json()),
+)
+check(
+    "the unreadable line is named in the errors",
+    any("Line 4" in message for message in imported.json().get("errors", [])),
+    str(imported.json()),
+)
+reimported = requests.post(
+    f"{BASE}/admin/roster/upload",
+    files={"file": ("roster.csv", roster_csv.encode("utf-8"), "text/csv")},
+    data={"year": "1", "division": "D"},
+    headers=auth(admin_token),
+    timeout=10,
+)
+check(
+    "re-importing the same file updates instead of duplicating",
+    reimported.json().get("added") == 0 and reimported.json().get("updated") == 2,
+    str(reimported.json()),
+)
+check(
+    "the CSV import created exactly two rows",
+    conn.execute(
+        "SELECT COUNT(*) FROM class_roster WHERE roll_number IN ('8802','8804')"
+    ).fetchone()[0]
+    == 2,
+)
+check(
+    "an empty upload is refused",
+    requests.post(
+        f"{BASE}/admin/roster/upload",
+        files={"file": ("roster.csv", b"", "text/csv")},
+        data={"year": "1", "division": "D"},
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code == 400,
+)
+
+# The promise of the feature: when that roll number finally registers, the
+# lectures already marked for it are in their account with no re-entry.
+late_token = "late-registration-token"
+conn.execute(
+    "INSERT INTO students (email, roll_number, password, name, branch, year, division, "
+    "batch, token, token_expires_at, status) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    (
+        "roster.only@example.edu",
+        "8801",
+        password_hash.hash(PASSWORD),
+        "ROSTER ONLY STUDENT (FIXED)",
+        "Computer",
+        1,
+        "D",
+        "D-1",
+        late_token,
+        (datetime.utcnow() + timedelta(days=1)).isoformat(sep=" "),
+        "approved",
+    ),
+)
+conn.commit()
+late_summary = requests.get(
+    f"{BASE}/student/attendance", headers=auth(late_token), timeout=10
+)
+check(
+    "a student who registers later inherits the lectures marked for their roll",
+    late_summary.status_code == 200
+    and late_summary.json().get("total_classes") == 1
+    and late_summary.json().get("attended") == 1,
+    late_summary.text[:200],
+)
+check(
+    "the inherited lecture is the one that was marked",
+    late_summary.json()["subjects"][0]["subject"] == "M-1"
+    and late_summary.json()["subjects"][0]["percentage"] == 100.0,
+    str(late_summary.json())[:200],
+)
+# The next save of that lecture attaches the account id to the row that
+# already existed, so the link is repaired without touching the history.
+requests.post(
+    f"{BASE}/teacher/attendance/submit",
+    json=roster_mark,
+    headers=auth(admin_token),
+    timeout=10,
+)
+linked = conn.execute(
+    "SELECT student_id, status FROM attendance_records WHERE roll_number='8801'"
+).fetchone()
+check(
+    "a later save attaches the account id to the existing row",
+    linked is not None and linked[0] is not None and linked[1] == "present",
+    str(linked),
+)
+check(
+    "attaching the account did not add a second row",
+    conn.execute(
+        "SELECT COUNT(*) FROM attendance_records WHERE roll_number='8801'"
+    ).fetchone()[0]
+    == 1,
+)
+
+entry_id = next(
+    row["id"]
+    for row in requests.get(
+        f"{BASE}/admin/roster?year=1&division=D", headers=auth(admin_token), timeout=10
+    ).json()
+    if row["roll_number"] == "8802"
+)
+check(
+    "a student token cannot delete a roster entry -> 401",
+    requests.delete(
+        f"{BASE}/admin/roster/{entry_id}", headers=auth(TOKENS["1"]), timeout=10
+    ).status_code == 401,
+)
+removed = requests.delete(
+    f"{BASE}/admin/roster/{entry_id}", headers=auth(admin_token), timeout=10
+)
+check("a roster entry can be removed", removed.status_code == 200, removed.text[:160])
+check(
+    "the removed roll number is gone but its marked lecture survives",
+    conn.execute("SELECT COUNT(*) FROM class_roster WHERE roll_number='8802'").fetchone()[0] == 0
+    and conn.execute("SELECT COUNT(*) FROM attendance_records WHERE roll_number='8801'").fetchone()[0] == 1,
+)
+check(
+    "deleting an entry that is already gone -> 404",
+    requests.delete(
+        f"{BASE}/admin/roster/{entry_id}", headers=auth(admin_token), timeout=10
+    ).status_code == 404,
 )
 
 # ==========================================================================
