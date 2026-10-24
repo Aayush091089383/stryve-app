@@ -44,11 +44,18 @@ Map<String, dynamic> assignmentJson({String subject = 'M-1'}) => {
 };
 
 Map<String, dynamic> studentJson({
-  required int id,
+  required int? id,
   required String roll,
   required String name,
   String batch = 'D-1',
-}) => {'id': id, 'roll_number': roll, 'name': name, 'batch': batch};
+  String? branch = 'AI&DS',
+}) => {
+  'id': id,
+  'roll_number': roll,
+  'name': name,
+  'branch': branch,
+  'batch': batch,
+};
 
 /// A mock backend for the whole flow. [saved] is what
 /// `GET /teacher/attendance` returns for the selected lecture.
@@ -181,6 +188,49 @@ void main() {
     expect(find.byKey(const Key('attendance_card_1')), findsOneWidget);
     // Nothing is sent to the server just by loading.
     expect(backend.requests.where((r) => r.method == 'POST'), isEmpty);
+  });
+
+  testWidgets('the card reads roll number, name and branch', (tester) async {
+    final backend = AttendanceBackend(
+      roster: [
+        studentJson(
+          id: 1,
+          roll: '71',
+          name: 'AAYUSH SHANTARAM TITAME',
+          batch: 'D-3',
+          branch: 'AI&DS',
+        ),
+      ],
+    );
+    await pumpAttendance(tester, backend);
+    await loadRoster(tester);
+
+    expect(find.text('71'), findsWidgets);
+    expect(find.text('AAYUSH SHANTARAM TITAME'), findsOneWidget);
+    expect(find.text('AI&DS'), findsOneWidget);
+    // The branch replaces the batch line, so the batch is not repeated here.
+    expect(find.text('D-3'), findsNothing);
+  });
+
+  testWidgets('a roster entry with no account yet shows its batch', (
+    tester,
+  ) async {
+    final backend = AttendanceBackend(
+      roster: [
+        studentJson(
+          id: null,
+          roll: '88',
+          name: 'PENDING STUDENT',
+          batch: 'D-2',
+          branch: null,
+        ),
+      ],
+    );
+    await pumpAttendance(tester, backend);
+    await loadRoster(tester);
+
+    expect(find.text('PENDING STUDENT'), findsOneWidget);
+    expect(find.text('D-2'), findsOneWidget);
   });
 
   testWidgets('swiping right marks present, left marks absent', (tester) async {

@@ -429,6 +429,7 @@ class AttendanceStudentOut(BaseModel):
     id: Optional[int] = None
     roll_number: str
     name: str
+    branch: Optional[str] = None
     batch: str
     is_registered: bool = True
 

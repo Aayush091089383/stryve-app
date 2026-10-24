@@ -2359,6 +2359,7 @@ def list_attendance_students(
                 id=student.id if student is not None else None,
                 roll_number=roll,
                 name=student.name if student is not None else roster_name,
+                branch=(student.branch or None) if student is not None else None,
                 batch=(student.batch or "") if student is not None else roster_batch,
                 is_registered=student is not None,
             )

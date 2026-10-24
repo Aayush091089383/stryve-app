@@ -893,6 +893,13 @@ check(
     all(not ({"password", "token", "email"} & set(row.keys())) for row in roster_rows),
 )
 check(
+    "the roster carries each student's branch",
+    all("branch" in row for row in roster_rows)
+    and {row["roll_number"]: row["branch"] for row in roster_rows}.get("71")
+    == "AI&DS",
+    str(roster_rows[:2]),
+)
+check(
     "the roster honours the year filter",
     requests.get(
         f"{BASE}/teacher/attendance/students?year=2&division=D",

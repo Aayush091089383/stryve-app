@@ -52,6 +52,7 @@ class _ClassStudent {
     required this.name,
     required this.rollNumber,
     required this.batch,
+    this.branch = '',
     this.isRegistered = true,
   });
 
@@ -60,6 +61,11 @@ class _ClassStudent {
   final String name;
   final String rollNumber;
   final String batch;
+
+  /// The branch on the student's account ('AI&DS'); empty for a roster entry
+  /// whose student has not registered yet, because the branch is only known
+  /// once an account exists.
+  final String branch;
   final bool isRegistered;
 
   /// The stable identity of a row: attendance is keyed on the roll number,
@@ -72,6 +78,7 @@ class _ClassStudent {
       name: (json['name'] as String?)?.trim() ?? '',
       rollNumber: (json['roll_number'] as String?)?.trim() ?? '',
       batch: (json['batch'] as String?)?.trim() ?? '',
+      branch: (json['branch'] as String?)?.trim() ?? '',
       isRegistered: (json['is_registered'] as bool?) ?? json['id'] is int,
     );
   }
@@ -239,6 +246,10 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
     if (subject == null) return '';
     final match = _assignments.where((a) => a.subject == subject);
     if (match.isEmpty) return '';
+    // Prefer a whole-division sheet when the subject is taught to the whole
+    // division: it lists the entire class, and a single-batch sheet can be
+    // empty when no student of that batch has registered yet.
+    if (match.any((a) => a.batch.isEmpty)) return '';
     return match.first.batch;
   }
 
@@ -979,10 +990,18 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
                     ),
                   ),
                   const SizedBox(height: 6),
+                  // Branch first: it is what tells two classmates apart on the
+                  // official list. A roster entry has no account yet, so it has
+                  // no branch and falls back to its batch.
                   Text(
-                    student.batch.isEmpty ? 'Whole division' : student.batch,
+                    student.branch.isNotEmpty
+                        ? student.branch
+                        : (student.batch.isEmpty
+                              ? 'Whole division'
+                              : student.batch),
                     style: TextStyle(
                       fontSize: 12,
+                      fontWeight: FontWeight.w600,
                       color: GlassColors.secondaryTextOf(context),
                     ),
                   ),
