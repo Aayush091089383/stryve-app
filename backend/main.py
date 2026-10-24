@@ -9,6 +9,7 @@ from fastapi import (
     FastAPI,
     File,
     Form,
+    Query,
     Request,
     UploadFile,
     status,
@@ -76,9 +77,16 @@ from schemas import (
     TeacherAssignmentOut,
     TeacherAssignmentCreate,
     AttendanceClassStudentOut,
+    AttendanceHistorySessionOut,
     AttendanceSaveRequest,
     AttendanceSaveResponse,
     AttendanceSessionOut,
+    AttendanceStudentOut,
+    AttendanceSubmitRequest,
+    AttendanceSubmitResponse,
+    StudentAttendanceOut,
+    SubjectAttendanceSummary,
+    AttendanceLectureOut,
     FreePeriodAvailabilityOut,
     FreePeriodClaimOut,
     FreePeriodClaimRequest,
@@ -2072,6 +2080,256 @@ def save_attendance(
         slot_start=payload.slot_start,
         created=created,
         corrected=corrected,
+    )
+
+
+def _period_pair(period: str) -> tuple[str, str] | None:
+    """Split a printed period label ("10:15-11:15") into the official pair."""
+    text = (period or "").strip().replace("\u2013", "-").replace(" ", "")
+    if text.count("-") != 1:
+        return None
+    start, end = text.split("-", 1)
+    return _slot_pair(start, end)
+
+
+def _roll_sort_key(roll_number: str):
+    """Numeric roll numbers first (1, 2, 10), then any non-numeric label."""
+    text = (roll_number or "").strip()
+    if text.isdigit():
+        return (0, int(text), "")
+    return (1, 0, text)
+
+
+@app.get("/teacher/attendance/students", response_model=list[AttendanceStudentOut])
+def list_attendance_students(
+    year: int | None = Query(default=None, ge=1, le=5),
+    division: str = "D",
+    batch: str = "",
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Approved students of one class group, sorted by roll number ascending.
+
+    A directory of who may be marked: it carries no credentials and no
+    attendance history. ``year`` is optional so a whole division can be listed
+    across years when it is not known.
+    """
+    normalised = _normalise_batch(batch)
+
+    query = db.query(models.Student).filter(
+        models.Student.division == division,
+        models.Student.status == "approved",
+    )
+    if year is not None:
+        query = query.filter(models.Student.year == year)
+    if normalised:
+        query = query.filter(
+            or_(
+                models.Student.batch == normalised,
+                models.Student.batch == normalised.replace("-", ""),
+            )
+        )
+
+    students = sorted(query.all(), key=lambda s: _roll_sort_key(s.roll_number))
+    return [
+        AttendanceStudentOut(
+            id=student.id,
+            roll_number=student.roll_number,
+            name=student.name,
+            batch=student.batch or "",
+        )
+        for student in students
+    ]
+
+
+@app.post("/teacher/attendance/submit", response_model=AttendanceSubmitResponse)
+def submit_attendance(
+    payload: AttendanceSubmitRequest,
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Save one lecture's whole sheet, addressed by date and printed period.
+
+    The period is resolved against the official timetable before anything is
+    written, then the request is handed to the same save path the app already
+    uses, so permission checks, duplicate prevention and the correction audit
+    trail are identical for both shapes of request.
+    """
+    pair = _period_pair(payload.period)
+    if pair is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "That period is not part of the official timetable "
+                f"({payload.period})"
+            ),
+        )
+    slot_start, slot_end = pair
+
+    saved = save_attendance(
+        AttendanceSaveRequest(
+            subject=payload.subject,
+            division=payload.division,
+            batch=payload.batch,
+            session_date=payload.class_date,
+            slot_start=slot_start,
+            slot_end=slot_end,
+            records=payload.records,
+        ),
+        teacher,
+        db,
+    )
+
+    present = sum(1 for record in payload.records if record.status == "present")
+    return AttendanceSubmitResponse(
+        message="Attendance saved",
+        subject=saved.subject,
+        class_date=saved.session_date,
+        period=f"{slot_start}-{slot_end}",
+        total=len(payload.records),
+        present=present,
+        absent=len(payload.records) - present,
+        created=saved.created,
+        corrected=saved.corrected,
+    )
+
+
+@app.get(
+    "/teacher/attendance/history",
+    response_model=list[AttendanceHistorySessionOut],
+)
+def attendance_history(
+    subject: str = "",
+    division: str = "",
+    limit: int = Query(default=50, ge=1, le=200),
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Saved lectures, newest first, grouped by date + period + subject.
+
+    A teacher sees the lectures they marked (or last corrected); an admin sees
+    every saved lecture. Tallies come from the stored rows, never from a
+    client-side count.
+    """
+    query = db.query(models.AttendanceRecord)
+    if subject:
+        query = query.filter(models.AttendanceRecord.subject == subject)
+    if division:
+        query = query.filter(models.AttendanceRecord.division == division)
+    rows = query.all()
+
+    def session_key(row) -> tuple:
+        return (
+            row.session_date,
+            row.slot_start,
+            row.slot_end,
+            row.subject,
+            row.division,
+            row.batch or "",
+        )
+
+    if teacher.role != "admin":
+        # A teacher sees each lecture they took part in, as a lecture - not just
+        # the rows they personally wrote. Correcting one student must not make
+        # the other students of the same session disappear from the tally.
+        mine = {
+            session_key(row)
+            for row in db.query(models.AttendanceRecord)
+            .filter(
+                or_(
+                    models.AttendanceRecord.marked_by == teacher.id,
+                    models.AttendanceRecord.updated_by == teacher.id,
+                )
+            )
+            .all()
+        }
+        rows = [row for row in rows if session_key(row) in mine]
+
+    # (date, slot_start, slot_end, subject, division, batch) -> tallies
+    sessions: dict[tuple, dict[str, int]] = {}
+    for row in rows:
+        key = session_key(row)
+        bucket = sessions.setdefault(key, {"total": 0, "present": 0})
+        bucket["total"] += 1
+        if row.status == "present":
+            bucket["present"] += 1
+
+    keys = sorted(sessions, key=lambda k: (k[0], k[1]), reverse=True)[:limit]
+
+    return [
+        AttendanceHistorySessionOut(
+            class_date=key[0],
+            period=f"{key[1]}-{key[2]}",
+            subject=key[3],
+            division=key[4],
+            batch=key[5],
+            total=sessions[key]["total"],
+            present=sessions[key]["present"],
+            absent=sessions[key]["total"] - sessions[key]["present"],
+        )
+        for key in keys
+    ]
+
+
+@app.get("/student/attendance", response_model=StudentAttendanceOut)
+def my_attendance(
+    student: models.Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """The signed-in student's own attendance, broken down by subject.
+
+    Only the caller's rows are read - the student id comes from the session,
+    never from a query parameter - and only subjects with at least one recorded
+    lecture are listed. Lectures are newest first; subjects are alphabetical.
+    """
+    rows = (
+        db.query(models.AttendanceRecord)
+        .filter(models.AttendanceRecord.student_id == student.id)
+        .all()
+    )
+
+    by_subject: dict[str, list[models.AttendanceRecord]] = {}
+    for row in rows:
+        by_subject.setdefault(row.subject, []).append(row)
+
+    subjects_out: list[SubjectAttendanceSummary] = []
+    total = 0
+    attended = 0
+
+    for subject in sorted(by_subject, key=lambda name: name.lower()):
+        lectures = sorted(
+            by_subject[subject],
+            key=lambda row: (row.session_date, row.slot_start),
+            reverse=True,
+        )
+        subject_total = len(lectures)
+        subject_attended = sum(1 for row in lectures if row.status == "present")
+
+        total += subject_total
+        attended += subject_attended
+
+        subjects_out.append(
+            SubjectAttendanceSummary(
+                subject=subject,
+                total_classes=subject_total,
+                attended=subject_attended,
+                percentage=round(subject_attended * 100 / subject_total, 1),
+                lectures=[
+                    AttendanceLectureOut(
+                        date=row.session_date,
+                        period=f"{row.slot_start}-{row.slot_end}",
+                        status=row.status,
+                    )
+                    for row in lectures
+                ],
+            )
+        )
+
+    return StudentAttendanceOut(
+        overall_percentage=round(attended * 100 / total, 1) if total else 0.0,
+        total_classes=total,
+        attended=attended,
+        subjects=subjects_out,
     )
 
 

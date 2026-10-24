@@ -81,8 +81,9 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
   String? _loadError;
   int _tabIndex = 0;
 
-  /// Tab positions in the shared four-tab bar.
+  /// Tab positions in the shared five-tab bar.
   static const int _approvalsTabIndex = 2;
+  static const int _attendanceTabIndex = 3;
 
   /// Tabs that have been shown at least once, so their view is only built (and
   /// so only fetches) after the first visit. Index 0 is Home, which build()
@@ -91,12 +92,13 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
 
   bool get _isAdmin => _teacher?.role == 'admin';
 
-  /// The same four tabs for teachers and admins, in the same order, so the
+  /// The same five tabs for teachers and admins, in the same order, so the
   /// bottom navigation never reshuffles between roles.
   static const List<String> _tabTitles = [
     'Home',
     'Assignments',
     'Approvals',
+    'Attendance',
     'Profile',
   ];
 
@@ -380,16 +382,13 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
     );
   }
 
+  /// Opening attendance from Home selects the Attendance tab instead of
+  /// pushing a second copy of the same screen over the panel.
   void _openAttendance() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => TeacherAttendancePage(
-          authService: _authService,
-          client: widget.client,
-        ),
-      ),
-    );
+    setState(() {
+      _tabIndex = _attendanceTabIndex;
+      _seenTabs.add(_attendanceTabIndex);
+    });
   }
 
   void _openClaimFreePeriod() {
@@ -421,9 +420,7 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
     if (posted != true || !mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('Announcement posted')),
-      );
+      ..showSnackBar(const SnackBar(content: Text('Announcement posted')));
   }
 
   void _openTeacherManagement() {
@@ -457,7 +454,7 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
 
     final isAdmin = _isAdmin;
 
-    // Four tabs for both roles. Only the Home page behind index 0 differs.
+    // Five tabs for both roles. Only the Home page behind index 0 differs.
     final pages = <Widget>[
       isAdmin ? _buildAdminHome() : _buildTeacherHome(),
       TeacherAssignmentsView(
@@ -469,6 +466,12 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
         authService: _authService,
         client: _client,
         onSessionExpired: _handleSessionExpired,
+      ),
+      TeacherAttendancePage(
+        authService: _authService,
+        client: _client,
+        embedded: true,
+        bottomInset: 110,
       ),
       TeacherProfileView(
         name: _teacher?.name ?? (isAdmin ? 'Administrator' : 'Teacher'),
@@ -555,6 +558,11 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
               child: const Icon(Icons.assignment_ind_rounded),
             ),
             label: 'Approvals',
+          ),
+          const SlidingNavDestination(
+            icon: Icon(Icons.fact_check_outlined),
+            selectedIcon: Icon(Icons.fact_check_rounded),
+            label: 'Attendance',
           ),
           const SlidingNavDestination(
             icon: Icon(Icons.person_outline),

@@ -16,6 +16,7 @@ import 'services/auth_service.dart';
 import 'services/notification_service.dart';
 import 'services/push_notification_service.dart';
 import 'student.dart';
+import 'student_attendance_page.dart';
 import 'student_notification.dart';
 import 'timetable.dart';
 import 'profile.dart';
@@ -88,12 +89,12 @@ class _HomePageState extends State<HomePage> {
 
   /// A slot stays null until its tab is first shown.
   ///
-  /// Building all three tabs up front (the previous behaviour) meant the
+  /// Building every tab up front (the previous behaviour) meant the
   /// Assignments tab fired `GET /assignments` while the user was still on
   /// Home, competing with the timetable request and delaying the first
   /// screen. Once created, a tab is kept alive by the IndexedStack exactly as
   /// before, so switching back never refetches or resets scroll position.
-  final List<Widget?> _pages = List<Widget?>.filled(3, null);
+  final List<Widget?> _pages = List<Widget?>.filled(4, null);
 
   /// The student's notification feed, used for the bell badge. Empty until the
   /// first fetch answers (or when the backend is unreachable, in which case the
@@ -105,17 +106,13 @@ class _HomePageState extends State<HomePage> {
       widget.client ?? (_ownedNotificationClient ??= http.Client());
 
   SystemNotifications? _systemNotifications;
-  SystemNotifications get _notificationsPresenter =>
-      _systemNotifications ??=
-          widget.systemNotifications ?? LocalSystemNotifications();
+  SystemNotifications get _notificationsPresenter => _systemNotifications ??=
+      widget.systemNotifications ?? LocalSystemNotifications();
 
   PushNotificationService? _pushNotifications;
-  PushNotificationService get _pushService =>
-      _pushNotifications ??=
-          widget.pushNotifications ??
-          PushNotificationService(
-            systemNotifications: _notificationsPresenter,
-          );
+  PushNotificationService get _pushService => _pushNotifications ??=
+      widget.pushNotifications ??
+      PushNotificationService(systemNotifications: _notificationsPresenter);
 
   /// Highest notification id already announced in the system tray. Starts at 0
   /// per app launch, so the newest unread assignment is announced once and a
@@ -126,7 +123,12 @@ class _HomePageState extends State<HomePage> {
   /// twice.
   bool _openingNotifications = false;
 
-  static const List<String> _tabTitles = ['Stryve', 'Assignments', 'Profile'];
+  static const List<String> _tabTitles = [
+    'Stryve',
+    'Assignments',
+    'Attendance',
+    'Profile',
+  ];
 
   @override
   void didChangeDependencies() {
@@ -140,7 +142,7 @@ class _HomePageState extends State<HomePage> {
     // before this runs). Recreate the widgets - their State, data and scroll
     // position are kept, only the padding changes - so a tab opened across a
     // navigation-mode change still clears the bar.
-    for (final index in const [0, 1]) {
+    for (final index in const [0, 1, 2]) {
       if (_pages[index] != null) {
         _pages[index] = _buildPage(index);
       }
@@ -203,9 +205,7 @@ class _HomePageState extends State<HomePage> {
       if (newest.id <= _lastAlertedId) return;
 
       _lastAlertedId = newest.id;
-      unawaited(
-        _notificationsPresenter.show(newest.title, newest.message),
-      );
+      unawaited(_notificationsPresenter.show(newest.title, newest.message));
     } catch (_) {
       // Leave the previous badge in place; nothing here may break Home.
     }
@@ -217,10 +217,8 @@ class _HomePageState extends State<HomePage> {
     try {
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => NotificationsPage(
-            student: widget.student,
-            client: widget.client,
-          ),
+          builder: (_) =>
+              NotificationsPage(student: widget.student, client: widget.client),
         ),
       );
     } finally {
@@ -245,12 +243,20 @@ class _HomePageState extends State<HomePage> {
           bottomInset: _navInset,
         );
       case 2:
+        return StudentAttendancePage(
+          student: widget.student,
+          client: widget.client,
+          embedded: true,
+          bottomInset: _navInset,
+        );
+      case 3:
         return ProfilePage(student: widget.student);
       default:
         return _HomeTab(
           student: widget.student,
           client: widget.client,
           bottomInset: _navInset,
+          onOpenAttendance: () => _select(2),
         );
     }
   }
@@ -303,7 +309,7 @@ class _HomePageState extends State<HomePage> {
       body: GlassBackground(
         child: IndexedStack(
           index: selectedIndex,
-          children: [for (var i = 0; i < 3; i++) _slot(i)],
+          children: [for (var i = 0; i < _pages.length; i++) _slot(i)],
         ),
       ),
 
@@ -395,6 +401,12 @@ class _GlassBottomNav extends StatelessWidget {
               label: 'Assignments',
             ),
             SlidingNavDestination(
+              key: Key('nav_attendance'),
+              icon: Icon(Icons.fact_check_outlined),
+              selectedIcon: Icon(Icons.fact_check_rounded),
+              label: 'Attendance',
+            ),
+            SlidingNavDestination(
               icon: Icon(Icons.person_outline),
               selectedIcon: Icon(Icons.person_rounded),
               label: 'Profile',
@@ -407,9 +419,18 @@ class _GlassBottomNav extends StatelessWidget {
 }
 
 class _HomeTab extends StatefulWidget {
-  const _HomeTab({required this.student, this.client, this.bottomInset = 0});
+  const _HomeTab({
+    required this.student,
+    this.client,
+    this.bottomInset = 0,
+    this.onOpenAttendance,
+  });
 
   final Student student;
+
+  /// Switches HomePage to the Attendance tab; the quick card used to be a dead
+  /// tile before that tab existed.
+  final VoidCallback? onOpenAttendance;
 
   /// Optional injected HTTP client, for tests only.
   final http.Client? client;
@@ -654,12 +675,7 @@ class _HomeTabState extends State<_HomeTab> {
     return SingleChildScrollView(
       // 100 of breathing room plus the floating nav's footprint, so the
       // "Latest Update" card can scroll fully clear of the bar.
-      padding: EdgeInsets.fromLTRB(
-        20,
-        topInset,
-        20,
-        100 + widget.bottomInset,
-      ),
+      padding: EdgeInsets.fromLTRB(20, topInset, 20, 100 + widget.bottomInset),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -885,8 +901,10 @@ class _HomeTabState extends State<_HomeTab> {
               const SizedBox(width: 12),
               Expanded(
                 child: _glassQuickCard(
+                  key: const Key('home_attendance_card'),
                   icon: Icons.bar_chart_rounded,
                   title: 'Attendance',
+                  onTap: widget.onOpenAttendance,
                 ),
               ),
             ],

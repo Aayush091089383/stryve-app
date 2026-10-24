@@ -394,6 +394,89 @@ class AttendanceSaveResponse(BaseModel):
     corrected: int
 
 
+class AttendanceStudentOut(BaseModel):
+    """One student in a class list, ordered by roll number by the endpoint."""
+
+    id: int
+    roll_number: str
+    name: str
+    batch: str
+
+
+class AttendanceSubmitRequest(BaseModel):
+    """One lecture's whole sheet, addressed by date and printed period.
+
+    ``period`` is the timetable's own label ("10:15-11:15"); the endpoint
+    resolves it to the stored ``slot_start``/``slot_end`` pair, so the client can
+    never invent a period that is not on the official grid.
+    """
+
+    class_date: str  # YYYY-MM-DD
+    period: str
+    subject: str
+    division: str = "D"
+    batch: str = ""
+    records: list[AttendanceMark]
+
+    @field_validator("batch")
+    @classmethod
+    def valid_batch(cls, v: str) -> str:
+        cleaned = (v or "").strip().upper()
+        if cleaned and cleaned not in VALID_BATCHES:
+            raise ValueError(f"Batch must be one of {sorted(VALID_BATCHES)} or empty")
+        return cleaned
+
+
+class AttendanceSubmitResponse(BaseModel):
+    message: str
+    subject: str
+    class_date: str
+    period: str
+    total: int
+    present: int
+    absent: int
+    created: int
+    corrected: int
+
+
+class AttendanceHistorySessionOut(BaseModel):
+    """One saved lecture (a date + period + subject), with its tallies."""
+
+    class_date: str
+    period: str
+    subject: str
+    division: str
+    batch: str
+    total: int
+    present: int
+    absent: int
+
+
+class AttendanceLectureOut(BaseModel):
+    """One lecture as the student saw it."""
+
+    date: str
+    period: str
+    status: str
+
+
+class SubjectAttendanceSummary(BaseModel):
+    subject: str
+    total_classes: int
+    attended: int
+    percentage: float
+    lectures: list[AttendanceLectureOut]
+
+
+class StudentAttendanceOut(BaseModel):
+    """The signed-in student's own attendance, never another student's."""
+
+    overall_percentage: float
+    total_classes: int
+    attended: int
+    subjects: list[SubjectAttendanceSummary]
+
+
 # ======================================================================
 # Claim free period
 # ======================================================================

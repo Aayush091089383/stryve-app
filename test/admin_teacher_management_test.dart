@@ -123,9 +123,8 @@ class _Recorder {
 
   void add(http.Request request) => requests.add(request);
 
-  List<http.Request> to(String path, {String method = 'GET'}) => requests
-      .where((r) => r.url.path == path && r.method == method)
-      .toList();
+  List<http.Request> to(String path, {String method = 'GET'}) =>
+      requests.where((r) => r.url.path == path && r.method == method).toList();
 
   List<String> get paths => requests.map((r) => r.url.path).toList();
 }
@@ -190,7 +189,9 @@ Future<void> _pumpPanel(
   addTearDown(tester.view.reset);
 
   if (!management) {
-    await tester.pumpWidget(MaterialApp(home: TeacherPanelPage(client: client)));
+    await tester.pumpWidget(
+      MaterialApp(home: TeacherPanelPage(client: client)),
+    );
     return;
   }
 
@@ -282,8 +283,17 @@ void main() {
       final recorder = _Recorder();
       final client = _router(
         onList: (request) async => jsonResponse([
-          teacherJson(id: 1, name: 'Admin User', email: 'admin@campussync.edu', role: 'admin'),
-          teacherJson(id: 2, name: 'Dr. Meera Rao', email: 'meera@campussync.edu'),
+          teacherJson(
+            id: 1,
+            name: 'Admin User',
+            email: 'admin@campussync.edu',
+            role: 'admin',
+          ),
+          teacherJson(
+            id: 2,
+            name: 'Dr. Meera Rao',
+            email: 'meera@campussync.edu',
+          ),
         ]),
         onRequest: recorder.add,
       );
@@ -331,10 +341,13 @@ void main() {
         final destinations = tester
             .widget<SlidingNavBar>(find.byType(SlidingNavBar))
             .destinations;
-        expect(
-          destinations.map((destination) => destination.label).toList(),
-          ['Home', 'Assignments', 'Approvals', 'Profile'],
-        );
+        expect(destinations.map((destination) => destination.label).toList(), [
+          'Home',
+          'Assignments',
+          'Approvals',
+          'Attendance',
+          'Profile',
+        ]);
 
         // ... and the admin-only endpoints are not even attempted.
         expect(recorder.paths, isNot(contains(kListPath)));
@@ -353,7 +366,10 @@ void main() {
         );
 
         await _pumpPanel(tester, client);
-        await _pumpUntilFound(tester, find.textContaining('Admin access required'));
+        await _pumpUntilFound(
+          tester,
+          find.textContaining('Admin access required'),
+        );
 
         expect(find.text('No Teacher Accounts'), findsNothing);
         expect(find.text('0 accounts'), findsNothing);
@@ -427,7 +443,10 @@ void main() {
         });
 
         expect(find.text('Create Teacher Account'), findsNothing);
-        expect(find.text('Teacher account created successfully'), findsOneWidget);
+        expect(
+          find.text('Teacher account created successfully'),
+          findsOneWidget,
+        );
         expect(listCalls, 2);
         expect(find.text('2 accounts'), findsOneWidget);
         expect(find.text(kNewTeacherName), findsOneWidget);
@@ -455,28 +474,29 @@ void main() {
       expect(find.text('Teacher account created successfully'), findsOneWidget);
     });
 
-    testWidgets('the password is masked, can be revealed, never shown as text', (
-      tester,
-    ) async {
-      final client = _router();
+    testWidgets(
+      'the password is masked, can be revealed, never shown as text',
+      (tester) async {
+        final client = _router();
 
-      await _pumpPanel(tester, client);
-      await _openCreateDialog(tester);
-      await _fillForm(tester);
+        await _pumpPanel(tester, client);
+        await _openCreateDialog(tester);
+        await _fillForm(tester);
 
-      final passwordField = find.byType(TextField).at(2);
-      expect(tester.widget<TextField>(passwordField).obscureText, isTrue);
-      // No widget renders the secret while it is masked.
-      expect(_renderedText(kNewTeacherPassword), findsNothing);
+        final passwordField = find.byType(TextField).at(2);
+        expect(tester.widget<TextField>(passwordField).obscureText, isTrue);
+        // No widget renders the secret while it is masked.
+        expect(_renderedText(kNewTeacherPassword), findsNothing);
 
-      await tester.tap(find.byIcon(Icons.visibility_rounded));
-      await tester.pump();
-      expect(tester.widget<TextField>(passwordField).obscureText, isFalse);
+        await tester.tap(find.byIcon(Icons.visibility_rounded));
+        await tester.pump();
+        expect(tester.widget<TextField>(passwordField).obscureText, isFalse);
 
-      await tester.tap(find.byIcon(Icons.visibility_off_rounded));
-      await tester.pump();
-      expect(tester.widget<TextField>(passwordField).obscureText, isTrue);
-    });
+        await tester.tap(find.byIcon(Icons.visibility_off_rounded));
+        await tester.pump();
+        expect(tester.widget<TextField>(passwordField).obscureText, isTrue);
+      },
+    );
 
     testWidgets('the confirmation step never echoes the password', (
       tester,
@@ -593,10 +613,7 @@ void main() {
       await _fillForm(tester);
       await _submitAndConfirm(tester);
 
-      expect(
-        find.text('value is not a valid email address'),
-        findsOneWidget,
-      );
+      expect(find.text('value is not a valid email address'), findsOneWidget);
       expect(find.text('Teacher account created successfully'), findsNothing);
     });
 
@@ -692,7 +709,9 @@ void main() {
       expect(find.text('CREATING...'), findsOneWidget);
       expect(
         tester
-            .widget<GlassButton>(find.widgetWithText(GlassButton, 'CREATING...'))
+            .widget<GlassButton>(
+              find.widgetWithText(GlassButton, 'CREATING...'),
+            )
             .onPressed,
         isNull,
       );
@@ -789,7 +808,10 @@ void main() {
       await _pumpUntilFound(tester, find.text('No Teacher Accounts'));
 
       expect(find.text('0 accounts'), findsOneWidget);
-      expect(find.text('Accounts you create will appear here.'), findsOneWidget);
+      expect(
+        find.text('Accounts you create will appear here.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('a 401 on the teacher list clears the session and signs out', (
@@ -812,7 +834,10 @@ void main() {
         await FlutterSecureStorage().read(key: 'teacher_auth_token'),
         isNull,
       );
-      expect(await FlutterSecureStorage().read(key: 'auth_token'), kStudentToken);
+      expect(
+        await FlutterSecureStorage().read(key: 'auth_token'),
+        kStudentToken,
+      );
     });
 
     testWidgets('the stored password is masked until the eye is tapped', (
@@ -822,7 +847,11 @@ void main() {
       final client = _router(
         onList: (request) async => jsonResponse(<Map<String, dynamic>>[
           {
-            ...teacherJson(id: 11, name: 'Teacher 1', email: 'teacher1@stryve.edu'),
+            ...teacherJson(
+              id: 11,
+              name: 'Teacher 1',
+              email: 'teacher1@stryve.edu',
+            ),
             'plain_password': secret,
           },
         ]),
@@ -831,7 +860,10 @@ void main() {
       await _pumpPanel(tester, client);
       await _pumpUntilFound(tester, find.text('Teacher 1'));
 
-      expect(find.text('Password: \u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'), findsOneWidget);
+      expect(
+        find.text('Password: \u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'),
+        findsOneWidget,
+      );
       expect(find.textContaining(secret), findsNothing);
 
       await tester.tap(find.byTooltip('Show password'));
@@ -876,7 +908,11 @@ void main() {
       final client = _router(
         onList: (request) async => jsonResponse(<Map<String, dynamic>>[
           {
-            ...teacherJson(id: 11, name: 'Teacher 1', email: 'teacher1@stryve.edu'),
+            ...teacherJson(
+              id: 11,
+              name: 'Teacher 1',
+              email: 'teacher1@stryve.edu',
+            ),
             'plain_password': 'Abc123!@#xyz',
           },
         ]),
@@ -903,7 +939,9 @@ void main() {
       expect(find.byTooltip('Show password'), findsNothing);
     });
 
-    testWidgets('the active switch PATCHes the status endpoint', (tester) async {
+    testWidgets('the active switch PATCHes the status endpoint', (
+      tester,
+    ) async {
       final recorder = _Recorder();
       final client = _router(
         onList: (request) async => jsonResponse(<Map<String, dynamic>>[

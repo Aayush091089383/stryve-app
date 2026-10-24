@@ -848,6 +848,194 @@ check(
     requests.get(f"{BASE}/teacher/attendance?subject=M-1", headers=auth(smg_token), timeout=10).status_code == 400,
 )
 
+# --------------------------------------------------------------------------
+# The swipe-attendance endpoints and the student's subject dashboard
+# --------------------------------------------------------------------------
+roster = requests.get(
+    f"{BASE}/teacher/attendance/students?year=1&division=D",
+    headers=auth(smg_token),
+    timeout=10,
+)
+check("the class roster endpoint answers", roster.status_code == 200, roster.text[:160])
+roster_rows = roster.json()
+roster_rolls = [row["roll_number"] for row in roster_rows]
+check(
+    "the roster is sorted by roll number ascending",
+    roster_rolls == sorted(roster_rolls, key=int),
+    str(roster_rolls),
+)
+check(
+    "a pending student is not in the roster",
+    "903" not in roster_rolls,
+    str(roster_rolls),
+)
+check(
+    "the roster carries no credentials",
+    all(not ({"password", "token", "email"} & set(row.keys())) for row in roster_rows),
+)
+check(
+    "the roster honours the year filter",
+    requests.get(
+        f"{BASE}/teacher/attendance/students?year=2&division=D",
+        headers=auth(smg_token),
+        timeout=10,
+    ).json() == [],
+)
+check(
+    "a student token cannot read a class roster -> 403",
+    requests.get(
+        f"{BASE}/teacher/attendance/students?division=D",
+        headers=auth(TOKENS["1"]),
+        timeout=10,
+    ).status_code == 403,
+)
+
+submit_body = {
+    "class_date": MONDAY_STR,
+    "period": "13:00-14:00",
+    "subject": "M-1",
+    "division": "D",
+    "batch": "",
+    "records": [{"student_id": sid, "status": "present"} for sid in d1_ids[:2]],
+}
+submitted = requests.post(
+    f"{BASE}/teacher/attendance/submit", json=submit_body, headers=auth(smg_token), timeout=10
+)
+check("a whole sheet saves through the swipe endpoint", submitted.status_code == 200, submitted.text[:200])
+check(
+    "the submit response tallies the sheet",
+    submitted.json().get("total") == 2
+    and submitted.json().get("present") == 2
+    and submitted.json().get("absent") == 0,
+    str(submitted.json()),
+)
+check(
+    "an unchanged re-submit creates no duplicate rows",
+    requests.post(
+        f"{BASE}/teacher/attendance/submit", json=submit_body, headers=auth(smg_token), timeout=10
+    ).json().get("created") == 0,
+)
+check(
+    "a period outside the official grid is refused by the swipe endpoint",
+    requests.post(
+        f"{BASE}/teacher/attendance/submit",
+        json={**submit_body, "period": "09:00-10:00"},
+        headers=auth(smg_token),
+        timeout=10,
+    ).status_code == 400,
+)
+check(
+    "an unassigned subject is refused by the swipe endpoint",
+    requests.post(
+        f"{BASE}/teacher/attendance/submit",
+        json={**submit_body, "subject": "PHY"},
+        headers=auth(smg_token),
+        timeout=10,
+    ).status_code == 403,
+)
+check(
+    "a student token cannot submit attendance -> 403",
+    requests.post(
+        f"{BASE}/teacher/attendance/submit", json=submit_body, headers=auth(TOKENS["1"]), timeout=10
+    ).status_code == 403,
+)
+
+history = requests.get(
+    f"{BASE}/teacher/attendance/history?subject=M-1", headers=auth(smg_token), timeout=10
+)
+check("the session history answers", history.status_code == 200, history.text[:160])
+history_rows = [
+    row
+    for row in history.json()
+    if row["class_date"] == MONDAY_STR and row["period"] == "13:00-14:00"
+]
+check("the saved lecture is in the history", len(history_rows) == 1, str(history.json()))
+check(
+    "the history tallies the whole lecture, not only the caller's rows",
+    history_rows and history_rows[0]["total"] == 2 and history_rows[0]["present"] == 2,
+    str(history_rows),
+)
+check(
+    "a teacher sees no history for a lecture they never took",
+    requests.get(
+        f"{BASE}/teacher/attendance/history", headers=auth(plain_token), timeout=10
+    ).json() == [],
+)
+check(
+    "a student token cannot read lecture history -> 403",
+    requests.get(
+        f"{BASE}/teacher/attendance/history", headers=auth(TOKENS["1"]), timeout=10
+    ).status_code == 403,
+)
+
+# A second subject for student 1, so the per-subject breakdown has something to
+# sort and the overall total is more than one lecture.
+requests.post(
+    f"{BASE}/teacher/attendance/submit",
+    json={
+        "class_date": MONDAY_STR,
+        "period": "15:15-16:15",
+        "subject": "Engineering Physics",
+        "division": "D",
+        "batch": "D-1",
+        "records": [{"student_id": d1_ids[0], "status": "absent"}],
+    },
+    headers=auth(admin_token),
+    timeout=10,
+)
+
+roll_one_id = conn.execute("SELECT id FROM students WHERE roll_number='1'").fetchone()[0]
+roll_one_token = TOKENS["1"]
+mine_summary = requests.get(f"{BASE}/student/attendance", headers=auth(roll_one_token), timeout=10)
+check("the student attendance endpoint answers", mine_summary.status_code == 200, mine_summary.text[:200])
+summary_body = mine_summary.json()
+rows_for_one = conn.execute(
+    "SELECT subject, status FROM attendance_records WHERE student_id=?", (roll_one_id,)
+).fetchall()
+check(
+    "the student summary counts exactly that student's lectures",
+    summary_body.get("total_classes") == len(rows_for_one),
+    f"api={summary_body.get('total_classes')} db={len(rows_for_one)}",
+)
+check(
+    "the student summary counts only present rows as attended",
+    summary_body.get("attended") == sum(1 for _, status in rows_for_one if status == "present"),
+    str(summary_body),
+)
+check(
+    "the subjects are listed alphabetically",
+    [row["subject"] for row in summary_body["subjects"]]
+    == sorted([row["subject"] for row in summary_body["subjects"]], key=str.lower),
+    str([row["subject"] for row in summary_body["subjects"]]),
+)
+check(
+    "each subject carries its own lectures, newest first",
+    all(
+        [lecture["date"] for lecture in subject["lectures"]]
+        == sorted([lecture["date"] for lecture in subject["lectures"]], reverse=True)
+        for subject in summary_body["subjects"]
+    ),
+    str(summary_body["subjects"]),
+)
+check(
+    "a subject percentage matches its own counts",
+    all(
+        subject["percentage"]
+        == round(subject["attended"] * 100 / subject["total_classes"], 1)
+        for subject in summary_body["subjects"]
+    ),
+    str(summary_body["subjects"]),
+)
+check(
+    "a student with no attendance gets an empty, honest summary",
+    requests.get(f"{BASE}/student/attendance", headers=auth(TOKENS["25"]), timeout=10).json()
+    == {"overall_percentage": 0.0, "total_classes": 0, "attended": 0, "subjects": []},
+)
+check(
+    "a teacher token is not a student session -> 401",
+    requests.get(f"{BASE}/student/attendance", headers=auth(smg_token), timeout=10).status_code == 401,
+)
+
 # ==========================================================================
 section("4. Claim free period")
 # ==========================================================================

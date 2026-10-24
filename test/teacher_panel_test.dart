@@ -296,11 +296,14 @@ void main() {
           .widget<SlidingNavBar>(find.byType(SlidingNavBar))
           .destinations;
 
-      expect(destinations, hasLength(4));
-      expect(
-        destinations.map((destination) => destination.label).toList(),
-        ['Home', 'Assignments', 'Approvals', 'Profile'],
-      );
+      expect(destinations, hasLength(5));
+      expect(destinations.map((destination) => destination.label).toList(), [
+        'Home',
+        'Assignments',
+        'Approvals',
+        'Attendance',
+        'Profile',
+      ]);
       // Logout is not on Home (it moved to Profile).
       expect(find.text('LOG OUT'), findsNothing);
       expect(find.byTooltip('Logout'), findsNothing);
@@ -318,31 +321,38 @@ void main() {
       expect(find.byTooltip('Refresh'), findsNothing);
     });
 
-    testWidgets('an admin gets the separate admin dashboard, not the teacher one', (
-      tester,
-    ) async {
-      await pumpPanel(
-        tester,
-        panelRouter(
-          me: meJson(role: 'admin'),
-          teachers: [meJson(role: 'admin')],
-        ),
-        storage: {...teacherStorage(role: 'admin', token: kAdminToken), ...studentStorage()},
-      );
-      await pumpUntilFound(tester, find.text('ADMIN'));
+    testWidgets(
+      'an admin gets the separate admin dashboard, not the teacher one',
+      (tester) async {
+        await pumpPanel(
+          tester,
+          panelRouter(
+            me: meJson(role: 'admin'),
+            teachers: [meJson(role: 'admin')],
+          ),
+          storage: {
+            ...teacherStorage(role: 'admin', token: kAdminToken),
+            ...studentStorage(),
+          },
+        );
+        await pumpUntilFound(tester, find.text('ADMIN'));
 
-      final destinations = tester
-          .widget<SlidingNavBar>(find.byType(SlidingNavBar))
-          .destinations;
+        final destinations = tester
+            .widget<SlidingNavBar>(find.byType(SlidingNavBar))
+            .destinations;
 
-      expect(
-        destinations.map((destination) => destination.label).toList(),
-        ['Home', 'Assignments', 'Approvals', 'Profile'],
-      );
-      expect(find.text('Teacher Management'), findsOneWidget);
-      // The Admin Home never carries a logout button.
-      expect(find.text('LOG OUT'), findsNothing);
-    });
+        expect(destinations.map((destination) => destination.label).toList(), [
+          'Home',
+          'Assignments',
+          'Approvals',
+          'Attendance',
+          'Profile',
+        ]);
+        expect(find.text('Teacher Management'), findsOneWidget);
+        // The Admin Home never carries a logout button.
+        expect(find.text('LOG OUT'), findsNothing);
+      },
+    );
 
     testWidgets('a pending registration raises the badge on Approvals', (
       tester,
@@ -400,8 +410,11 @@ void main() {
     testWidgets('an expired local teacher session goes to the teacher login', (
       tester,
     ) async {
-      final expired = teacherStorage()..['teacher_token_expiry'] =
-          DateTime.now().subtract(const Duration(days: 1)).toUtc().toIso8601String();
+      final expired = teacherStorage()
+        ..['teacher_token_expiry'] = DateTime.now()
+            .subtract(const Duration(days: 1))
+            .toUtc()
+            .toIso8601String();
 
       await pumpPanel(tester, panelRouter(), storage: expired);
       await pumpUntilFound(tester, find.byType(TeacherLoginPage));
@@ -414,18 +427,12 @@ void main() {
       tester,
     ) async {
       final recorder = Recorder();
-      final client = panelRouter(
-        pending: [studentJson()],
-        recorder: recorder,
-      );
+      final client = panelRouter(pending: [studentJson()], recorder: recorder);
 
       await pumpApprovals(tester, client);
       await pumpUntilFound(tester, find.text('Aarav Sharma'));
 
-      expect(
-        recorder.paths.where((path) => path == pendingPath),
-        hasLength(1),
-      );
+      expect(recorder.paths.where((path) => path == pendingPath), hasLength(1));
 
       expect(find.text('1 pending'), findsOneWidget);
       expect(find.text('APPROVE'), findsOneWidget);
@@ -491,11 +498,12 @@ void main() {
       expect(find.text('Approve Registration'), findsOneWidget);
 
       await confirmDialog(tester, 'Approve');
-      await pumpUntilFound(tester, find.text('Aarav Sharma approved successfully'));
+      await pumpUntilFound(
+        tester,
+        find.text('Aarav Sharma approved successfully'),
+      );
 
-      final posts = recorder.requests
-          .where((r) => r.method == 'POST')
-          .toList();
+      final posts = recorder.requests.where((r) => r.method == 'POST').toList();
       expect(posts, hasLength(1));
       expect(posts.single.url.path, '/teacher/registrations/7/approve');
       expect(_authorizationOf(posts.single), 'Bearer $kTeacherToken');
@@ -504,10 +512,7 @@ void main() {
 
     testWidgets('rejecting sends the reason', (tester) async {
       final recorder = Recorder();
-      final client = panelRouter(
-        pending: [studentJson()],
-        recorder: recorder,
-      );
+      final client = panelRouter(pending: [studentJson()], recorder: recorder);
 
       await pumpApprovals(tester, client);
       await pumpUntilFound(tester, find.text('Aarav Sharma'));
@@ -523,10 +528,7 @@ void main() {
       final posts = recorder.requests.where((r) => r.method == 'POST').toList();
       expect(posts, hasLength(1));
       expect(posts.single.url.path, '/teacher/registrations/7/reject');
-      expect(
-        jsonDecode(posts.single.body),
-        {'reason': 'Incomplete documents'},
-      );
+      expect(jsonDecode(posts.single.body), {'reason': 'Incomplete documents'});
     });
 
     testWidgets('cancelling the reject dialog sends nothing', (tester) async {
@@ -551,7 +553,8 @@ void main() {
       final client = panelRouter(
         pending: [studentJson()],
         onApprove: (request) async => jsonResponse({
-          'detail': 'Student registration is not pending (current status: approved)',
+          'detail':
+              'Student registration is not pending (current status: approved)',
         }, 400),
       );
 
@@ -639,29 +642,30 @@ void main() {
       expect(find.text('No Pending Registrations'), findsNothing);
     });
 
-    testWidgets('an unreachable backend keeps the student pending and retries', (
-      tester,
-    ) async {
-      var attempts = 0;
-      final client = panelRouter(
-        onPending: (request) async {
-          attempts++;
-          if (attempts == 1) throw const SocketExceptionStub();
-          return jsonResponse([studentJson()]);
-        },
-      );
+    testWidgets(
+      'an unreachable backend keeps the student pending and retries',
+      (tester) async {
+        var attempts = 0;
+        final client = panelRouter(
+          onPending: (request) async {
+            attempts++;
+            if (attempts == 1) throw const SocketExceptionStub();
+            return jsonResponse([studentJson()]);
+          },
+        );
 
-      await pumpApprovals(tester, client);
-      await pumpUntilFound(
-        tester,
-        find.textContaining('Could not reach the Stryve server'),
-      );
-      expect(find.text('No Pending Registrations'), findsNothing);
+        await pumpApprovals(tester, client);
+        await pumpUntilFound(
+          tester,
+          find.textContaining('Could not reach the Stryve server'),
+        );
+        expect(find.text('No Pending Registrations'), findsNothing);
 
-      await tester.tap(find.text('Retry'));
-      await tester.pumpAndSettle();
-      await pumpUntilFound(tester, find.text('Aarav Sharma'));
-    });
+        await tester.tap(find.text('Retry'));
+        await tester.pumpAndSettle();
+        await pumpUntilFound(tester, find.text('Aarav Sharma'));
+      },
+    );
 
     testWidgets('a 401 during approval clears the teacher session only', (
       tester,
@@ -691,18 +695,19 @@ void main() {
 
   // =====================================================================
   group('Teacher Panel home and permissions', () {
-    testWidgets('a teacher without the permission never calls the approval API', (
-      tester,
-    ) async {
-      final recorder = Recorder();
-      await pumpPanel(tester, panelRouter(recorder: recorder));
-      await pumpUntilFound(tester, find.text('Dr. Meera Rao'));
+    testWidgets(
+      'a teacher without the permission never calls the approval API',
+      (tester) async {
+        final recorder = Recorder();
+        await pumpPanel(tester, panelRouter(recorder: recorder));
+        await pumpUntilFound(tester, find.text('Dr. Meera Rao'));
 
-      expect(find.text('Approval access not granted'), findsOneWidget);
-      expect(find.text('Review Pending Registrations'), findsNothing);
-      expect(recorder.paths, isNot(contains(pendingPath)));
-      expect(recorder.paths, isNot(contains(teacherListPath)));
-    });
+        expect(find.text('Approval access not granted'), findsOneWidget);
+        expect(find.text('Review Pending Registrations'), findsNothing);
+        expect(recorder.paths, isNot(contains(pendingPath)));
+        expect(recorder.paths, isNot(contains(teacherListPath)));
+      },
+    );
 
     testWidgets('a permitted teacher reaches the section from Home', (
       tester,
@@ -734,10 +739,7 @@ void main() {
       expect(find.text('No verified teaching assignments'), findsOneWidget);
       expect(find.text('Faculty code not linked yet'), findsOneWidget);
       // No class is claimed for the teacher.
-      expect(
-        find.textContaining('No classes assigned for'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('No classes assigned for'), findsOneWidget);
     });
 
     testWidgets('today\'s classes come from the verified assignments', (

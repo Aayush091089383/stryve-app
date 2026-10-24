@@ -32,6 +32,7 @@ import 'package:stryve/assignments_page.dart';
 import 'package:stryve/home_page.dart';
 import 'package:stryve/services/api_cache.dart';
 import 'package:stryve/student.dart';
+import 'package:stryve/student_attendance_page.dart';
 import 'package:stryve/tasks.dart';
 import 'package:stryve/timetable.dart';
 import 'package:stryve/utils/glass_container.dart';
@@ -85,9 +86,17 @@ class RecordingClient {
       );
     }
     if (request.url.path == '/assignments') {
-      return http.Response('[]', 200, headers: {'content-type': 'application/json'});
+      return http.Response(
+        '[]',
+        200,
+        headers: {'content-type': 'application/json'},
+      );
     }
-    return http.Response('[]', 200, headers: {'content-type': 'application/json'});
+    return http.Response(
+      '[]',
+      200,
+      headers: {'content-type': 'application/json'},
+    );
   });
 }
 
@@ -125,11 +134,10 @@ void main() {
 
       // Home asks for its own timetable and the bell's notification feed; no
       // other tab may talk to the backend before it is opened.
-      expect(
-        recorder.paths.toSet(),
-        {'/timetable', '/notifications'},
-        reason: 'only the visible tab (and Home\'s own bell) may load data',
-      );
+      expect(recorder.paths.toSet(), {
+        '/timetable',
+        '/notifications',
+      }, reason: 'only the visible tab (and Home\'s own bell) may load data');
       expect(
         recorder.paths,
         isNot(contains('/assignments')),
@@ -139,7 +147,10 @@ void main() {
       // The quick-access grid is five cards, no Tasks card.
       expect(find.byKey(const Key('home_tasks_card')), findsNothing);
       expect(find.text('Tasks'), findsNothing);
-      expect(find.text('Attendance'), findsOneWidget);
+      expect(find.byKey(const Key('home_attendance_card')), findsOneWidget);
+      // The card and the new bottom-navigation destination both read
+      // "Attendance".
+      expect(find.text('Attendance'), findsNWidgets(2));
 
       // Home scrolls under the floating nav bar, so its padding must include
       // the bar's footprint or the last card sits behind it.
@@ -172,78 +183,79 @@ void main() {
       expect(homePadding.right, 20);
     });
 
-    testWidgets('a tall system inset raises the clearance on Home and Assignments', (
-      tester,
-    ) async {
-      // Three-button navigation reserves ~48dp. The floating bar's SafeArea
-      // lifts it by that amount, so both tab bodies have to reserve the same
-      // extra space or the last card hides behind the bar at full scroll.
-      const double inset = 48;
-      final recorder = RecordingClient();
-      await pumpHomeWith(tester, recorder, bottomInset: inset);
+    testWidgets(
+      'a tall system inset raises the clearance on Home and Assignments',
+      (tester) async {
+        // Three-button navigation reserves ~48dp. The floating bar's SafeArea
+        // lifts it by that amount, so both tab bodies have to reserve the same
+        // extra space or the last card hides behind the bar at full scroll.
+        const double inset = 48;
+        final recorder = RecordingClient();
+        await pumpHomeWith(tester, recorder, bottomInset: inset);
 
-      final barHeight = HomePage.kGlassNavBarHeight;
-      final homeScroll = tester.widget<SingleChildScrollView>(
-        find.byType(SingleChildScrollView),
-      );
-      expect(
-        (homeScroll.padding! as EdgeInsets).bottom,
-        100 + barHeight + inset,
-        reason: 'Home reserves the bar plus the system inset',
-      );
+        final barHeight = HomePage.kGlassNavBarHeight;
+        final homeScroll = tester.widget<SingleChildScrollView>(
+          find.byType(SingleChildScrollView),
+        );
+        expect(
+          (homeScroll.padding! as EdgeInsets).bottom,
+          100 + barHeight + inset,
+          reason: 'Home reserves the bar plus the system inset',
+        );
 
-      // The bar itself is lifted clear of the reserved system area.
-      expect(
-        tester.getRect(find.byType(SlidingNavBar)).bottom,
-        lessThanOrEqualTo(2400 - inset),
-        reason: 'the bar must not sit inside the gesture area',
-      );
+        // The bar itself is lifted clear of the reserved system area.
+        expect(
+          tester.getRect(find.byType(SlidingNavBar)).bottom,
+          lessThanOrEqualTo(2400 - inset),
+          reason: 'the bar must not sit inside the gesture area',
+        );
 
-      await tester.tap(find.byKey(const Key('nav_assignments')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+        await tester.tap(find.byKey(const Key('nav_assignments')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
 
-      expect(
-        tester.widget<AssignmentsPage>(find.byType(AssignmentsPage)).bottomInset,
-        barHeight + inset,
-        reason: 'the Assignments list clears the lifted bar too',
-      );
-    });
+        expect(
+          tester
+              .widget<AssignmentsPage>(find.byType(AssignmentsPage))
+              .bottomInset,
+          barHeight + inset,
+          reason: 'the Assignments list clears the lifted bar too',
+        );
+      },
+    );
 
-    testWidgets('opening Assignments fetches once and switching back does not refetch', (
-      tester,
-    ) async {
-      final recorder = RecordingClient();
-      await pumpHomeWith(tester, recorder);
+    testWidgets(
+      'opening Assignments fetches once and switching back does not refetch',
+      (tester) async {
+        final recorder = RecordingClient();
+        await pumpHomeWith(tester, recorder);
 
-      await tester.tap(find.byKey(const Key('nav_assignments')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+        await tester.tap(find.byKey(const Key('nav_assignments')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.byType(AssignmentsPage), findsOneWidget);
-      expect(find.byType(TasksPage), findsNothing);
-      expect(find.text('All Assignments'), findsOneWidget);
-      expect(
-        recorder.paths.where((p) => p == '/assignments'),
-        hasLength(1),
-      );
+        expect(find.byType(AssignmentsPage), findsOneWidget);
+        expect(find.byType(TasksPage), findsNothing);
+        expect(find.text('All Assignments'), findsOneWidget);
+        expect(recorder.paths.where((p) => p == '/assignments'), hasLength(1));
 
-      // Home, then back to Assignments: state is kept, so no second request.
-      await tester.tap(find.byIcon(Icons.home_outlined));
-      await tester.pump();
-      expect(find.byType(AssignmentsPage), findsNothing);
+        // Home, then back to Assignments: state is kept, so no second request.
+        await tester.tap(find.byIcon(Icons.home_outlined));
+        await tester.pump();
+        expect(find.byType(AssignmentsPage), findsNothing);
 
-      await tester.tap(find.byKey(const Key('nav_assignments')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+        await tester.tap(find.byKey(const Key('nav_assignments')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.byType(AssignmentsPage), findsOneWidget);
-      expect(
-        recorder.paths.where((p) => p == '/assignments'),
-        hasLength(1),
-        reason: 'switching tabs must not refetch',
-      );
-    });
+        expect(find.byType(AssignmentsPage), findsOneWidget);
+        expect(
+          recorder.paths.where((p) => p == '/assignments'),
+          hasLength(1),
+          reason: 'switching tabs must not refetch',
+        );
+      },
+    );
 
     testWidgets('the Assignments destination opens the dedicated screen', (
       tester,
@@ -271,7 +283,9 @@ void main() {
         tester.element(find.byType(HomePage)),
       );
       expect(
-        tester.widget<AssignmentsPage>(find.byType(AssignmentsPage)).bottomInset,
+        tester
+            .widget<AssignmentsPage>(find.byType(AssignmentsPage))
+            .bottomInset,
         navInset,
         reason: 'the embedded list leaves room for the nav bar',
       );
@@ -282,10 +296,43 @@ void main() {
       );
       expect(find.text('All Assignments'), findsOneWidget);
       // Opening it reads the same endpoint exactly once.
-      expect(
-        recorder.paths.where((p) => p == '/assignments'),
-        hasLength(1),
-      );
+      expect(recorder.paths.where((p) => p == '/assignments'), hasLength(1));
+    });
+
+    testWidgets(
+      'the Attendance destination opens its dashboard on first visit',
+      (tester) async {
+        final recorder = RecordingClient();
+        await pumpHomeWith(tester, recorder);
+
+        expect(
+          recorder.paths,
+          isNot(contains('/student/attendance')),
+          reason: 'the Attendance tab must not fetch before it is opened',
+        );
+
+        await tester.tap(find.byKey(const Key('nav_attendance')));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(StudentAttendancePage), findsOneWidget);
+        expect(
+          recorder.paths.where((p) => p == '/student/attendance'),
+          hasLength(1),
+        );
+        // Embedded: the tab adds no second Scaffold or app bar.
+        expect(find.byType(Scaffold), findsOneWidget);
+        expect(find.text('No attendance recorded yet'), findsOneWidget);
+      },
+    );
+
+    testWidgets('the Home quick card opens the Attendance tab', (tester) async {
+      final recorder = RecordingClient();
+      await pumpHomeWith(tester, recorder);
+
+      await tester.tap(find.byKey(const Key('home_attendance_card')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(StudentAttendancePage), findsOneWidget);
     });
 
     testWidgets('the embedded Assignments list clears the glass app bar', (
@@ -331,7 +378,10 @@ void main() {
       expect(navGlass.shadowColor, Colors.transparent);
       // Geometry is untouched.
       expect(navGlass.borderRadius, 24);
-      expect(navGlass.padding, const EdgeInsets.symmetric(horizontal: 8, vertical: 8));
+      expect(
+        navGlass.padding,
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      );
     });
 
     testWidgets('the selected pill slides to its tab instead of snapping', (
@@ -344,7 +394,7 @@ void main() {
       final bar = find.byType(SlidingNavBar);
       expect(pill, findsOneWidget);
 
-      final slotWidth = tester.getSize(bar).width / 3;
+      final slotWidth = tester.getSize(bar).width / 4;
       final pillElement = tester.element(pill);
       final barLeft = tester.getTopLeft(bar).dx;
       final startLeft = tester.getTopLeft(pill).dx;
@@ -404,7 +454,9 @@ void main() {
   group('timetable day pill', () {
     GlassContainer chip(WidgetTester tester, String day) {
       return tester.widget<GlassContainer>(
-        find.ancestor(of: find.text(day), matching: find.byType(GlassContainer)).first,
+        find
+            .ancestor(of: find.text(day), matching: find.byType(GlassContainer))
+            .first,
       );
     }
 
@@ -418,7 +470,10 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: TimetablePage(student: studentFixture(), client: RecordingClient().client),
+          home: TimetablePage(
+            student: studentFixture(),
+            client: RecordingClient().client,
+          ),
         ),
       );
       await tester.pump();
@@ -469,7 +524,10 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: TimetablePage(student: studentFixture(), client: RecordingClient().client),
+          home: TimetablePage(
+            student: studentFixture(),
+            client: RecordingClient().client,
+          ),
         ),
       );
       await tester.pump();

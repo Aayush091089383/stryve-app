@@ -1015,6 +1015,15 @@
         <span>Announcements</span>
       </button>
 
+      <button class="nav-item" type="button" data-tab="attendance" id="tab-attendance">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M4 5h16v15H4z"/><path d="M8 3v4"/><path d="M16 3v4"/>
+          <path d="M8 13l2.4 2.4L16 10"/>
+        </svg>
+        <span>Attendance</span>
+      </button>
+
       <button class="nav-item" type="button" data-tab="approvals" id="navApprovals" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -1239,6 +1248,108 @@
           </div>
         </section>
 
+        <!-- --------------------------------------------------- attendance -->
+        <section class="panel" id="panel-attendance">
+          <div class="grid-2">
+            <section class="card">
+              <h2>Mark attendance</h2>
+              <p class="hint">
+                Choose the lecture, load the class and set each student's status. Saving
+                replaces the stored status for that date, period and subject; it never
+                adds a second row for the same student and lecture.
+              </p>
+
+              <form id="attendanceForm" novalidate>
+                <div class="field">
+                  <label for="attSubject">Subject</label>
+                  <select id="attSubject" required></select>
+                  <p class="file-note" id="attSubjectNote">
+                    The list comes from the classes you are verified to teach.
+                  </p>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label for="attDate">Date</label>
+                    <input id="attDate" type="date" required />
+                  </div>
+                  <div class="field">
+                    <label for="attPeriod">Period</label>
+                    <select id="attPeriod"></select>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label for="attYear">Year</label>
+                    <select id="attYear">
+                      <option value="1" selected>Year 1</option>
+                      <option value="2">Year 2</option>
+                      <option value="3">Year 3</option>
+                      <option value="4">Year 4</option>
+                      <option value="5">Year 5</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="attDivision">Division</label>
+                    <select id="attDivision">
+                      <option value="D" selected>Division D</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="attBatch">Batch</label>
+                  <select id="attBatch"></select>
+                </div>
+
+                <button id="loadAttendanceBtn" class="block" type="button">
+                  <span class="spinner" id="loadAttendanceSpinner" hidden></span>
+                  <span id="loadAttendanceLabel">Load students</span>
+                </button>
+              </form>
+
+              <div id="attendanceMessage" class="message" role="status" aria-live="polite"></div>
+            </section>
+
+            <section class="card">
+              <div class="section-head">
+                <h2>Class sheet</h2>
+                <span class="hint" id="attendanceCount">No class loaded</span>
+              </div>
+              <p class="hint">
+                A freshly loaded student starts as present. Change any row, or use the
+                bulk buttons, before submitting.
+              </p>
+
+              <div class="row">
+                <button class="ghost small" id="markAllPresentBtn" type="button">Mark all present</button>
+                <button class="ghost small" id="markAllAbsentBtn" type="button">Mark all absent</button>
+              </div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Roll</th>
+                      <th scope="col">Name</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attendanceBody">
+                    <tr><td colspan="3" class="state">Load a class to begin.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <button id="submitAttendanceBtn" class="block" type="button" disabled>
+                <span class="spinner" id="submitAttendanceSpinner" hidden></span>
+                <span id="submitAttendanceLabel">Submit attendance</span>
+              </button>
+            </section>
+          </div>
+        </section>
+
         <!-- ---------------------------------------------------- approvals -->
         <section class="panel" id="panel-approvals">
           <section class="card">
@@ -1381,6 +1492,10 @@
       title: "Announcements",
       sub: "Post notices to the student feed and withdraw the ones you manage."
     },
+    attendance: {
+      title: "Attendance",
+      sub: "Mark present or absent for a lecture you are assigned to teach."
+    },
     approvals: {
       title: "Approvals",
       sub: "Review student registrations waiting for a decision."
@@ -1445,6 +1560,26 @@
   var announcementsMessage = document.getElementById("announcementsMessage");
   var announcementFilters = document.getElementById("announcementFilters");
   var refreshAnnouncementsBtn = document.getElementById("refreshAnnouncementsBtn");
+
+  var attendanceForm = document.getElementById("attendanceForm");
+  var attSubject = document.getElementById("attSubject");
+  var attSubjectNote = document.getElementById("attSubjectNote");
+  var attDate = document.getElementById("attDate");
+  var attPeriod = document.getElementById("attPeriod");
+  var attYear = document.getElementById("attYear");
+  var attDivision = document.getElementById("attDivision");
+  var attBatch = document.getElementById("attBatch");
+  var attendanceBody = document.getElementById("attendanceBody");
+  var attendanceCount = document.getElementById("attendanceCount");
+  var attendanceMessage = document.getElementById("attendanceMessage");
+  var loadAttendanceBtn = document.getElementById("loadAttendanceBtn");
+  var loadAttendanceSpinner = document.getElementById("loadAttendanceSpinner");
+  var loadAttendanceLabel = document.getElementById("loadAttendanceLabel");
+  var submitAttendanceBtn = document.getElementById("submitAttendanceBtn");
+  var submitAttendanceSpinner = document.getElementById("submitAttendanceSpinner");
+  var submitAttendanceLabel = document.getElementById("submitAttendanceLabel");
+  var markAllPresentBtn = document.getElementById("markAllPresentBtn");
+  var markAllAbsentBtn = document.getElementById("markAllAbsentBtn");
   var fileModal = document.getElementById("fileModal");
   var fileModalTitle = document.getElementById("fileModalTitle");
   var fileModalBody = document.getElementById("fileModalBody");
@@ -1615,7 +1750,8 @@
   function allowed(tab) {
     if (tab === "teachers") return isAdmin();
     if (tab === "approvals") return canReview();
-    return tab === "assignments" || tab === "announcements" || tab === "profile";
+    return tab === "assignments" || tab === "announcements" ||
+      tab === "attendance" || tab === "profile";
   }
 
   function activate(tab) {
@@ -1638,6 +1774,7 @@
 
     if (tab === "assignments") loadMine();
     if (tab === "announcements") loadAnnouncements();
+    if (tab === "attendance") prepareAttendance();
     if (tab === "approvals") loadPending();
     if (tab === "teachers") loadTeachers();
     if (tab === "profile") renderProfile();
@@ -1681,6 +1818,10 @@
     announcementRows = [];
     announcementFilter = "all";
     announcementFilters.textContent = "";
+    attendanceRows = [];
+    attendanceAssignments = null;
+    if (typeof resetAttendanceSheet === "function") resetAttendanceSheet();
+    if (typeof hideMessage === "function") hideMessage(attendanceMessage);
     recentList.textContent = "";
     pendingList.textContent = "";
     teachersBody.textContent = "";
@@ -2979,6 +3120,318 @@
   });
 
   refreshAnnouncementsBtn.addEventListener("click", loadAnnouncements);
+
+  // ------------------------------------------------------------- attendance
+  // The same six printed periods the mobile app offers. The backend validates
+  // the chosen pair against official_data.SESSION_BLOCKS, so this list only
+  // narrows the choices - it can never widen what is accepted.
+  var ATTENDANCE_PERIODS = [
+    "10:15-11:15",
+    "11:15-12:15",
+    "13:00-14:00",
+    "14:00-15:00",
+    "15:15-16:15",
+    "16:15-17:15"
+  ];
+
+  var attendanceRows = [];
+  // null = not fetched yet; [] = fetched but the account has no assignments.
+  var attendanceAssignments = null;
+
+  function todayIso() {
+    var now = new Date();
+    var month = String(now.getMonth() + 1).padStart(2, "0");
+    var day = String(now.getDate()).padStart(2, "0");
+    return now.getFullYear() + "-" + month + "-" + day;
+  }
+
+  function prepareAttendance() {
+    if (!attDate.value) attDate.value = todayIso();
+    if (attPeriod.options.length === 0) {
+      ATTENDANCE_PERIODS.forEach(function (period) {
+        var option = document.createElement("option");
+        option.value = period;
+        option.textContent = period.replace("-", " – ");
+        attPeriod.appendChild(option);
+      });
+    }
+    if (attendanceAssignments === null) loadAttendanceSubjects();
+  }
+
+  // Subject choices come from the caller's VERIFIED assignments, because the
+  // backend refuses a save for anything else. An account with no assignments
+  // (typically an admin, who may mark any class) falls back to the seven
+  // official subject names.
+  async function loadAttendanceSubjects() {
+    attendanceAssignments = [];
+    try {
+      var result = await api("/teacher/assignments");
+      if (result.response.status === 401) { expired(); return; }
+      if (result.response.ok && Array.isArray(result.body)) {
+        attendanceAssignments = result.body;
+      }
+    } catch (error) {
+      attendanceAssignments = [];
+    }
+    fillAttendanceSubjects();
+  }
+
+  function fillAttendanceSubjects() {
+    var subjects = [];
+    (attendanceAssignments || []).forEach(function (assignment) {
+      var subject = (assignment.subject || "").trim();
+      if (subject && subjects.indexOf(subject) === -1) subjects.push(subject);
+    });
+
+    var fallback = subjects.length === 0;
+    if (fallback) subjects = ANNOUNCEMENT_SUBJECTS.slice();
+
+    attSubject.textContent = "";
+    subjects.forEach(function (subject) {
+      var option = document.createElement("option");
+      option.value = subject;
+      option.textContent = subject;
+      attSubject.appendChild(option);
+    });
+
+    attSubjectNote.textContent = fallback
+      ? "No verified teaching assignments: only an administrator can save this class."
+      : "The list comes from the classes you are verified to teach.";
+
+    renderAttendanceBatches();
+  }
+
+  function renderAttendanceBatches() {
+    var subject = attSubject.value;
+    var batches = [""];
+    (attendanceAssignments || []).forEach(function (assignment) {
+      if (assignment.subject !== subject) return;
+      var batch = assignment.batch || "";
+      if (batches.indexOf(batch) === -1) batches.push(batch);
+    });
+
+    attBatch.textContent = "";
+    batches.forEach(function (batch) {
+      var option = document.createElement("option");
+      option.value = batch;
+      option.textContent = batch || "Whole division";
+      attBatch.appendChild(option);
+    });
+
+    // A batch-specific assignment must not silently submit a whole-division
+    // sheet (the backend would refuse it anyway); start on its own batch.
+    if (batches.length === 2) attBatch.value = batches[1];
+  }
+
+  function resetAttendanceSheet(message) {
+    attendanceRows = [];
+    attendanceBody.textContent = "";
+    var state = document.createElement("tr");
+    var cell = document.createElement("td");
+    cell.colSpan = 3;
+    cell.className = "state";
+    cell.textContent = message || "Load a class to begin.";
+    state.appendChild(cell);
+    attendanceBody.appendChild(state);
+    attendanceCount.textContent = "No class loaded";
+    submitAttendanceBtn.disabled = true;
+  }
+
+  async function loadAttendanceRoster() {
+    var subject = attSubject.value;
+    var date = attDate.value;
+    var period = attPeriod.value;
+
+    if (!subject || !date || !period) {
+      showMessage(attendanceMessage, "Choose a subject, date and period first.", "error");
+      return;
+    }
+
+    hideMessage(attendanceMessage);
+    resetAttendanceSheet("Loading students…");
+    busy(loadAttendanceBtn, loadAttendanceSpinner, loadAttendanceLabel, true, "Loading…");
+
+    try {
+      var query = "/teacher/attendance/students?year=" +
+        encodeURIComponent(attYear.value) +
+        "&division=" + encodeURIComponent(attDivision.value) +
+        "&batch=" + encodeURIComponent(attBatch.value);
+      var result = await api(query);
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        resetAttendanceSheet("Could not load the class.");
+        showMessage(attendanceMessage, errorText(result.body, "Could not load the class (" + result.response.status + ")."), "error");
+        return;
+      }
+
+      var rows = Array.isArray(result.body) ? result.body : [];
+      if (rows.length === 0) {
+        resetAttendanceSheet("No approved students in this class group.");
+        showMessage(attendanceMessage, "No approved students match this year, division and batch.", "info");
+        return;
+      }
+
+      // Read back what is already stored for this lecture so a correction
+      // starts from the saved statuses, exactly as the mobile app does.
+      var saved = {};
+      var pair = period.split("-");
+      try {
+        var existing = await api(
+          "/teacher/attendance?subject=" + encodeURIComponent(subject) +
+          "&division=" + encodeURIComponent(attDivision.value) +
+          "&batch=" + encodeURIComponent(attBatch.value) +
+          "&session_date=" + encodeURIComponent(date) +
+          "&slot_start=" + encodeURIComponent(pair[0]) +
+          "&slot_end=" + encodeURIComponent(pair[1])
+        );
+        if (existing.response.ok && Array.isArray(existing.body)) {
+          existing.body.forEach(function (row) { saved[row.student_id] = row.status; });
+        }
+      } catch (error) {
+        // A failed read-back must not block marking a fresh lecture.
+      }
+
+      attendanceRows = rows.map(function (student) {
+        return {
+          id: student.id,
+          roll: student.roll_number,
+          name: student.name,
+          status: saved[student.id] === "absent" ? "absent" : "present"
+        };
+      });
+      renderAttendanceRows();
+
+      var already = Object.keys(saved).length;
+      showMessage(
+        attendanceMessage,
+        already > 0
+          ? "Loaded " + rows.length + " student(s); " + already + " already marked for this lecture."
+          : "Loaded " + rows.length + " student(s).",
+        "info"
+      );
+    } catch (error) {
+      resetAttendanceSheet("Could not load the class.");
+      showMessage(attendanceMessage, "Could not load the class. Check your connection.", "error");
+    } finally {
+      busy(loadAttendanceBtn, loadAttendanceSpinner, loadAttendanceLabel, false, "Load students");
+    }
+  }
+
+  function renderAttendanceRows() {
+    attendanceBody.textContent = "";
+
+    if (attendanceRows.length === 0) {
+      resetAttendanceSheet();
+      return;
+    }
+
+    attendanceRows.forEach(function (row) {
+      var tr = document.createElement("tr");
+
+      var roll = document.createElement("td");
+      roll.textContent = row.roll || "—";
+
+      var name = document.createElement("td");
+      name.textContent = row.name || "—";
+
+      var statusCell = document.createElement("td");
+      var select = document.createElement("select");
+      ["present", "absent"].forEach(function (value) {
+        var option = document.createElement("option");
+        option.value = value;
+        option.textContent = value.charAt(0).toUpperCase() + value.slice(1);
+        select.appendChild(option);
+      });
+      select.value = row.status;
+      select.setAttribute("aria-label", "Attendance for " + (row.name || row.roll));
+      select.addEventListener("change", function () {
+        row.status = select.value;
+      });
+      statusCell.appendChild(select);
+
+      tr.appendChild(roll);
+      tr.appendChild(name);
+      tr.appendChild(statusCell);
+      attendanceBody.appendChild(tr);
+    });
+
+    attendanceCount.textContent = attendanceRows.length + " student(s) loaded";
+    submitAttendanceBtn.disabled = false;
+  }
+
+  function setAllAttendance(status) {
+    attendanceRows.forEach(function (row) { row.status = status; });
+    renderAttendanceRows();
+  }
+
+  async function submitAttendance() {
+    if (attendanceRows.length === 0) return;
+
+    var subject = attSubject.value;
+    if (!subject || !attDate.value || !attPeriod.value) {
+      showMessage(attendanceMessage, "Choose a subject, date and period first.", "error");
+      return;
+    }
+
+    hideMessage(attendanceMessage);
+    busy(submitAttendanceBtn, submitAttendanceSpinner, submitAttendanceLabel, true, "Saving…");
+
+    try {
+      var result = await api("/teacher/attendance/submit", {
+        method: "POST",
+        json: {
+          class_date: attDate.value,
+          period: attPeriod.value,
+          subject: subject,
+          division: attDivision.value,
+          batch: attBatch.value,
+          records: attendanceRows.map(function (row) {
+            return { student_id: row.id, status: row.status };
+          })
+        }
+      });
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        showMessage(attendanceMessage, errorText(result.body, "Could not save attendance (" + result.response.status + ")."), "error");
+        return;
+      }
+
+      var present = result.body.present;
+      var absent = result.body.absent;
+      showMessage(
+        attendanceMessage,
+        "Attendance saved · " + present + " present, " + absent + " absent.",
+        "success"
+      );
+    } catch (error) {
+      showMessage(attendanceMessage, "Could not save attendance. Check your connection.", "error");
+    } finally {
+      busy(submitAttendanceBtn, submitAttendanceSpinner, submitAttendanceLabel, false, "Submit attendance");
+    }
+  }
+
+  // Changing the lecture after loading a sheet would submit old marks under a
+  // new subject/date/period, so the sheet is cleared instead.
+  function onAttendanceLectureChanged() {
+    if (attendanceRows.length > 0) {
+      resetAttendanceSheet("Lecture changed - load the class again.");
+    }
+  }
+
+  loadAttendanceBtn.addEventListener("click", loadAttendanceRoster);
+  submitAttendanceBtn.addEventListener("click", submitAttendance);
+  markAllPresentBtn.addEventListener("click", function () { setAllAttendance("present"); });
+  markAllAbsentBtn.addEventListener("click", function () { setAllAttendance("absent"); });
+  [attSubject, attDate, attPeriod, attYear, attDivision].forEach(function (control) {
+    control.addEventListener("change", onAttendanceLectureChanged);
+  });
+  attSubject.addEventListener("change", renderAttendanceBatches);
+  attBatch.addEventListener("change", onAttendanceLectureChanged);
+  attendanceForm.addEventListener("submit", function (event) { event.preventDefault(); });
 
   // ---------------------------------------------------------------- profile
   function renderProfile() {
