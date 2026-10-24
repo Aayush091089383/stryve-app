@@ -2168,6 +2168,28 @@ def _roll_sort_key(roll_number: str):
     return (1, 0, text)
 
 
+def _registry_student(roll_number: str, *, division: str) -> dict | None:
+    """The official registry row for one roll number in one division.
+
+    `STUDENT_REGISTRY` is the college's master list: it describes every student
+    of Division D whether or not they have registered an account, which is why
+    the class sheet and the attendance resolver both fall back to it.
+    """
+    wanted_roll = (roll_number or "").strip()
+    wanted_division = (division or "").strip().upper()
+    if not wanted_roll:
+        return None
+    return next(
+        (
+            entry
+            for entry in STUDENT_REGISTRY
+            if (entry.get("roll_number") or "").strip() == wanted_roll
+            and (entry.get("division") or "").strip().upper() == wanted_division
+        ),
+        None,
+    )
+
+
 def _roster_entry(
     db: Session, *, division: str, roll_number: str, batch: str = ""
 ) -> models.ClassRoster | None:
@@ -2197,10 +2219,10 @@ def _resolve_attendance_marks(
 
     The roll number is the identity that survives registration, so every mark is
     resolved to one before anything is written. A mark is accepted when the roll
-    number belongs to an approved account in this division, or when it is on the
-    class roster - which is exactly what lets a teacher mark a student who has
-    not signed up yet. Anything else is refused, so a typo cannot invent a
-    student out of thin air.
+    number belongs to an approved account in this division, when it is on the
+    class roster, or when it is in the official registry - which is exactly what
+    lets a teacher mark a student who has not signed up yet. Anything else is
+    refused, so a typo cannot invent a student out of thin air.
     """
     ids = [r.student_id for r in payload.records if r.student_id is not None]
     by_id = {}
@@ -2264,16 +2286,25 @@ def _resolve_attendance_marks(
             roster = _roster_entry(
                 db, division=payload.division, roll_number=roll, batch=payload.batch
             )
-            if roster is None:
+            official = (
+                None
+                if roster is not None
+                else _registry_student(roll, division=payload.division)
+            )
+            if roster is None and official is None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=(
-                        f"Roll number {roll} is not on the class roster for "
-                        f"division {payload.division}"
+                        f"Roll number {roll} is not on the class roster or in "
+                        f"the official registry for division {payload.division}"
                     ),
                 )
-            row_batch = _normalise_batch(roster.batch)
-            label = roster.name
+            if roster is not None:
+                row_batch = _normalise_batch(roster.batch)
+                label = roster.name
+            else:
+                row_batch = _normalise_batch(official.get("batch"))
+                label = official.get("name") or roll
 
         if batch and row_batch and row_batch != batch:
             raise HTTPException(
@@ -2302,12 +2333,13 @@ def list_attendance_students(
 ):
     """The class list for one class group, sorted by roll number ascending.
 
-    The roster is the class list, so a student who has not registered is listed
-    too (``is_registered`` false, no account id) and can be marked. An approved
-    account that is missing from the roster is still added, so a student who
-    registered before the roster existed is never dropped from the sheet. The
-    response carries no credentials and no attendance history; ``year`` is
-    optional so a whole division can be listed across years when it is unknown.
+    The official registry is the class list, so every student of the division is
+    listed even before they register (``is_registered`` false, no account id) and
+    can be marked. The roster adds students the registry does not describe, and
+    an approved account that appears in neither is still added, so nobody who
+    registered is ever dropped from the sheet. The response carries no
+    credentials and no attendance history; ``year`` is optional so a whole
+    division can be listed across years when it is unknown.
     """
     normalised = _normalise_batch(batch)
 
@@ -2344,23 +2376,59 @@ def list_attendance_students(
         for student in student_query.all()
     }
 
-    merged: dict[str, tuple[str, str]] = {}
+    # roll number -> (name, branch, batch). The official registry is the base
+    # layer, so the sheet is the whole class even when nobody has registered.
+    merged: dict[str, tuple[str, str, str]] = {}
+    wanted_division = (division or "").strip().upper()
+    for entry in STUDENT_REGISTRY:
+        if (entry.get("division") or "").strip().upper() != wanted_division:
+            continue
+        if year is not None and entry.get("year") != year:
+            continue
+        entry_batch = _normalise_batch(entry.get("batch"))
+        if normalised and entry_batch != normalised:
+            continue
+        roll = (entry.get("roll_number") or "").strip()
+        if roll:
+            merged[roll] = (
+                entry.get("name") or "",
+                entry.get("course") or "",
+                entry.get("batch") or "",
+            )
+
+    # A roster row is an explicit class-list entry: it may add a roll the
+    # registry does not have, and its name is the one the admin chose to keep.
     for entry in roster_query.all():
-        merged[(entry.roll_number or "").strip()] = (entry.name, entry.batch or "")
+        roll = (entry.roll_number or "").strip()
+        if not roll:
+            continue
+        official = merged.get(roll)
+        merged[roll] = (
+            entry.name,
+            official[1] if official else "",
+            entry.batch or (official[2] if official else ""),
+        )
+
     for roll, student in accounts.items():
-        merged.setdefault(roll, (student.name, student.batch or ""))
+        merged.setdefault(
+            roll, (student.name, student.branch or "", student.batch or "")
+        )
 
     out: list[AttendanceStudentOut] = []
     for roll in sorted(merged, key=_roll_sort_key):
-        roster_name, roster_batch = merged[roll]
+        class_name, class_branch, class_batch = merged[roll]
         student = accounts.get(roll)
         out.append(
             AttendanceStudentOut(
                 id=student.id if student is not None else None,
                 roll_number=roll,
-                name=student.name if student is not None else roster_name,
-                branch=(student.branch or None) if student is not None else None,
-                batch=(student.batch or "") if student is not None else roster_batch,
+                name=student.name if student is not None else class_name,
+                branch=(
+                    (student.branch or None)
+                    if student is not None
+                    else (class_branch or None)
+                ),
+                batch=(student.batch or "") if student is not None else class_batch,
                 is_registered=student is not None,
             )
         )

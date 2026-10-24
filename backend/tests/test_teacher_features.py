@@ -1176,6 +1176,64 @@ check(
     str([row["roll_number"] for row in sheet_rows]),
 )
 
+# The official registry is the class list: a student who has never signed up is
+# still on the sheet, with their official name and branch and no account id.
+official_only = [row for row in sheet_rows if row["roll_number"] == "3"]
+check(
+    "an official student who has not registered is on the class sheet",
+    len(official_only) == 1
+    and official_only[0]["is_registered"] is False
+    and official_only[0]["id"] is None
+    and official_only[0]["name"] == "SAMRUDDHI MANOJ AMBEKAR"
+    and official_only[0]["branch"] == "Computer",
+    str(official_only),
+)
+whole_division = requests.get(
+    f"{BASE}/teacher/attendance/students?year=1&division=D",
+    headers=auth(smg_token),
+    timeout=10,
+).json()
+check(
+    "the whole official division is listed on the class sheet",
+    {str(roll) for roll in range(1, 73)}
+    <= {row["roll_number"] for row in whole_division},
+    f"{len(whole_division)} row(s)",
+)
+
+# ...and can be marked, because the save path falls back to the registry too.
+official_mark = {
+    "class_date": MONDAY_STR,
+    "period": "13:00-14:00",
+    "subject": "M-1",
+    "division": "D",
+    "batch": "D-1",
+    "records": [{"roll_number": "3", "status": "absent"}],
+}
+official_saved = requests.post(
+    f"{BASE}/teacher/attendance/submit",
+    json=official_mark,
+    headers=auth(admin_token),
+    timeout=10,
+)
+check(
+    "attendance can be marked for an official student who has not registered",
+    official_saved.status_code == 200,
+    official_saved.text[:200],
+)
+official_stored = conn.execute(
+    "SELECT student_id, roll_number, status FROM attendance_records "
+    "WHERE roll_number='3' AND session_date=?",
+    (MONDAY_STR,),
+).fetchone()
+check(
+    "the official student's mark is keyed to the roll number, with no account",
+    official_stored is not None
+    and official_stored[0] is None
+    and official_stored[1] == "3"
+    and official_stored[2] == "absent",
+    str(official_stored),
+)
+
 roster_mark = {
     "class_date": MONDAY_STR,
     "period": "13:00-14:00",
