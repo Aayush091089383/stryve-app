@@ -1395,6 +1395,82 @@ def _college_today() -> date:
     return datetime.now(COLLEGE_TIMEZONE).date()
 
 
+# ==================================================================
+# A lecture's attendance is written during that lecture, not whenever it is
+# convenient. The sheet opens ATTENDANCE_GRACE before the printed period and
+# closes the same amount after it, on the college clock. Admin accounts are
+# exempt: they are how a mistake gets corrected after the fact.
+# ==================================================================
+ATTENDANCE_GRACE = timedelta(minutes=15)
+
+
+def _attendance_now() -> datetime:
+    """Now on the college clock.
+
+    A single seam: the suites replace this to pin the time rules instead of
+    depending on the wall clock of whichever machine runs them.
+    """
+    return datetime.now(COLLEGE_TIMEZONE)
+
+
+def _clock_label(moment: datetime) -> str:
+    """'1:05 PM' - the clock face a teacher reads off the printed timetable."""
+    hour = moment.hour % 12 or 12
+    suffix = "AM" if moment.hour < 12 else "PM"
+    return f"{hour}:{moment.minute:02d} {suffix}"
+
+
+def _lecture_moment(day_date: date, hhmm: str) -> datetime:
+    """A printed time on a calendar day, read on the college clock."""
+    hour, minute = (int(part) for part in hhmm.split(":"))
+    return datetime(
+        day_date.year,
+        day_date.month,
+        day_date.day,
+        hour,
+        minute,
+        tzinfo=COLLEGE_TIMEZONE,
+    )
+
+
+def _require_attendance_window(
+    teacher: models.Teacher,
+    *,
+    session_date: str,
+    slot_start: str,
+    slot_end: str,
+) -> None:
+    """Refuse an attendance save that is not during its lecture.
+
+    The window is the printed period plus ATTENDANCE_GRACE on either side, judged
+    on the college clock (IST) - never the UTC day, which would close an evening
+    lecture four hours late. Admin accounts are exempt and may always correct a
+    lecture, which is what keeps a marking mistake fixable.
+    """
+    if teacher.role == "admin":
+        return
+
+    day_date = _parse_date(session_date)
+    opens = _lecture_moment(day_date, slot_start) - ATTENDANCE_GRACE
+    closes = _lecture_moment(day_date, slot_end) + ATTENDANCE_GRACE
+    now = _attendance_now()
+
+    if opens <= now <= closes:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            f"Attendance for {session_date} "
+            f"{_clock_label(_lecture_moment(day_date, slot_start))} to "
+            f"{_clock_label(_lecture_moment(day_date, slot_end))} can only be "
+            f"saved from {_clock_label(opens)} to {_clock_label(closes)} "
+            f"({COLLEGE_TIMEZONE_LABEL}). An administrator can still correct "
+            "this lecture later."
+        ),
+    )
+
+
 # Official timetable helpers (Division D, First Term, Revision 4)
 # ============================================================
 def _normalise_batch(value) -> str:
@@ -2001,6 +2077,13 @@ def save_attendance(
         batch=batch,
         day=_day_name(day_date),
         slot_start=payload.slot_start,
+    )
+
+    _require_attendance_window(
+        teacher,
+        session_date=session_date,
+        slot_start=payload.slot_start,
+        slot_end=payload.slot_end,
     )
 
     resolved = _resolve_attendance_marks(db, payload)

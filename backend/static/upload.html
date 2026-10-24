@@ -1264,7 +1264,9 @@
               <p class="hint">
                 Choose the lecture, load the class and set each student's status. Saving
                 replaces the stored status for that date, period and subject; it never
-                adds a second row for the same student and lecture.
+                adds a second row for the same student and lecture. A lecture's sheet
+                can only be saved during that period, with 15 minutes of grace either
+                side (IST); admins may save at any time to correct a mistake.
               </p>
 
               <form id="attendanceForm" novalidate>
@@ -3332,13 +3334,32 @@
     return now.getFullYear() + "-" + month + "-" + day;
   }
 
+  // The value stays the 24-hour pair the backend validates; only the label is
+  // the 12-hour clock a teacher reads off the printed timetable.
+  function clock12h(hhmm) {
+    var parts = String(hhmm || "").split(":");
+    if (parts.length !== 2) return hhmm;
+    var hour = parseInt(parts[0], 10);
+    var minute = parseInt(parts[1], 10);
+    if (isNaN(hour) || isNaN(minute)) return hhmm;
+    var suffix = hour < 12 ? "AM" : "PM";
+    var hour12 = hour % 12 === 0 ? 12 : hour % 12;
+    return hour12 + ":" + (minute < 10 ? "0" + minute : String(minute)) + " " + suffix;
+  }
+
+  function period12h(period) {
+    var pair = String(period || "").split("-");
+    if (pair.length !== 2) return period;
+    return clock12h(pair[0]) + " - " + clock12h(pair[1]);
+  }
+
   function prepareAttendance() {
     if (!attDate.value) attDate.value = todayIso();
     if (attPeriod.options.length === 0) {
       ATTENDANCE_PERIODS.forEach(function (period) {
         var option = document.createElement("option");
         option.value = period;
-        option.textContent = period.replace("-", " – ");
+        option.textContent = period12h(period);
         attPeriod.appendChild(option);
       });
     }

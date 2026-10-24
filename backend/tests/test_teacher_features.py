@@ -322,6 +322,24 @@ MONDAY_STR = MONDAY.strftime("%Y-%m-%d")
 SUNDAY_STR = (MONDAY + timedelta(days=6)).strftime("%Y-%m-%d")
 
 
+# Attendance is time-locked to its lecture (15 minutes of grace either side) on
+# the college clock. The suite pins that clock, so a teacher's own save is
+# testable at whatever hour the suite happens to run; the lock itself is
+# exercised deliberately in section 3c.
+def freeze_attendance_clock(hour, minute, day=None):
+    base = day or MONDAY
+    target = datetime(
+        base.year,
+        base.month,
+        base.day,
+        hour,
+        minute,
+        tzinfo=main.COLLEGE_TIMEZONE,
+    )
+    main._attendance_now = lambda: target
+    return target
+
+
 def _next_named_date(name: str) -> date:
     """The next date (today or later) that falls on ``name`` (Monday-Saturday).
 
@@ -707,6 +725,7 @@ check(
 # ==========================================================================
 section("3. Lecture-wise attendance")
 # ==========================================================================
+freeze_attendance_clock(13, 5)  # inside the Monday 13:00-14:00 lecture
 attendance_body = {
     "subject": "M-1",
     "division": "D",
@@ -1363,6 +1382,106 @@ check(
         f"{BASE}/admin/roster/{entry_id}", headers=auth(admin_token), timeout=10
     ).status_code == 404,
 )
+
+# ==========================================================================
+section("3c. Attendance is time-locked to its lecture")
+# ==========================================================================
+lock_body = {
+    "class_date": MONDAY_STR,
+    "period": "13:00-14:00",
+    "subject": "M-1",
+    "division": "D",
+    "batch": "",
+    "records": [{"roll_number": "1", "status": "present"}],
+}
+
+
+def submit_as_teacher():
+    return requests.post(
+        f"{BASE}/teacher/attendance/submit",
+        json=lock_body,
+        headers=auth(smg_token),
+        timeout=10,
+    )
+
+
+freeze_attendance_clock(12, 30)
+too_early = submit_as_teacher()
+check(
+    "marking a lecture long before it starts is refused",
+    too_early.status_code == 403,
+    str(too_early.status_code) + " " + too_early.text[:160],
+)
+check(
+    "the refusal says when the sheet opens",
+    "12:45 PM" in too_early.text,
+    too_early.text[:220],
+)
+check(
+    "the refusal names the college clock",
+    "IST" in too_early.text,
+    too_early.text[:220],
+)
+
+freeze_attendance_clock(12, 50)
+check(
+    "the sheet opens 15 minutes before the period",
+    submit_as_teacher().status_code == 200,
+)
+
+freeze_attendance_clock(14, 10)
+check(
+    "the sheet stays open 15 minutes after the period ends",
+    submit_as_teacher().status_code == 200,
+)
+
+freeze_attendance_clock(14, 20)
+too_late = submit_as_teacher()
+check(
+    "marking a lecture after the grace window is refused",
+    too_late.status_code == 403,
+    str(too_late.status_code) + " " + too_late.text[:160],
+)
+check(
+    "the refusal says when the sheet closes",
+    "2:15 PM" in too_late.text,
+    too_late.text[:220],
+)
+
+freeze_attendance_clock(13, 5, day=MONDAY + timedelta(days=1))
+wrong_day = submit_as_teacher()
+check(
+    "a lecture cannot be marked on another calendar day",
+    wrong_day.status_code == 403,
+    str(wrong_day.status_code) + " " + wrong_day.text[:160],
+)
+check(
+    "its refusal names the lecture's own date",
+    MONDAY_STR in wrong_day.text,
+    wrong_day.text[:220],
+)
+
+check(
+    "a student token is still refused before any clock rule -> 403",
+    requests.post(
+        f"{BASE}/teacher/attendance/submit",
+        json=lock_body,
+        headers=auth(TOKENS["1"]),
+        timeout=10,
+    ).status_code == 403,
+)
+
+freeze_attendance_clock(23, 30)
+check(
+    "an admin can still correct a lecture after the fact",
+    requests.post(
+        f"{BASE}/teacher/attendance/submit",
+        json=lock_body,
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code == 200,
+)
+freeze_attendance_clock(13, 5)  # leave the rest of the suite inside the lecture
 
 # ==========================================================================
 section("4. Claim free period")

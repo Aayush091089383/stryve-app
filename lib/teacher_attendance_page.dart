@@ -22,6 +22,28 @@ const List<List<String>> kTimetableSlots = [
   ['16:15', '17:15'],
 ];
 
+/// "15:15" -> "3:15 PM".
+///
+/// The timetable is stored as a 24-hour grid because the backend validates
+/// exactly those strings; a teacher reads a clock face, so only the labels are
+/// converted. An unparseable value is returned unchanged rather than guessed at.
+String formatClock12h(String hhmm) {
+  final parts = hhmm.split(':');
+  if (parts.length != 2) return hhmm;
+  final hour24 = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour24 == null || minute == null) return hhmm;
+  final suffix = hour24 < 12 ? 'AM' : 'PM';
+  final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+  return '$hour12:${minute.toString().padLeft(2, '0')} $suffix';
+}
+
+/// ["13:00", "14:00"] -> "1:00 PM - 2:00 PM".
+String formatPeriod12h(List<String> slot) {
+  if (slot.length != 2) return slot.join('-');
+  return '${formatClock12h(slot[0])} - ${formatClock12h(slot[1])}';
+}
+
 enum _AttendanceStage { setup, marking, review }
 
 class _ClassStudent {
@@ -148,7 +170,11 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
       '${_date.month.toString().padLeft(2, '0')}-'
       '${_date.day.toString().padLeft(2, '0')}';
 
+  /// The wire format the backend validates ("13:00-14:00").
   String get _periodLabel => '${_slot[0]}-${_slot[1]}';
+
+  /// The same period as a teacher reads it ("1:00 PM - 2:00 PM").
+  String get _periodDisplay => formatPeriod12h(_slot);
 
   int get _unmarkedCount => _students.length - _marks.length;
 
@@ -727,7 +753,7 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
                         (slot) => DropdownMenuItem<String>(
                           value: '${slot[0]}-${slot[1]}',
                           child: Text(
-                            '${slot[0]} - ${slot[1]}',
+                            formatPeriod12h(slot),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -800,11 +826,20 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$_dateIso · $_periodLabel · '
+                  '$_dateIso · $_periodDisplay · '
                   '${_batch.isEmpty ? 'Whole division' : _batch}',
                   style: TextStyle(
                     fontSize: 12,
                     color: GlassColors.secondaryTextOf(context),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Attendance can be saved during this period only, with 15 '
+                  'minutes of grace either side (IST).',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: GlassColors.disabledOf(context),
                   ),
                 ),
               ],

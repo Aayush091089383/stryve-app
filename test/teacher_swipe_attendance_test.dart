@@ -53,10 +53,15 @@ Map<String, dynamic> studentJson({
 /// A mock backend for the whole flow. [saved] is what
 /// `GET /teacher/attendance` returns for the selected lecture.
 class AttendanceBackend {
-  AttendanceBackend({this.saved = const [], this.roster});
+  AttendanceBackend({
+    this.saved = const [],
+    this.roster,
+    List<Map<String, dynamic>>? assignments,
+  }) : assignments = assignments ?? [assignmentJson()];
 
   List<Map<String, dynamic>> saved;
   List<Map<String, dynamic>>? roster;
+  final List<Map<String, dynamic>> assignments;
   int submitStatus = 200;
   Map<String, dynamic>? submitError;
   final List<http.Request> requests = [];
@@ -70,7 +75,7 @@ class AttendanceBackend {
     requests.add(request);
 
     if (request.url.path == '/teacher/assignments') {
-      return jsonResponse([assignmentJson()]);
+      return jsonResponse(assignments);
     }
     if (request.url.path == '/teacher/attendance/students') {
       return jsonResponse(roster ?? defaultRoster);
@@ -139,6 +144,30 @@ Future<void> loadRoster(WidgetTester tester) async {
 }
 
 void main() {
+  group('12-hour clock', () {
+    test('formats a printed period as a clock face', () {
+      expect(formatClock12h('10:15'), '10:15 AM');
+      expect(formatClock12h('12:00'), '12:00 PM');
+      expect(formatClock12h('00:05'), '12:05 AM');
+      expect(formatClock12h('13:00'), '1:00 PM');
+      expect(formatClock12h('15:15'), '3:15 PM');
+      expect(formatClock12h('16:15'), '4:15 PM');
+      expect(formatPeriod12h(['15:15', '16:15']), '3:15 PM - 4:15 PM');
+      // Anything unparseable is left alone rather than guessed at.
+      expect(formatClock12h('later'), 'later');
+    });
+  });
+
+  testWidgets('the period picker reads on a 12-hour clock', (tester) async {
+    await pumpAttendance(tester, AttendanceBackend());
+
+    expect(find.text('1:00 PM - 2:00 PM'), findsOneWidget);
+
+    await loadRoster(tester);
+    // The lecture header uses the same clock, and the wire format is unchanged.
+    expect(find.textContaining('1:00 PM - 2:00 PM'), findsOneWidget);
+  });
+
   testWidgets('the roster loads with a progress count', (tester) async {
     final backend = AttendanceBackend();
     await pumpAttendance(tester, backend);
@@ -314,6 +343,42 @@ void main() {
       {'roll_number': '901', 'status': 'present'},
       {'roll_number': '2', 'student_id': 2, 'status': 'present'},
     ]);
+  });
+
+  testWidgets('the batch chosen in setup is the batch that is marked', (
+    tester,
+  ) async {
+    final backend = AttendanceBackend(
+      assignments: [
+        {...assignmentJson(), 'batch': 'D-1'},
+        {...assignmentJson(), 'batch': 'D-2'},
+        {...assignmentJson(), 'batch': 'D-3'},
+      ],
+      roster: [
+        studentJson(
+          id: 3,
+          roll: '25',
+          name: 'BHAGYASHRI VITTHALSINGH GIRASE',
+          batch: 'D-2',
+        ),
+      ],
+    );
+    await pumpAttendance(tester, backend);
+
+    await tester.tap(find.text('D-1').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('D-2').last);
+    await tester.pumpAndSettle();
+
+    await loadRoster(tester);
+
+    // The lecture header and the request both carry the batch that was chosen,
+    // never the batch of some other assignment.
+    expect(find.textContaining('\u00b7 D-2'), findsOneWidget);
+    final query = backend.requests.firstWhere(
+      (request) => request.url.path == '/teacher/attendance/students',
+    );
+    expect(query.url.queryParameters['batch'], 'D-2');
   });
 
   testWidgets('mark-all-remaining-present completes the sheet', (tester) async {
