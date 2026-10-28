@@ -708,6 +708,32 @@ class FreePeriodClaimOut(BaseModel):
         from_attributes = True
 
 
+class ScheduleChangeOut(BaseModel):
+    """One claimed free period as a student sees it on Home.
+
+    ``time`` is the printed 24-hour pair ("10:15 - 11:15"), the same shape the
+    teacher's claim list uses, so both halves of the feature read identically.
+    """
+
+    id: int
+    day: str
+    time: str
+    subject: Optional[str] = None
+    division: str
+    batch: str
+    claimed_by_name: str
+    is_today: bool = True
+
+
+class ScheduleChangesResponse(BaseModel):
+    """Today's claimed free periods for one student's class group."""
+
+    date: str  # YYYY-MM-DD, on the college clock
+    count: int
+    changes: list[ScheduleChangeOut]
+    message: str
+
+
 class FreePeriodAvailabilityOut(BaseModel):
     date: str
     day: str

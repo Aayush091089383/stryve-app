@@ -4345,6 +4345,151 @@ check(
 edit_db.close()
 delete_db.close()
 
+# ==========================================================================
+section("4b. Student schedule changes (claimed free periods)")
+# ==========================================================================
+# Today's claims for the student's own division and class group, and nothing
+# else: another batch's practical is not their change, yesterday is history, and
+# another division is somebody else's timetable.
+schedule_db = sqlite3.connect(DB_FILE)
+today_iso = main._college_today().isoformat()
+yesterday_iso = (main._college_today() - timedelta(days=1)).isoformat()
+today_name = main._college_today().strftime("%A")
+
+# Earlier sections claim today's free period when this run happens to be on a
+# RELM day. Clear only today's rows in this THROWAWAY database so the set below
+# is the whole story and the count assertion is deterministic.
+schedule_db.execute(
+    "DELETE FROM free_period_claims WHERE claim_date = ?", (today_iso,)
+)
+
+schedule_claims = [
+    # (teacher_id, date, day, start, end, division, batch, subject)
+    (smg_id, today_iso, today_name, "10:15", "11:15", "D", "", None),
+    (spk_id, today_iso, today_name, "14:00", "15:00", "D", "D-3", "EG"),
+    (smg_id, today_iso, today_name, "15:15", "16:15", "D", "D-1", None),
+    (smg_id, yesterday_iso, today_name, "09:00", "10:00", "D", "", None),
+    # A different teacher: one teacher cannot hold two claims in the same slot.
+    (spk_id, today_iso, today_name, "10:15", "11:15", "F", "", None),
+]
+for claim_row in schedule_claims:
+    schedule_db.execute(
+        "INSERT INTO free_period_claims "
+        "(teacher_id, claim_date, day, start_time, end_time, division, batch, subject, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (*claim_row, "2026-10-29 05:00:00"),
+    )
+schedule_db.commit()
+
+# A student in a division with no claims at all.
+schedule_session = database.SessionLocal()
+schedule_session.add(
+    models.Student(
+        name="DIVISION E STUDENT",
+        email="divisione@example.com",
+        roll_number="5001",
+        branch="Computer",
+        year=1,
+        division="E",
+        batch="E-1",
+        password=password_hash.hash(PASSWORD),
+        status="approved",
+    )
+)
+schedule_session.commit()
+schedule_session.close()
+division_e_token = login("divisione@example.com")
+
+changes_response = requests.get(
+    f"{BASE}/student/schedule-changes", headers=auth(TOKENS["71"]), timeout=10
+)
+check(
+    "a student can read their schedule changes",
+    changes_response.status_code == 200,
+    changes_response.text[:200],
+)
+changes_body = changes_response.json()
+check(
+    "the response is dated today on the college clock",
+    changes_body.get("date") == today_iso,
+    str(changes_body.get("date")),
+)
+check(
+    "only the whole-division and own-batch claims are returned",
+    changes_body.get("count") == 2,
+    str(changes_body.get("changes")),
+)
+check(
+    "the list is in time order",
+    [change["time"] for change in changes_body["changes"]]
+    == ["10:15 - 11:15", "14:00 - 15:00"],
+    str([change["time"] for change in changes_body["changes"]]),
+)
+whole_change = next(
+    change for change in changes_body["changes"] if change["batch"] == ""
+)
+check(
+    "a whole-division claim carries its slot and claimant",
+    whole_change["day"] == today_name
+    and whole_change["division"] == "D"
+    and whole_change["subject"] is None
+    and whole_change["claimed_by_name"] == "S M Gangurde"
+    and whole_change["is_today"] is True,
+    str(whole_change),
+)
+check(
+    "a batch claim carries its subject",
+    any(
+        change["batch"] == "D-3"
+        and change["subject"] == "EG"
+        and change["claimed_by_name"] == "S P Kulkarni"
+        for change in changes_body["changes"]
+    ),
+    str(changes_body["changes"]),
+)
+check(
+    "another batch's claim is not this student's change",
+    all(change["batch"] != "D-1" for change in changes_body["changes"]),
+    str(changes_body["changes"]),
+)
+check(
+    "yesterday's claim and another division's claim are excluded",
+    all(
+        change["time"] != "09:00 - 10:00" and change["division"] == "D"
+        for change in changes_body["changes"]
+    ),
+    str(changes_body["changes"]),
+)
+check(
+    "the message summarises the count",
+    changes_body.get("message") == "2 free periods claimed today.",
+    str(changes_body.get("message")),
+)
+
+other_division = requests.get(
+    f"{BASE}/student/schedule-changes", headers=auth(division_e_token), timeout=10
+)
+check(
+    "a student in another division sees an honest empty list",
+    other_division.status_code == 200
+    and other_division.json()["count"] == 0
+    and other_division.json()["changes"] == []
+    and other_division.json()["message"] == "No schedule changes today.",
+    other_division.text[:200],
+)
+check(
+    "a teacher token is not a student session -> 401",
+    requests.get(
+        f"{BASE}/student/schedule-changes", headers=auth(smg_token), timeout=10
+    ).status_code == 401,
+)
+check(
+    "the endpoint requires a session -> 401",
+    requests.get(f"{BASE}/student/schedule-changes", timeout=10).status_code == 401,
+)
+
+schedule_db.close()
+
 real_stamp_end = (
     (REAL_DB.stat().st_size, REAL_DB.stat().st_mtime_ns) if REAL_DB.exists() else None
 )

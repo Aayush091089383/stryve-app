@@ -132,12 +132,14 @@ void main() {
       final recorder = RecordingClient();
       await pumpHomeWith(tester, recorder);
 
-      // Home asks for its own timetable and the bell's notification feed; no
-      // other tab may talk to the backend before it is opened.
+      // Home asks for its own timetable, its claimed free periods, and the
+      // bell's notification feed; no other tab may talk to the backend before
+      // it is opened.
       expect(recorder.paths.toSet(), {
         '/timetable',
         '/notifications',
-      }, reason: 'only the visible tab (and Home\'s own bell) may load data');
+        '/student/schedule-changes',
+      }, reason: 'only the visible tab (and Home\'s own data) may load data');
       expect(
         recorder.paths,
         isNot(contains('/assignments')),

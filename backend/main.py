@@ -102,6 +102,8 @@ from schemas import (
     FreePeriodAvailabilityOut,
     FreePeriodClaimOut,
     FreePeriodClaimRequest,
+    ScheduleChangeOut,
+    ScheduleChangesResponse,
     FreePeriodSlotOut,
     FacultyOut,
     LabRoomOut,
@@ -3043,6 +3045,77 @@ def update_attendance_record(
         status=row.status,
         marked_at=row.marked_at.isoformat() if row.marked_at is not None else None,
         updated_at=row.updated_at.isoformat() if row.updated_at is not None else None,
+    )
+
+
+@app.get("/student/schedule-changes", response_model=ScheduleChangesResponse)
+def student_schedule_changes(
+    student: models.Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Today's claimed free periods that change this student's timetable.
+
+    A claim is included when it is for today, in the student's division, and is
+    either division-wide (``batch`` empty) or for the student's own batch. A
+    claim for another batch is somebody else's practical and must not appear;
+    past days are history, not a schedule change, so they are excluded too.
+
+    The identity is the session's, never a query parameter: a student can only
+    ever read their own class group's changes.
+    """
+    today = _college_today().isoformat()
+    batch = _normalise_batch(student.batch)
+
+    batch_filters = [
+        models.FreePeriodClaim.batch == "",
+        models.FreePeriodClaim.batch.is_(None),
+    ]
+    # The normalised and the raw stored spelling both count: the registry uses
+    # "D-3" while an older row may carry "D3".
+    for value in {batch, (student.batch or "").strip()} - {""}:
+        batch_filters.append(models.FreePeriodClaim.batch == value)
+
+    claims = (
+        db.query(models.FreePeriodClaim)
+        .options(joinedload(models.FreePeriodClaim.teacher))
+        .filter(
+            models.FreePeriodClaim.claim_date == today,
+            models.FreePeriodClaim.division == (student.division or "").strip(),
+            or_(*batch_filters),
+        )
+        .order_by(models.FreePeriodClaim.start_time)
+        .all()
+    )
+
+    changes = [
+        ScheduleChangeOut(
+            id=claim.id,
+            day=claim.day,
+            time=f"{claim.start_time} - {claim.end_time}",
+            subject=claim.subject,
+            division=claim.division,
+            batch=claim.batch or "",
+            claimed_by_name=(
+                claim.teacher.name if claim.teacher is not None else "A teacher"
+            ),
+            is_today=True,
+        )
+        for claim in claims
+    ]
+
+    count = len(changes)
+    if count == 0:
+        message = "No schedule changes today."
+    elif count == 1:
+        message = f"1 free period claimed: {changes[0].time}"
+    else:
+        message = f"{count} free periods claimed today."
+
+    return ScheduleChangesResponse(
+        date=today,
+        count=count,
+        changes=changes,
+        message=message,
     )
 
 

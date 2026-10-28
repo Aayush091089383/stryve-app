@@ -11,6 +11,7 @@ import 'faculty_finder_page.dart';
 import 'lab_finder_page.dart';
 import 'notifications_page.dart';
 import 'role_selection_page.dart';
+import 'schedule_change.dart';
 import 'services/api_cache.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
@@ -257,6 +258,7 @@ class _HomePageState extends State<HomePage> {
           client: widget.client,
           bottomInset: _navInset,
           onOpenAttendance: () => _select(2),
+          onRefreshNotifications: () => _fetchNotifications(alert: false),
         );
     }
   }
@@ -424,6 +426,7 @@ class _HomeTab extends StatefulWidget {
     this.client,
     this.bottomInset = 0,
     this.onOpenAttendance,
+    this.onRefreshNotifications,
   });
 
   final Student student;
@@ -431,6 +434,10 @@ class _HomeTab extends StatefulWidget {
   /// Switches HomePage to the Attendance tab; the quick card used to be a dead
   /// tile before that tab existed.
   final VoidCallback? onOpenAttendance;
+
+  /// Pull-to-refresh also refreshes the bell badge, which lives on the parent
+  /// page. Null when the tab is built without one.
+  final Future<void> Function()? onRefreshNotifications;
 
   /// Optional injected HTTP client, for tests only.
   final http.Client? client;
@@ -447,6 +454,11 @@ class _HomeTab extends StatefulWidget {
 class _HomeTabState extends State<_HomeTab> {
   bool _isLoadingSchedule = true;
   String? _scheduleError;
+
+  /// Today's claimed free periods for this student's class group.
+  List<ScheduleChange> _scheduleChanges = const [];
+  bool _isLoadingChanges = true;
+  String? _changesError;
   List<TimetableEntry> _today = const [];
   http.Client? _ownedClient;
   http.Client get _client => widget.client ?? (_ownedClient ??= http.Client());
@@ -480,6 +492,7 @@ class _HomeTabState extends State<_HomeTab> {
   void initState() {
     super.initState();
     _fetchToday();
+    _fetchScheduleChanges();
     _refreshTimer = Timer.periodic(
       const Duration(minutes: 1),
       (_) => _onMinuteTick(),
@@ -494,6 +507,9 @@ class _HomeTabState extends State<_HomeTab> {
     final todayName = _dayNames[DateTime.now().weekday - 1];
     if (_scheduleDay != null && _scheduleDay != todayName) {
       _fetchToday();
+      // Claims are day-scoped too: a phone left open overnight must not keep
+      // yesterday's changes on screen.
+      _fetchScheduleChanges();
       return;
     }
 
@@ -630,6 +646,78 @@ class _HomeTabState extends State<_HomeTab> {
     }
   }
 
+  /// Loads today's claimed free periods for this student's class group.
+  ///
+  /// The backend scopes the list to the student's own division and batch, so
+  /// this screen never filters or widens it. A failed refresh keeps the last
+  /// good list on screen; only a first load can render the error card, so a
+  /// dropped connection never pretends the changes disappeared.
+  Future<void> _fetchScheduleChanges() async {
+    setState(() {
+      _isLoadingChanges = true;
+      _changesError = null;
+    });
+
+    try {
+      final response = await _client.get(
+        Uri.parse('${Environment.backendUrl}/student/schedule-changes'),
+        headers: {'Authorization': 'Bearer ${widget.student.token}'},
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 401) {
+        await AuthService().clearAuthData();
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const RoleSelectionPage()),
+          (route) => false,
+        );
+        return;
+      }
+
+      if (response.statusCode != 200) {
+        setState(() {
+          _changesError =
+              'Could not load schedule updates (${response.statusCode}).';
+          _isLoadingChanges = false;
+        });
+        return;
+      }
+
+      final decoded = jsonDecode(response.body);
+      final raw = decoded is Map<String, dynamic> ? decoded['changes'] : null;
+      final changes = raw is List
+          ? raw
+                .whereType<Map<String, dynamic>>()
+                .map(ScheduleChange.fromJson)
+                .toList()
+          : <ScheduleChange>[];
+
+      setState(() {
+        _scheduleChanges = changes;
+        _changesError = null;
+        _isLoadingChanges = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _changesError = 'Could not connect to Stryve server.';
+        _isLoadingChanges = false;
+      });
+    }
+  }
+
+  /// Pull-to-refresh: the timetable, the claimed periods and the bell badge.
+  Future<void> _refreshHome() async {
+    await Future.wait([
+      _fetchToday(),
+      _fetchScheduleChanges(),
+      if (widget.onRefreshNotifications != null)
+        widget.onRefreshNotifications!(),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final hour = DateTime.now().hour;
@@ -672,11 +760,20 @@ class _HomeTabState extends State<_HomeTab> {
     // Recomputed on every build, including the once-a-minute timer rebuild.
     final nextUp = _upNext(DateTime.now());
 
-    return SingleChildScrollView(
-      // 100 of breathing room plus the floating nav's footprint, so the
-      // "Latest Update" card can scroll fully clear of the bar.
-      padding: EdgeInsets.fromLTRB(20, topInset, 20, 100 + widget.bottomInset),
-      child: Column(
+    return RefreshIndicator(
+      onRefresh: _refreshHome,
+      child: SingleChildScrollView(
+        // Always scrollable, so the gesture works even when the page is short.
+        physics: const AlwaysScrollableScrollPhysics(),
+        // 100 of breathing room plus the floating nav's footprint, so the
+        // "Latest Update" card can scroll fully clear of the bar.
+        padding: EdgeInsets.fromLTRB(
+          20,
+          topInset,
+          20,
+          100 + widget.bottomInset,
+        ),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Welcome. The greeting is the only identity line on Home: only the
@@ -980,54 +1077,178 @@ class _HomeTabState extends State<_HomeTab> {
 
           const SizedBox(height: 14),
 
-          GlassCard(
-            padding: const EdgeInsets.all(16),
-            margin: EdgeInsets.zero,
-            borderRadius: 16,
-            blurStrength: 8,
-            child: Row(
-              children: [
-                GlassContainer(
-                  width: 44,
-                  height: 44,
-                  borderRadius: 12,
-                  padding: EdgeInsets.zero,
-                  blurStrength: 15,
-                  opacity: 0.7,
-                  borderOpacity: 0.4,
-                  child: const Icon(
-                    Icons.check_circle_outline_rounded,
-                    size: 22,
-                    color: GlassColors.success,
+          _buildLatestUpdate(),
+        ],
+        ),
+      ),
+    );
+  }
+
+  /// The "Latest Update" card: today's claimed free periods, or the honest
+  /// empty/error states. It never reports an unreachable server as "no
+  /// changes".
+  Widget _buildLatestUpdate() {
+    // A refresh keeps the last good list; only a first load shows a spinner.
+    if (_isLoadingChanges && _scheduleChanges.isEmpty) {
+      return const GlassCard(
+        padding: EdgeInsets.all(16),
+        margin: EdgeInsets.zero,
+        borderRadius: 16,
+        blurStrength: 8,
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    if (_changesError != null && _scheduleChanges.isEmpty) {
+      return GlassCard(
+        padding: const EdgeInsets.all(16),
+        margin: EdgeInsets.zero,
+        borderRadius: 16,
+        blurStrength: 8,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Could not load schedule updates.',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: GlassColors.headingOf(context),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _changesError!,
+              style: TextStyle(
+                fontSize: 12,
+                color: GlassColors.secondaryTextOf(context),
+              ),
+            ),
+            TextButton(
+              key: const Key('home_schedule_changes_retry'),
+              onPressed: _fetchScheduleChanges,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_scheduleChanges.isEmpty) {
+      return GlassCard(
+        padding: const EdgeInsets.all(16),
+        margin: EdgeInsets.zero,
+        borderRadius: 16,
+        blurStrength: 8,
+        child: Row(
+          children: [
+            GlassContainer(
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              padding: EdgeInsets.zero,
+              blurStrength: 15,
+              opacity: 0.7,
+              borderOpacity: 0.4,
+              child: const Icon(
+                Icons.check_circle_outline_rounded,
+                size: 22,
+                color: GlassColors.success,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No Schedule Changes',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: GlassColors.headingOf(context),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'No Schedule Changes',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: GlassColors.headingOf(context),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'There are no free-period changes for your batch.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: GlassColors.secondaryTextOf(context),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 2),
+                  Text(
+                    'There are no free-period changes for your batch.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: GlassColors.secondaryTextOf(context),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GlassCard(
+      key: const Key('home_schedule_changes'),
+      padding: const EdgeInsets.all(16),
+      margin: EdgeInsets.zero,
+      borderRadius: 16,
+      blurStrength: 8,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${_scheduleChanges.length} Schedule '
+            'Change${_scheduleChanges.length == 1 ? '' : 's'}',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: GlassColors.headingOf(context),
             ),
           ),
+          const SizedBox(height: 8),
+          for (final change in _scheduleChanges)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.event_available_rounded,
+                    size: 16,
+                    color: GlassColors.primaryBlue,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          change.time,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: GlassColors.headingOf(context),
+                          ),
+                        ),
+                        Text(
+                          change.hasSubject
+                              ? '${change.subject} — now free period'
+                              : 'Free period (${change.claimedByName})',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: GlassColors.secondaryTextOf(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
