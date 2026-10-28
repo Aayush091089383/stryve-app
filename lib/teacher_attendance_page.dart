@@ -150,6 +150,22 @@ class _PastSession {
   /// fields, not from this string).
   String get key => '$subject|$classDate|$period|$batch';
 
+  /// A copy with the tallies of an expanded session after a flip, so the list
+  /// header never disagrees with the student rows below it.
+  _PastSession copyWith({int? present, int? absent}) {
+    return _PastSession(
+      classDate: classDate,
+      period: period,
+      subject: subject,
+      division: division,
+      batch: batch,
+      total: (present ?? this.present) + (absent ?? this.absent),
+      present: present ?? this.present,
+      absent: absent ?? this.absent,
+      canDelete: canDelete,
+    );
+  }
+
   factory _PastSession.fromJson(Map<String, dynamic> json) {
     return _PastSession(
       classDate: (json['class_date'] as String?)?.trim() ?? '',
@@ -163,6 +179,87 @@ class _PastSession {
       canDelete: json['can_delete'] == true,
     );
   }
+}
+
+/// One student's row inside an expanded saved session.
+class _SessionStudent {
+  const _SessionStudent({
+    required this.recordId,
+    required this.rollNumber,
+    required this.name,
+    required this.status,
+    this.updatedAt,
+  });
+
+  final int recordId;
+  final String rollNumber;
+  final String name;
+  final String status;
+  final String? updatedAt;
+
+  _SessionStudent withStatus(String value) => _SessionStudent(
+    recordId: recordId,
+    rollNumber: rollNumber,
+    name: name,
+    status: value,
+    updatedAt: updatedAt,
+  );
+
+  factory _SessionStudent.fromJson(Map<String, dynamic> json) {
+    return _SessionStudent(
+      recordId: (json['record_id'] as num?)?.toInt() ?? 0,
+      rollNumber: (json['roll_number'] as String?)?.trim() ?? '',
+      name: (json['name'] as String?)?.trim() ?? '',
+      status: json['status'] == 'absent' ? 'absent' : 'present',
+      updatedAt: json['updated_at'] as String?,
+    );
+  }
+}
+
+/// `GET /teacher/attendance/session`: the two lists and what this caller may do.
+///
+/// `canEdit` is the server's 24-hour correction window (or an admin); the screen
+/// never computes it, because the window is judged away from this device.
+class _SessionDetail {
+  _SessionDetail({
+    required this.canEdit,
+    required this.present,
+    required this.absent,
+  });
+
+  final bool canEdit;
+  final List<_SessionStudent> present;
+  final List<_SessionStudent> absent;
+
+  factory _SessionDetail.fromJson(Map<String, dynamic> json) {
+    final info = json['session'];
+    final session = info is Map<String, dynamic>
+        ? info
+        : const <String, dynamic>{};
+
+    List<_SessionStudent> parse(Object? value) => value is List
+        ? value
+              .whereType<Map<String, dynamic>>()
+              .map(_SessionStudent.fromJson)
+              .toList()
+        : <_SessionStudent>[];
+
+    return _SessionDetail(
+      canEdit: session['can_edit'] == true,
+      present: parse(json['present']),
+      absent: parse(json['absent']),
+    );
+  }
+}
+
+/// Numeric roll numbers first (1, 2, 10), then any non-numeric label.
+int _compareRolls(String a, String b) {
+  final left = int.tryParse(a);
+  final right = int.tryParse(b);
+  if (left != null && right != null) return left.compareTo(right);
+  if (left != null) return -1;
+  if (right != null) return 1;
+  return a.compareTo(b);
 }
 
 /// Swipe-based lecture attendance.
@@ -235,6 +332,16 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
   /// The session whose delete request is in flight, so only its own button
   /// shows a spinner and a repeated tap cannot send a second request.
   String? _deletingSessionKey;
+
+  /// Expanded sessions, the detail each one loaded, and the in-flight/error
+  /// state per session. A session is fetched only when it is first opened.
+  final Set<String> _expandedSessions = {};
+  final Map<String, _SessionDetail> _sessionDetails = {};
+  final Set<String> _loadingSessionDetails = {};
+  final Map<String, String> _sessionDetailErrors = {};
+
+  /// The record whose flip is in flight, so one tap cannot send two flips.
+  String? _flippingRecordId;
 
   @override
   void initState() {
@@ -630,9 +737,15 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
         final sessions = teacherJsonList(response.body)
             .map(_PastSession.fromJson)
             .toList();
+        final keys = sessions.map((session) => session.key).toSet();
         setState(() {
           _pastSessions = sessions;
           _historyError = null;
+          // Drop any expansion whose session is gone (deleted, or pushed out
+          // of the 50-session window) so it cannot show stale rows.
+          _expandedSessions.retainAll(keys);
+          _sessionDetails.removeWhere((key, _) => !keys.contains(key));
+          _sessionDetailErrors.removeWhere((key, _) => !keys.contains(key));
         });
         return;
       } else if (response.statusCode == 401) {
@@ -652,6 +765,192 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
         });
       }
     }
+  }
+
+  /// Opens or closes one saved session, fetching its students the first time.
+  void _toggleSession(_PastSession session) {
+    final expanding = !_expandedSessions.contains(session.key);
+    setState(() {
+      if (expanding) {
+        _expandedSessions.add(session.key);
+      } else {
+        _expandedSessions.remove(session.key);
+      }
+    });
+
+    if (expanding &&
+        !_sessionDetails.containsKey(session.key) &&
+        !_loadingSessionDetails.contains(session.key)) {
+      _loadSessionDetail(session);
+    }
+  }
+
+  /// Loads the present/absent lists of one saved session.
+  Future<void> _loadSessionDetail(_PastSession session) async {
+    if (_loadingSessionDetails.contains(session.key)) return;
+
+    setState(() {
+      _loadingSessionDetails.add(session.key);
+      _sessionDetailErrors.remove(session.key);
+    });
+
+    try {
+      final token = await _authService.getToken();
+      if (!mounted) return;
+      if (token == null) {
+        await _sessionLost();
+        return;
+      }
+
+      final uri = Uri.parse(
+        '${Environment.backendUrl}/teacher/attendance/session',
+      ).replace(
+        queryParameters: {
+          'class_date': session.classDate,
+          'period': session.period,
+          'subject': session.subject,
+          'division': session.division,
+          'batch': session.batch,
+        },
+      );
+
+      final response = await _client
+          .get(uri, headers: teacherHeaders(token))
+          .timeout(kTeacherRequestTimeout);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          final detail = _SessionDetail.fromJson(decoded);
+          detail.present.sort(
+            (a, b) => _compareRolls(a.rollNumber, b.rollNumber),
+          );
+          detail.absent.sort(
+            (a, b) => _compareRolls(a.rollNumber, b.rollNumber),
+          );
+          setState(() => _sessionDetails[session.key] = detail);
+        }
+      } else if (response.statusCode == 401) {
+        await _sessionLost();
+      } else {
+        setState(
+          () => _sessionDetailErrors[session.key] = teacherMessageFromBody(
+            response,
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(
+        () => _sessionDetailErrors[session.key] = kTeacherUnreachableMessage,
+      );
+    } finally {
+      if (mounted) setState(() => _loadingSessionDetails.remove(session.key));
+    }
+  }
+
+  /// Flips one student between present and absent, inside the server's window.
+  Future<void> _flipRecord(
+    _PastSession session,
+    _SessionStudent student,
+  ) async {
+    if (_flippingRecordId != null) return;
+
+    final detail = _sessionDetails[session.key];
+    if (detail == null || !detail.canEdit) return;
+
+    final next = student.status == 'present' ? 'absent' : 'present';
+
+    final token = await _authService.getToken();
+    if (!mounted) return;
+    if (token == null) {
+      await _sessionLost();
+      return;
+    }
+
+    setState(() => _flippingRecordId = '${student.recordId}');
+
+    try {
+      final response = await _client
+          .patch(
+            Uri.parse(
+              '${Environment.backendUrl}/teacher/attendance/record/'
+              '${student.recordId}',
+            ),
+            headers: teacherHeaders(token),
+            body: jsonEncode({'status': next}),
+          )
+          .timeout(kTeacherRequestTimeout);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        var updated = student.withStatus(next);
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map<String, dynamic>) {
+            updated = _SessionStudent.fromJson(decoded);
+          }
+        } catch (_) {
+          // Non-JSON success body: the requested status is what was applied.
+        }
+
+        setState(() {
+          detail.present.removeWhere((row) => row.recordId == student.recordId);
+          detail.absent.removeWhere((row) => row.recordId == student.recordId);
+          final target = next == 'present' ? detail.present : detail.absent;
+          target.add(updated);
+          detail.present.sort(
+            (a, b) => _compareRolls(a.rollNumber, b.rollNumber),
+          );
+          detail.absent.sort(
+            (a, b) => _compareRolls(a.rollNumber, b.rollNumber),
+          );
+          _replaceSessionCounts(
+            session,
+            present: detail.present.length,
+            absent: detail.absent.length,
+          );
+        });
+
+        _showSnackBar(
+          '${updated.name.isEmpty ? 'Roll ${updated.rollNumber}' : updated.name} '
+          'marked $next',
+          color: GlassColors.success,
+        );
+      } else if (response.statusCode == 401) {
+        await _sessionLost();
+      } else {
+        _showSnackBar(teacherMessageFromBody(response));
+        if (response.statusCode == 403) {
+          // The 24-hour window may have closed since the session was opened.
+          await _loadSessionDetail(session);
+        }
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _showSnackBar(kTeacherUnreachableMessage);
+    } finally {
+      if (mounted) setState(() => _flippingRecordId = null);
+    }
+  }
+
+  /// Keeps the list header's tallies in step with the expanded rows.
+  void _replaceSessionCounts(
+    _PastSession session, {
+    required int present,
+    required int absent,
+  }) {
+    final index = _pastSessions.indexWhere((item) => item.key == session.key);
+    if (index == -1) return;
+    final updated = List<_PastSession>.of(_pastSessions);
+    updated[index] = _pastSessions[index].copyWith(
+      present: present,
+      absent: absent,
+    );
+    _pastSessions = updated;
   }
 
   /// Soft-deletes one saved lecture after an explicit confirmation.
@@ -1164,61 +1463,235 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
 
   Widget _buildPastSessionCard(_PastSession session) {
     final isDeleting = _deletingSessionKey == session.key;
+    final isExpanded = _expandedSessions.contains(session.key);
     final group = session.batch.isEmpty ? 'Whole division' : session.batch;
 
     return GlassCard(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  session.subject,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: GlassColors.headingOf(context),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: Key('attendance_session_toggle_${session.key}'),
+              onTap: () => _toggleSession(session),
+              borderRadius: BorderRadius.circular(10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          session.subject,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: GlassColors.headingOf(context),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${formatSessionDate(session.classDate)} · '
+                          '${formatStoredPeriod12h(session.period)} · $group',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: GlassColors.secondaryTextOf(context),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${session.present} present · '
+                          '${session.absent} absent · ${session.total} total',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: GlassColors.disabledOf(context),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${formatSessionDate(session.classDate)} · '
-                  '${formatStoredPeriod12h(session.period)} · $group',
-                  style: TextStyle(
-                    fontSize: 12,
+                  if (session.canDelete)
+                    TextButton(
+                      key: Key('attendance_delete_${session.key}'),
+                      onPressed: isDeleting
+                          ? null
+                          : () => _deleteSession(session),
+                      style: TextButton.styleFrom(
+                        foregroundColor: GlassColors.error,
+                      ),
+                      child: isDeleting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Delete'),
+                    ),
+                  Icon(
+                    isExpanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    size: 20,
                     color: GlassColors.secondaryTextOf(context),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${session.present} present · ${session.absent} absent · '
-                  '${session.total} total',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: GlassColors.disabledOf(context),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-          if (session.canDelete)
-            TextButton(
-              key: Key('attendance_delete_${session.key}'),
-              onPressed: isDeleting ? null : () => _deleteSession(session),
-              style: TextButton.styleFrom(foregroundColor: GlassColors.error),
-              child: isDeleting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Delete'),
-            ),
+          if (isExpanded) ...[
+            const SizedBox(height: 8),
+            _buildSessionDetail(session),
+          ],
         ],
       ),
+    );
+  }
+
+  /// The present/absent lists of one expanded session.
+  Widget _buildSessionDetail(_PastSession session) {
+    final detail = _sessionDetails[session.key];
+    final error = _sessionDetailErrors[session.key];
+
+    if (detail == null) {
+      if (error != null) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              error,
+              style: const TextStyle(fontSize: 12, color: GlassColors.error),
+            ),
+            TextButton(
+              key: Key('attendance_session_retry_${session.key}'),
+              onPressed: () => _loadSessionDetail(session),
+              child: const Text('Retry'),
+            ),
+          ],
+        );
+      }
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 10),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2.2),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildAttendanceGroup(
+          session,
+          detail,
+          label: 'Present',
+          rows: detail.present,
+        ),
+        const SizedBox(height: 10),
+        _buildAttendanceGroup(
+          session,
+          detail,
+          label: 'Absent',
+          rows: detail.absent,
+        ),
+        if (!detail.canEdit) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Marks can be corrected for 24 hours after the lecture was saved. '
+            'An administrator can still change them.',
+            style: TextStyle(
+              fontSize: 11,
+              color: GlassColors.disabledOf(context),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildAttendanceGroup(
+    _PastSession session,
+    _SessionDetail detail, {
+    required String label,
+    required List<_SessionStudent> rows,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$label (${rows.length})',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: GlassColors.headingOf(context),
+          ),
+        ),
+        if (rows.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              label == 'Present'
+                  ? 'Nobody is marked present.'
+                  : 'Nobody is marked absent.',
+              style: TextStyle(
+                fontSize: 12,
+                color: GlassColors.secondaryTextOf(context),
+              ),
+            ),
+          )
+        else
+          for (final student in rows)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${student.rollNumber} · ${student.name}',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: GlassColors.headingOf(context),
+                      ),
+                    ),
+                  ),
+                  if (detail.canEdit)
+                    TextButton(
+                      key: Key('attendance_flip_${student.recordId}'),
+                      onPressed: _flippingRecordId == null
+                          ? () => _flipRecord(session, student)
+                          : null,
+                      style: TextButton.styleFrom(
+                        foregroundColor: student.status == 'present'
+                            ? GlassColors.error
+                            : GlassColors.success,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: _flippingRecordId == '${student.recordId}'
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(
+                              student.status == 'present'
+                                  ? 'Mark absent'
+                                  : 'Mark present',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                    ),
+                ],
+              ),
+            ),
+      ],
     );
   }
 

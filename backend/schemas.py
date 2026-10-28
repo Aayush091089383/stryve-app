@@ -575,6 +575,61 @@ class AttendanceDeleteResponse(BaseModel):
     batch: str
 
 
+class AttendanceSessionInfoOut(BaseModel):
+    """One saved lecture as the expandable detail view sees it.
+
+    ``can_edit`` and ``can_delete`` are decided by the server: the correction
+    window runs from the session's own marks and the delete window from the
+    printed lecture, and only the server holds the college clock.
+    """
+
+    class_date: str
+    period: str
+    subject: str
+    division: str
+    batch: str
+    marked_at: Optional[str] = None
+    can_edit: bool = False
+    can_delete: bool = False
+
+
+class AttendanceRecordOut(BaseModel):
+    """One student's row inside a session, with its audit stamps.
+
+    ``marked_at`` is when the lecture was first saved; ``updated_at`` moves on
+    every later correction, so a client can show both without a second call.
+    """
+
+    record_id: int
+    roll_number: str
+    name: str
+    status: str
+    marked_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class AttendanceSessionDetailOut(BaseModel):
+    """A saved session split into its two lists, ready to render."""
+
+    session: AttendanceSessionInfoOut
+    present: list[AttendanceRecordOut]
+    absent: list[AttendanceRecordOut]
+
+
+class AttendanceRecordUpdate(BaseModel):
+    """Flip one student's mark. Nothing else about the row may be changed."""
+
+    status: str
+
+    @field_validator("status")
+    @classmethod
+    def known_status(cls, v: str) -> str:
+        cleaned = v.strip().lower()
+        if cleaned not in {"present", "absent"}:
+            raise ValueError("Status must be 'present' or 'absent'")
+        return cleaned
+
+
 class AttendanceHistorySessionOut(BaseModel):
     """One saved lecture (a date + period + subject), with its tallies.
 

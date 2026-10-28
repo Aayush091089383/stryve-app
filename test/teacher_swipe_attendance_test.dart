@@ -80,6 +80,42 @@ Map<String, dynamic> sessionJson({
   'can_delete': canDelete,
 };
 
+/// One student row inside an expanded saved session.
+Map<String, dynamic> sessionStudentJson({
+  required int recordId,
+  required String roll,
+  required String name,
+  required String status,
+}) => {
+  'record_id': recordId,
+  'roll_number': roll,
+  'name': name,
+  'status': status,
+  'marked_at': '2026-10-26T07:35:00',
+  'updated_at': null,
+};
+
+/// `GET /teacher/attendance/session`: the two lists and the edit permission.
+Map<String, dynamic> sessionDetailJson({
+  bool canEdit = true,
+  bool canDelete = false,
+  List<Map<String, dynamic>> present = const [],
+  List<Map<String, dynamic>> absent = const [],
+}) => {
+  'session': {
+    'class_date': '2026-10-26',
+    'period': '13:00-14:00',
+    'subject': 'M-1',
+    'division': 'D',
+    'batch': '',
+    'marked_at': '2026-10-26T07:35:00',
+    'can_edit': canEdit,
+    'can_delete': canDelete,
+  },
+  'present': present,
+  'absent': absent,
+};
+
 /// A mock backend for the whole flow. [saved] is what
 /// `GET /teacher/attendance` returns for the selected lecture.
 class AttendanceBackend {
@@ -88,6 +124,7 @@ class AttendanceBackend {
     this.roster,
     List<Map<String, dynamic>>? assignments,
     List<Map<String, dynamic>>? history,
+    this.sessionDetail,
   }) : assignments = assignments ?? [assignmentJson()],
        history = history ?? const [];
 
@@ -97,6 +134,9 @@ class AttendanceBackend {
 
   /// `GET /teacher/attendance/history`; empty means no saved sessions yet.
   List<Map<String, dynamic>> history;
+
+  /// `GET /teacher/attendance/session`; null answers 404 like the real server.
+  Map<String, dynamic>? sessionDetail;
   int submitStatus = 200;
   Map<String, dynamic>? submitError;
   final List<http.Request> requests = [];
@@ -120,6 +160,28 @@ class AttendanceBackend {
     }
     if (request.url.path == '/teacher/attendance/history') {
       return jsonResponse(history);
+    }
+    if (request.url.path == '/teacher/attendance/session' &&
+        request.method == 'GET') {
+      if (sessionDetail == null) {
+        return jsonResponse({
+          'detail': 'No attendance session found for that lecture.',
+        }, 404);
+      }
+      return jsonResponse(sessionDetail!);
+    }
+    if (request.url.path.startsWith('/teacher/attendance/record/') &&
+        request.method == 'PATCH') {
+      final id = int.tryParse(request.url.pathSegments.last) ?? 0;
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      return jsonResponse({
+        'record_id': id,
+        'roll_number': '1',
+        'name': 'SHUBHAM SURESH AHIRE',
+        'status': body['status'],
+        'marked_at': '2026-10-26T07:35:00',
+        'updated_at': '2026-10-26T09:00:00',
+      });
     }
     if (request.url.path == '/teacher/attendance/session' &&
         request.method == 'DELETE') {
@@ -586,5 +648,73 @@ void main() {
     expect(body['subject'], 'M-1');
     expect(body['division'], 'D');
     expect(body['batch'], '');
+  });
+
+  testWidgets('expanding a session lists students and flips one mark', (
+    tester,
+  ) async {
+    final backend = AttendanceBackend(
+      history: [sessionJson(subject: 'M-1', date: '2026-10-26')],
+      sessionDetail: sessionDetailJson(
+        present: [
+          sessionStudentJson(
+            recordId: 7,
+            roll: '1',
+            name: 'SHUBHAM SURESH AHIRE',
+            status: 'present',
+          ),
+        ],
+        absent: [
+          sessionStudentJson(
+            recordId: 8,
+            roll: '2',
+            name: 'SIMNA AHAD AKIL',
+            status: 'absent',
+          ),
+        ],
+      ),
+    );
+    await pumpAttendance(tester, backend);
+
+    // Collapsed by default: no student rows are fetched or shown.
+    expect(find.text('Present (1)'), findsNothing);
+    expect(
+      backend.requests.where(
+        (r) => r.url.path == '/teacher/attendance/session',
+      ),
+      isEmpty,
+    );
+
+    final toggle = find.byKey(
+      const Key('attendance_session_toggle_M-1|2026-10-26|13:00-14:00|'),
+    );
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Present (1)'), findsOneWidget);
+    expect(find.text('Absent (1)'), findsOneWidget);
+    expect(find.text('1 · SHUBHAM SURESH AHIRE'), findsOneWidget);
+    expect(find.text('2 · SIMNA AHAD AKIL'), findsOneWidget);
+
+    // Flipping sends exactly one PATCH for that record, with the new status.
+    final flip = find.byKey(const Key('attendance_flip_7'));
+    await tester.ensureVisible(flip);
+    await tester.pumpAndSettle();
+    await tester.tap(flip);
+    await tester.pumpAndSettle();
+
+    final patches = backend.requests
+        .where((r) => r.method == 'PATCH')
+        .toList();
+    expect(patches, hasLength(1));
+    expect(patches.single.url.path, '/teacher/attendance/record/7');
+    expect(jsonDecode(patches.single.body)['status'], 'absent');
+
+    // The student moves list, and the header tally follows.
+    expect(find.text('Present (0)'), findsOneWidget);
+    expect(find.text('Absent (2)'), findsOneWidget);
+    expect(find.text('Nobody is marked present.'), findsOneWidget);
   });
 }

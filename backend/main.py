@@ -83,8 +83,12 @@ from schemas import (
     AttendanceHistorySessionOut,
     AttendanceDeleteRequest,
     AttendanceDeleteResponse,
+    AttendanceRecordOut,
+    AttendanceRecordUpdate,
     AttendanceSaveRequest,
     AttendanceSaveResponse,
+    AttendanceSessionDetailOut,
+    AttendanceSessionInfoOut,
     AttendanceSessionOut,
     AttendanceStudentOut,
     AttendanceSubmitRequest,
@@ -1536,6 +1540,30 @@ def _require_attendance_window(
     )
 
 
+# ==================================================================
+# Correcting a saved lecture is a DIFFERENT window from taking it. A teacher who
+# spots a wrong mark may flip it for ATTENDANCE_EDIT_WINDOW after the session was
+# marked - long enough to notice, short enough that a term's history is not
+# rewritten weeks later. The delete window stays tied to the printed lecture
+# (see _attendance_window_open), because deleting a whole session is a bigger
+# act than correcting one student. Admin accounts are exempt from both.
+# ==================================================================
+ATTENDANCE_EDIT_WINDOW = timedelta(hours=24)
+
+
+def _within_edit_window(rows: list[models.AttendanceRecord]) -> bool:
+    """Is this session still inside its 24-hour correction window?
+
+    Judged from the session's earliest mark, so re-saving a lecture does not
+    extend its editable life: once the oldest row is a day old the whole
+    session is closed.
+    """
+    marks = [row.marked_at for row in rows if row.marked_at is not None]
+    if not marks:
+        return False
+    return datetime.utcnow() - min(marks) < ATTENDANCE_EDIT_WINDOW
+
+
 # Official timetable helpers (Division D, First Term, Revision 4)
 # ============================================================
 def _normalise_batch(value) -> str:
@@ -2027,6 +2055,39 @@ def list_class_students(
     return query.order_by(models.Student.roll_number).all()
 
 
+def _attendance_row_identity(
+    db: Session,
+    row: models.AttendanceRecord,
+    *,
+    division: str,
+    batch: str = "",
+) -> tuple[str, str, str]:
+    """(roll number, name, normalised batch) for one stored attendance row.
+
+    A row is linked to an account once the student registers; until then the
+    class roster (and the official registry behind it) supplies the name. Shared
+    by the correction sheet and the session detail view, so both read the same
+    person the same way.
+    """
+    student = row.student
+    if student is not None:
+        return (
+            (student.roll_number or "").strip(),
+            student.name,
+            _normalise_batch(student.batch),
+        )
+
+    # Marked from the class roster: this student has not registered yet.
+    roster = _roster_entry(
+        db, division=division, roll_number=row.roll_number, batch=batch
+    )
+    return (
+        (row.roll_number or "").strip(),
+        roster.name if roster else f"Roll {(row.roll_number or '').strip()}",
+        _normalise_batch(roster.batch if roster else row.batch),
+    )
+
+
 @app.get("/teacher/attendance", response_model=list[AttendanceSessionOut])
 def get_attendance(
     subject: str,
@@ -2067,20 +2128,10 @@ def get_attendance(
     batch_filter = _normalise_batch(batch)
     out = []
     for row in rows:
+        roll, name, row_batch = _attendance_row_identity(
+            db, row, division=division, batch=batch
+        )
         student = row.student
-        if student is not None:
-            row_batch = _normalise_batch(student.batch)
-            roll = (student.roll_number or "").strip()
-            name = student.name
-        else:
-            # Marked from the class roster: this student has not registered yet.
-            roster = _roster_entry(
-                db, division=division, roll_number=row.roll_number, batch=batch
-            )
-            row_batch = _normalise_batch(roster.batch if roster else row.batch)
-            roll = (row.roll_number or "").strip()
-            name = roster.name if roster else f"Roll {roll}"
-
         if batch_filter and row_batch and row_batch != batch_filter:
             continue
         out.append(
@@ -2670,6 +2721,37 @@ def attendance_history(
     ]
 
 
+def _session_rows(
+    db: Session,
+    *,
+    subject: str,
+    division: str,
+    batch: str,
+    class_date: str,
+    slot_start: str,
+    slot_end: str,
+) -> list[models.AttendanceRecord]:
+    """The live rows of one saved session, identified exactly as it was written.
+
+    One definition shared by the delete endpoint and the detail view, so the
+    session a teacher expands is always the session the server would delete.
+    Soft-deleted rows are never part of it.
+    """
+    return (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.subject == subject,
+            models.AttendanceRecord.division == division,
+            models.AttendanceRecord.batch == batch,
+            models.AttendanceRecord.session_date == class_date,
+            models.AttendanceRecord.slot_start == slot_start,
+            models.AttendanceRecord.slot_end == slot_end,
+            models.AttendanceRecord.deleted_at.is_(None),
+        )
+        .all()
+    )
+
+
 @app.delete(
     "/teacher/attendance/session",
     response_model=AttendanceDeleteResponse,
@@ -2714,18 +2796,14 @@ def delete_attendance_session(
     division = payload.division
     batch = _normalise_batch(payload.batch)
 
-    rows = (
-        db.query(models.AttendanceRecord)
-        .filter(
-            models.AttendanceRecord.subject == subject,
-            models.AttendanceRecord.division == division,
-            models.AttendanceRecord.batch == batch,
-            models.AttendanceRecord.session_date == session_date,
-            models.AttendanceRecord.slot_start == slot_start,
-            models.AttendanceRecord.slot_end == slot_end,
-            models.AttendanceRecord.deleted_at.is_(None),
-        )
-        .all()
+    rows = _session_rows(
+        db,
+        subject=subject,
+        division=division,
+        batch=batch,
+        class_date=session_date,
+        slot_start=slot_start,
+        slot_end=slot_end,
     )
 
     if not rows:
@@ -2766,6 +2844,205 @@ def delete_attendance_session(
         subject=subject,
         division=division,
         batch=batch,
+    )
+
+
+@app.get(
+    "/teacher/attendance/session",
+    response_model=AttendanceSessionDetailOut,
+)
+def get_attendance_session(
+    class_date: str,
+    period: str,
+    subject: str,
+    division: str = "D",
+    batch: str = "",
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """One saved lecture, split into its present and absent lists.
+
+    This is what the expandable Past sessions card reads. A teacher may open a
+    session they took part in - the same rule that puts it in their history - and
+    an administrator may open any. The two flags say what *this* caller may do,
+    judged on the server: ``can_edit`` from the session's 24-hour correction
+    window, ``can_delete`` from the printed lecture's own window. They are
+    separate on purpose: correcting one mark is not deleting a lecture.
+    """
+    subject = (subject or "").strip()
+    if not subject:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Subject is required"
+        )
+
+    slot_pair = _period_pair(period)
+    if slot_pair is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "That period is not part of the official timetable "
+                f"({period})"
+            ),
+        )
+    slot_start, slot_end = slot_pair
+
+    session_date = (class_date or "").strip()
+    _parse_date(session_date)
+    batch = _normalise_batch(batch)
+
+    rows = _session_rows(
+        db,
+        subject=subject,
+        division=division,
+        batch=batch,
+        class_date=session_date,
+        slot_start=slot_start,
+        slot_end=slot_end,
+    )
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No attendance session found for that lecture.",
+        )
+
+    marked_by_me = any(row.marked_by == teacher.id for row in rows)
+    if teacher.role != "admin" and not (
+        marked_by_me or any(row.updated_by == teacher.id for row in rows)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only open a session you took part in.",
+        )
+
+    records: list[tuple[models.AttendanceRecord, AttendanceRecordOut]] = []
+    for row in rows:
+        roll, name, _ = _attendance_row_identity(
+            db, row, division=division, batch=batch
+        )
+        records.append(
+            (
+                row,
+                AttendanceRecordOut(
+                    record_id=row.id,
+                    roll_number=roll,
+                    name=name,
+                    status=row.status,
+                    marked_at=(
+                        row.marked_at.isoformat() if row.marked_at is not None else None
+                    ),
+                    updated_at=(
+                        row.updated_at.isoformat()
+                        if row.updated_at is not None
+                        else None
+                    ),
+                ),
+            )
+        )
+
+    # Roll order, so the two lists read like the class sheet.
+    records.sort(key=lambda item: _roll_sort_key(item[1].roll_number))
+    marks = [row.marked_at for row in rows if row.marked_at is not None]
+
+    return AttendanceSessionDetailOut(
+        session=AttendanceSessionInfoOut(
+            class_date=session_date,
+            period=f"{slot_start}-{slot_end}",
+            subject=subject,
+            division=division,
+            batch=batch,
+            marked_at=min(marks).isoformat() if marks else None,
+            can_edit=(
+                True
+                if teacher.role == "admin"
+                else marked_by_me and _within_edit_window(rows)
+            ),
+            can_delete=(
+                True
+                if teacher.role == "admin"
+                else marked_by_me
+                and _attendance_window_open(session_date, slot_start, slot_end)
+            ),
+        ),
+        present=[record for _, record in records if record.status == "present"],
+        absent=[record for _, record in records if record.status == "absent"],
+    )
+
+
+@app.patch(
+    "/teacher/attendance/record/{record_id}",
+    response_model=AttendanceRecordOut,
+)
+def update_attendance_record(
+    record_id: int,
+    payload: AttendanceRecordUpdate,
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Flip one student's mark inside a saved session.
+
+    This corrects a single row, not the lecture, so it does NOT use the
+    timetable lock: it can only ever happen after the lecture anyway. It is
+    limited by ATTENDANCE_EDIT_WINDOW (24 hours from the session's marks) and to
+    a teacher who marked that session; an administrator may always correct one.
+
+    ``updated_at``/``updated_by`` move on every flip, while ``marked_by`` and
+    ``marked_at`` keep saying who took the lecture and when.
+    """
+    row = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.id == record_id,
+            models.AttendanceRecord.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attendance record not found.",
+        )
+
+    session_rows = _session_rows(
+        db,
+        subject=row.subject,
+        division=row.division,
+        batch=row.batch,
+        class_date=row.session_date,
+        slot_start=row.slot_start,
+        slot_end=row.slot_end,
+    )
+
+    if teacher.role != "admin":
+        if not any(other.marked_by == teacher.id for other in session_rows):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only edit a session you marked.",
+            )
+        if not _within_edit_window(session_rows):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "You can only edit attendance within 24 hours of "
+                    "submission. An administrator can still correct it."
+                ),
+            )
+
+    if row.status != payload.status:
+        row.status = payload.status
+        row.updated_at = datetime.utcnow()
+        row.updated_by = teacher.id
+        db.commit()
+
+    roll, name, _ = _attendance_row_identity(
+        db, row, division=row.division, batch=row.batch
+    )
+    return AttendanceRecordOut(
+        record_id=row.id,
+        roll_number=roll,
+        name=name,
+        status=row.status,
+        marked_at=row.marked_at.isoformat() if row.marked_at is not None else None,
+        updated_at=row.updated_at.isoformat() if row.updated_at is not None else None,
     )
 
 

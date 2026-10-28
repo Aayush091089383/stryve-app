@@ -4064,6 +4064,285 @@ check(
     ).status_code == 200,
 )
 
+# ==========================================================================
+section("3e. Expanding a session and flipping one mark")
+# ==========================================================================
+# Correcting a single student is a different act from deleting a lecture: it has
+# its own 24-hour window (from the session's marks), not the printed lecture's.
+# The suite pins both to prove they do not collapse into one another.
+flip_monday = MONDAY + timedelta(days=21)
+flip_monday_str = flip_monday.strftime("%Y-%m-%d")
+flip_target = {
+    "class_date": flip_monday_str,
+    "period": "13:00-14:00",
+    "subject": "M-1",
+    "division": "D",
+    "batch": "",
+}
+flip_second = delete_db.execute(
+    "SELECT id, roll_number FROM students "
+    "WHERE division='D' AND batch='D-1' AND status='approved' AND roll_number != '1' "
+    "ORDER BY CAST(roll_number AS INTEGER) LIMIT 1"
+).fetchone()
+# A writable handle for the deliberate clock backdate below.
+edit_db = sqlite3.connect(DB_FILE)
+
+freeze_attendance_clock(13, 5, day=flip_monday)
+check(
+    "a two-student session saves for the flip tests",
+    requests.post(
+        f"{BASE}/teacher/attendance/submit",
+        json={
+            "class_date": flip_monday_str,
+            "period": "13:00-14:00",
+            "subject": "M-1",
+            "division": "D",
+            "batch": "",
+            "records": [
+                {"student_id": delete_student_id, "status": "present"},
+                {"student_id": flip_second[0], "status": "absent"},
+            ],
+        },
+        headers=auth(smg_token),
+        timeout=10,
+    ).status_code == 200,
+)
+
+
+def session_detail(token):
+    return requests.get(
+        f"{BASE}/teacher/attendance/session",
+        params=flip_target,
+        headers=auth(token),
+        timeout=10,
+    )
+
+
+detail = session_detail(smg_token)
+check("the session detail answers", detail.status_code == 200, detail.text[:200])
+detail_body = detail.json()
+check(
+    "the detail carries the session identity",
+    detail_body["session"]["class_date"] == flip_monday_str
+    and detail_body["session"]["period"] == "13:00-14:00"
+    and detail_body["session"]["subject"] == "M-1",
+    str(detail_body["session"]),
+)
+check(
+    "the detail splits present from absent",
+    len(detail_body["present"]) == 1 and len(detail_body["absent"]) == 1,
+    f"present={len(detail_body['present'])} absent={len(detail_body['absent'])}",
+)
+check(
+    "every row carries its record id and audit stamps",
+    all(
+        row.get("record_id") and row.get("marked_at") is not None
+        for row in detail_body["present"] + detail_body["absent"]
+    ),
+    str(detail_body["present"] + detail_body["absent"]),
+)
+check(
+    "each list is ordered by roll number",
+    all(
+        [row["roll_number"] for row in rows]
+        == sorted(
+            [row["roll_number"] for row in rows],
+            key=lambda roll: (0, int(roll)) if roll.isdigit() else (1, roll),
+        )
+        for rows in (detail_body["present"], detail_body["absent"])
+    ),
+    str(detail_body["present"] + detail_body["absent"]),
+)
+check(
+    "a teacher who marked the session may edit it inside 24h",
+    detail_body["session"]["can_edit"] is True,
+    str(detail_body["session"]),
+)
+check(
+    "and may still delete it while the lecture window is open",
+    detail_body["session"]["can_delete"] is True,
+    str(detail_body["session"]),
+)
+check(
+    "a teacher who took no part cannot open the session -> 403",
+    session_detail(spk_token).status_code == 403,
+)
+check(
+    "a student token cannot open the session -> 403",
+    session_detail(TOKENS["1"]).status_code == 403,
+)
+check(
+    "an unknown session -> 404",
+    requests.get(
+        f"{BASE}/teacher/attendance/session",
+        params={**flip_target, "period": "14:00-15:00"},
+        headers=auth(smg_token),
+        timeout=10,
+    ).status_code == 404,
+)
+
+roll_one_record = next(
+    row for row in detail_body["present"] if row["roll_number"] == "1"
+)
+roll_two_record = detail_body["absent"][0]
+original_marked_at = roll_one_record["marked_at"]
+
+flipped = requests.patch(
+    f"{BASE}/teacher/attendance/record/{roll_one_record['record_id']}",
+    json={"status": "absent"},
+    headers=auth(smg_token),
+    timeout=10,
+)
+check("a teacher can flip a mark inside 24h", flipped.status_code == 200, flipped.text[:200])
+check("the response carries the new status", flipped.json().get("status") == "absent", str(flipped.json()))
+check(
+    "the flip records who corrected it, and when",
+    flipped.json().get("updated_at") is not None,
+    str(flipped.json()),
+)
+flip_audit = edit_db.execute(
+    "SELECT status, marked_by, marked_at, updated_by, updated_at "
+    "FROM attendance_records WHERE id=?",
+    (roll_one_record["record_id"],),
+).fetchone()
+check(
+    "the first-save audit trail survives a flip",
+    flip_audit[0] == "absent"
+    and flip_audit[1] == smg_id
+    and flip_audit[2] is not None
+    and flip_audit[3] == smg_id
+    and flip_audit[4] is not None,
+    str(flip_audit),
+)
+
+moved = session_detail(smg_token).json()
+check(
+    "the flipped student moved from present to absent",
+    [row["roll_number"] for row in moved["present"]] == []
+    and sorted(row["roll_number"] for row in moved["absent"]) == sorted(["1", flip_second[1]]),
+    str(moved),
+)
+check(
+    "an invalid status is refused -> 422",
+    requests.patch(
+        f"{BASE}/teacher/attendance/record/{roll_one_record['record_id']}",
+        json={"status": "maybe"},
+        headers=auth(smg_token),
+        timeout=10,
+    ).status_code == 422,
+)
+check(
+    "a record that does not exist -> 404",
+    requests.patch(
+        f"{BASE}/teacher/attendance/record/999999",
+        json={"status": "present"},
+        headers=auth(smg_token),
+        timeout=10,
+    ).status_code == 404,
+)
+check(
+    "a teacher who did not mark the session cannot flip a mark -> 403",
+    requests.patch(
+        f"{BASE}/teacher/attendance/record/{roll_two_record['record_id']}",
+        json={"status": "present"},
+        headers=auth(spk_token),
+        timeout=10,
+    ).status_code == 403,
+)
+check(
+    "a student token cannot flip a mark -> 403",
+    requests.patch(
+        f"{BASE}/teacher/attendance/record/{roll_two_record['record_id']}",
+        json={"status": "present"},
+        headers=auth(TOKENS["1"]),
+        timeout=10,
+    ).status_code == 403,
+)
+
+# The two windows are separate: once the lecture is over the session can no
+# longer be deleted, but a mark is still correctable for the rest of the day.
+freeze_attendance_clock(18, 0, day=flip_monday)
+evening = session_detail(smg_token).json()
+check(
+    "after the lecture, delete is closed but edit is still open",
+    evening["session"]["can_delete"] is False and evening["session"]["can_edit"] is True,
+    str(evening["session"]),
+)
+check(
+    "and a flip still succeeds in that gap",
+    requests.patch(
+        f"{BASE}/teacher/attendance/record/{roll_one_record['record_id']}",
+        json={"status": "present"},
+        headers=auth(smg_token),
+        timeout=10,
+    ).status_code == 200,
+)
+
+# Backdate the session's marks by 25 hours: the correction window is over, for
+# every row, no matter how recently one of them was touched.
+edit_db.execute(
+    "UPDATE attendance_records SET marked_at=? "
+    "WHERE subject='M-1' AND session_date=? AND slot_start='13:00'",
+    (
+        (datetime.utcnow() - timedelta(hours=25)).strftime("%Y-%m-%d %H:%M:%S.%f"),
+        flip_monday_str,
+    ),
+)
+edit_db.commit()
+closed = session_detail(smg_token).json()
+check(
+    "after 24 hours the teacher can no longer edit",
+    closed["session"]["can_edit"] is False,
+    str(closed["session"]),
+)
+late_flip = requests.patch(
+    f"{BASE}/teacher/attendance/record/{roll_one_record['record_id']}",
+    json={"status": "absent"},
+    headers=auth(smg_token),
+    timeout=10,
+)
+check(
+    "and a flip is refused with the 24-hour reason -> 403",
+    late_flip.status_code == 403 and "24 hours" in late_flip.text,
+    late_flip.text[:200],
+)
+admin_view = session_detail(admin_token).json()
+check(
+    "an admin can still edit the old session",
+    admin_view["session"]["can_edit"] is True,
+    str(admin_view["session"]),
+)
+check(
+    "and an admin flip succeeds after the window",
+    requests.patch(
+        f"{BASE}/teacher/attendance/record/{roll_one_record['record_id']}",
+        json={"status": "absent"},
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code == 200,
+)
+
+check(
+    "the admin can still delete this old session",
+    requests.request(
+        "DELETE",
+        f"{BASE}/teacher/attendance/session",
+        json=flip_target,
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code == 200,
+)
+check(
+    "a row of a deleted session cannot be flipped -> 404",
+    requests.patch(
+        f"{BASE}/teacher/attendance/record/{roll_one_record['record_id']}",
+        json={"status": "present"},
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code == 404,
+)
+
+edit_db.close()
 delete_db.close()
 
 real_stamp_end = (
