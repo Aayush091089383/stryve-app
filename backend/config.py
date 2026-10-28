@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     # disables the limit.
     TEACHER_LOGIN_RATE_LIMIT_PER_MINUTE: int = 5
 
+    # Student sign-in: the same failing-attempt brake. POST /login accepts a
+    # password from anyone, so an unthrottled route lets a caller guess
+    # endlessly against one account. Only failures are counted and a success
+    # clears the counter. 0 disables the limit.
+    STUDENT_LOGIN_RATE_LIMIT_PER_MINUTE: int = 5
+
     # Token Settings
     TOKEN_EXPIRATION_DAYS: int = 7
 

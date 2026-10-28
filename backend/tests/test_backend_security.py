@@ -457,6 +457,159 @@ check(
 )
 
 # ==========================================================================
+# 3b. Student login brute-force brake
+# ==========================================================================
+section("3b. Student login brute-force brake")
+
+# The brake counts FAILED attempts only, per client, and a success clears the
+# counter - the same behaviour the teacher portal has always had. Reset first
+# so earlier sections cannot have spent the allowance.
+main.student_login_limiter.reset()
+login_limit = main.settings.STUDENT_LOGIN_RATE_LIMIT_PER_MINUTE
+
+if login_limit <= 0:
+    check("student login brake is disabled by configuration", True, "limit=0")
+else:
+    guesses = [
+        requests.post(
+            f"{BASE}/login",
+            headers=hdr(),
+            json={
+                "email": "seed.student1@example.com",
+                "password": f"Wrong{i}@2026",
+            },
+            timeout=10,
+        )
+        for i in range(login_limit)
+    ]
+    check(
+        "wrong passwords are 401 while the allowance lasts",
+        all(response.status_code == 401 for response in guesses),
+        str([response.status_code for response in guesses]),
+    )
+
+    throttled = requests.post(
+        f"{BASE}/login",
+        headers=hdr(),
+        json={"email": "seed.student1@example.com", "password": "WrongAgain@2026"},
+        timeout=10,
+    )
+    check(
+        "the attempt after the allowance -> 429",
+        throttled.status_code == 429,
+        f"got {throttled.status_code}",
+    )
+    check(
+        "429 carries a Retry-After of at least one second",
+        (throttled.headers.get("Retry-After") or "0").isdigit()
+        and int(throttled.headers.get("Retry-After") or 0) >= 1,
+        str(throttled.headers.get("Retry-After")),
+    )
+    check(
+        "429 body uses 'detail' (clients read that first)",
+        isinstance(throttled.json().get("detail"), str)
+        and "message" not in throttled.json(),
+        str(throttled.json())[:120],
+    )
+
+    # A blocked client must not be able to guess whether an account exists: the
+    # 429 is returned before the email is looked up.
+    unknown_while_blocked = requests.post(
+        f"{BASE}/login",
+        headers=hdr(),
+        json={"email": "nobody@example.com", "password": "WrongAgain@2026"},
+        timeout=10,
+    )
+    check(
+        "a blocked client is throttled even for an unknown email",
+        unknown_while_blocked.status_code == 429,
+        f"got {unknown_while_blocked.status_code}",
+    )
+
+    # A success must clear the counter. Spend all but one of the allowance,
+    # sign in correctly, then spend a full allowance again: those later attempts
+    # are all 401 only if the successful sign-in reset the window.
+    main.student_login_limiter.reset()
+    for i in range(max(0, login_limit - 1)):
+        requests.post(
+            f"{BASE}/login",
+            headers=hdr(),
+            json={
+                "email": "seed.student1@example.com",
+                "password": f"Before{i}@2026",
+            },
+            timeout=10,
+        )
+
+    signed_in = student_login("seed.student1@example.com")
+    check(
+        "a correct password signs in on the last allowed slot",
+        signed_in.status_code == 200,
+        f"got {signed_in.status_code}",
+    )
+
+    after_reset = [
+        requests.post(
+            f"{BASE}/login",
+            headers=hdr(),
+            json={
+                "email": "seed.student1@example.com",
+                "password": f"After{i}@2026",
+            },
+            timeout=10,
+        ).status_code
+        for i in range(login_limit)
+    ]
+    check(
+        "the successful sign-in cleared the failed-attempt counter",
+        all(code == 401 for code in after_reset),
+        str(after_reset),
+    )
+    main.student_login_limiter.reset()
+
+recovered = student_login("seed.student1@example.com")
+check(
+    "a correct password still signs in once the window is clear",
+    recovered.status_code == 200,
+    f"got {recovered.status_code}",
+)
+# Signing in again rotates this account's single active token by design, so the
+# logout section below must use the token that is current now.
+student_token = recovered.json().get("token")
+
+# _client_key is the trust boundary for every limiter: the forwarded header is
+# only used when the request itself arrived from this machine.
+class _Peer:
+    """Minimal stand-in for a Starlette Request (only client/headers are read)."""
+
+    def __init__(self, host: str, headers=None):
+        self.client = type("Client", (), {"host": host})()
+        self.headers = headers or {}
+
+
+check(
+    "loopback peer: last forwarded hop becomes the key",
+    main._client_key(_Peer("127.0.0.1", {"x-forwarded-for": "1.2.3.4, 5.6.7.8"}))
+    == "5.6.7.8",
+)
+check(
+    "non-loopback peer: a supplied forwarded header is ignored",
+    main._client_key(_Peer("10.0.0.9", {"x-forwarded-for": "1.2.3.4"})) == "10.0.0.9",
+)
+check(
+    "loopback peer without the header keys on the peer",
+    main._client_key(_Peer("127.0.0.1")) == "127.0.0.1",
+)
+check(
+    "IPv6 loopback is local too",
+    main._client_key(_Peer("::1", {"x-forwarded-for": "9.9.9.9"})) == "9.9.9.9",
+)
+check(
+    "an empty forwarded header falls back to the peer",
+    main._client_key(_Peer("127.0.0.1", {"x-forwarded-for": " , "})) == "127.0.0.1",
+)
+
+# ==========================================================================
 # 4. Logout and expiry
 # ==========================================================================
 section("4. Logout and token expiry")

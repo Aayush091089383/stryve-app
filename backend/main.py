@@ -388,19 +388,45 @@ def register_student(student: StudentRegister, db: Session = Depends(get_db)):
 lookup_limiter = SlidingWindowLimiter(settings.LOOKUP_RATE_LIMIT_PER_MINUTE)
 
 
-def _client_ip(request: Request) -> str:
-    """Best-effort client identity for the in-process limiter.
+# A loopback peer is the local ngrok agent, or this machine. Only in that case
+# is a forwarded address meaningful; a request arriving from anywhere else must
+# not be able to choose its own rate-limit bucket by sending the header.
+LOOPBACK_CLIENT_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
-    Behind a reverse proxy every request may share one address; the limiter is
-    defence in depth, not the primary control (the masked response is).
-    """
+
+def _client_ip(request: Request) -> str:
+    """The direct peer address of this request, with no header trust."""
     client = request.client
     return client.host if client and client.host else "unknown"
 
 
+def _is_loopback_peer(host: str) -> bool:
+    """Whether the connection itself came from this machine."""
+    return (host or "").strip().lower() in LOOPBACK_CLIENT_HOSTS
+
+
+def _client_key(request: Request) -> str:
+    """Client identity for the in-process rate limiters.
+
+    The backend is normally reached through the ngrok tunnel, which terminates
+    the connection and forwards from 127.0.0.1 - so the peer address alone puts
+    every caller in one shared bucket. ``X-Forwarded-For`` is used instead, but
+    only the LAST hop (the value ngrok appended; anything the caller invented
+    sits earlier) and only when the peer is a loopback address. A request that
+    arrives from any other address is keyed on that peer, so it cannot pick a
+    fresh bucket by sending the header itself.
+    """
+    peer = _client_ip(request)
+    if not _is_loopback_peer(peer):
+        return peer
+    forwarded = request.headers.get("x-forwarded-for", "")
+    hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+    return hops[-1] if hops else peer
+
+
 def lookup_rate_limit(request: Request) -> None:
     """Dependency that rejects bulk lookups with 429 + Retry-After."""
-    allowed, retry_after = lookup_limiter.check(_client_ip(request))
+    allowed, retry_after = lookup_limiter.check(_client_key(request))
     if not allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -471,12 +497,42 @@ def get_my_timetable(
     return _student_timetable_entries(db, student)
 
 
+# The same brake for the student app: POST /login accepts a password from
+# anyone who can reach the API, so failures are counted per client exactly like
+# the portal. A successful sign-in clears the counter, so a student is never
+# locked out by their own correct password.
+student_login_limiter = SlidingWindowLimiter(
+    settings.STUDENT_LOGIN_RATE_LIMIT_PER_MINUTE
+)
+
+
+def student_login_rate_limit(request: Request) -> str:
+    """Reject further attempts once a client has failed too often; returns key."""
+    key = _client_key(request)
+    blocked, retry_after = student_login_limiter.blocked(key)
+    if blocked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Too many failed sign-in attempts. Wait a minute and try again."
+            ),
+            headers={"Retry-After": str(retry_after)},
+        )
+    return key
+
+
 @app.post("/login", response_model=TokenResponse)
-def login_student(student: StudentLogin, db: Session = Depends(get_db)):
+def login_student(
+    student: StudentLogin,
+    db: Session = Depends(get_db),
+    login_key: str = Depends(student_login_rate_limit),
+):
     """
     Authenticate a student and return a session token.
 
-    Returns 200 with token on success, 401 if credentials are invalid.
+    Returns 200 with token on success, 401 if credentials are invalid, and 429
+    once one client has failed too many times in a minute. Successful sign-ins
+    are never counted against the limit.
     """
     # Find student by email. The comparison is case-insensitive: existing rows
     # may hold any casing (e.g. a mixed-case address saved before this rule),
@@ -487,6 +543,7 @@ def login_student(student: StudentLogin, db: Session = Depends(get_db)):
 
     if not existing_student:
         from exceptions import AuthenticationError
+        student_login_limiter.check(login_key)
         raise AuthenticationError("Invalid email or password")
 
     # Verify password against stored hash
@@ -497,6 +554,7 @@ def login_student(student: StudentLogin, db: Session = Depends(get_db)):
 
     if not password_correct:
         from exceptions import AuthenticationError
+        student_login_limiter.check(login_key)
         raise AuthenticationError("Invalid email or password")
 
     # Check if student is approved
@@ -515,6 +573,10 @@ def login_student(student: StudentLogin, db: Session = Depends(get_db)):
     existing_student.token = new_token
     existing_student.token_expires_at = token_expiration
     db.commit()
+
+    # A correct password proves this is the account owner; earlier failures
+    # should not keep them out afterwards.
+    student_login_limiter.reset(login_key)
 
     # Return student information with token
     return TokenResponse(
@@ -548,32 +610,19 @@ def logout_student(
     return {"message": "Logged out"}
 
 
-# Brute-force brake for the one endpoint that accepts a password from the
-# public portal. Only FAILED attempts are recorded (see ratelimit.py), so a
-# teacher's own successful sign-ins never use up the allowance, and the key is
-# the forwarded client address when a proxy supplies one - behind the ngrok
-# tunnel every request arrives from the agent's 127.0.0.1, which would
-# otherwise put every teacher in one shared bucket.
+# Brute-force brake for the portal sign-in. Only FAILED attempts are recorded
+# (see ratelimit.py), so a teacher's own successful sign-ins never use up the
+# allowance. The key comes from _client_key: behind the ngrok tunnel every
+# request arrives from the agent's loopback address, and only in that case is
+# the forwarded header trusted.
 teacher_login_limiter = SlidingWindowLimiter(
     settings.TEACHER_LOGIN_RATE_LIMIT_PER_MINUTE
 )
 
 
-def _login_client_key(request: Request) -> str:
-    """Client address for the sign-in limiter.
-
-    ngrok appends the address it actually saw to ``X-Forwarded-For``; taking
-    the LAST hop uses that value and ignores anything the caller made up.
-    Without a proxy the direct peer address is used.
-    """
-    forwarded = request.headers.get("x-forwarded-for", "")
-    hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
-    return hops[-1] if hops else _client_ip(request)
-
-
 def teacher_login_rate_limit(request: Request) -> str:
     """Reject further attempts once a client has failed too often; returns key."""
-    key = _login_client_key(request)
+    key = _client_key(request)
     blocked, retry_after = teacher_login_limiter.blocked(key)
     if blocked:
         raise HTTPException(
