@@ -1358,6 +1358,41 @@
               </button>
             </section>
           </div>
+
+          <section class="card" style="margin-top: 18px;">
+            <div class="section-head">
+              <h2>Recent sessions</h2>
+              <button class="ghost small" id="refreshAttendanceHistoryBtn" type="button">Refresh</button>
+            </div>
+            <p class="hint">
+              Deleting a session removes it from every student's record and from the
+              teacher app. The rows are kept for audit only. A teacher can delete a
+              session they marked while its lecture window is still open; an
+              administrator can delete any session at any time.
+            </p>
+
+            <div id="attendanceHistoryMessage" class="message" role="status" aria-live="polite"></div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Date</th>
+                    <th scope="col">Period</th>
+                    <th scope="col">Subject</th>
+                    <th scope="col">Division</th>
+                    <th scope="col">Batch</th>
+                    <th scope="col">Present</th>
+                    <th scope="col">Absent</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="attendanceHistoryBody">
+                  <tr><td colspan="8" class="state">Open this tab to load past sessions.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
         </section>
 
         <!-- -------------------------------------------------------- roster -->
@@ -1736,6 +1771,9 @@
   var submitAttendanceBtn = document.getElementById("submitAttendanceBtn");
   var submitAttendanceSpinner = document.getElementById("submitAttendanceSpinner");
   var submitAttendanceLabel = document.getElementById("submitAttendanceLabel");
+  var attendanceHistoryBody = document.getElementById("attendanceHistoryBody");
+  var attendanceHistoryMessage = document.getElementById("attendanceHistoryMessage");
+  var refreshAttendanceHistoryBtn = document.getElementById("refreshAttendanceHistoryBtn");
   var markAllPresentBtn = document.getElementById("markAllPresentBtn");
   var markAllAbsentBtn = document.getElementById("markAllAbsentBtn");
 
@@ -3327,6 +3365,10 @@
   // null = not fetched yet; [] = fetched but the account has no assignments.
   var attendanceAssignments = null;
 
+  // Saved sessions shown in "Recent sessions".
+  var attendanceHistory = [];
+  var attendanceHistoryLoading = false;
+
   function todayIso() {
     var now = new Date();
     var month = String(now.getMonth() + 1).padStart(2, "0");
@@ -3353,6 +3395,23 @@
     return clock12h(pair[0]) + " - " + clock12h(pair[1]);
   }
 
+  var MONTHS_SHORT = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+  ];
+
+  // "2026-10-24" -> "24 Oct 2026". Unparseable values are shown unchanged.
+  function dateLabel(isoDate) {
+    var parts = String(isoDate || "").split("-");
+    if (parts.length !== 3) return isoDate || "—";
+    var year = parseInt(parts[0], 10);
+    var month = parseInt(parts[1], 10);
+    var day = parseInt(parts[2], 10);
+    if (isNaN(year) || isNaN(month) || isNaN(day)) return isoDate;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return isoDate;
+    return day + " " + MONTHS_SHORT[month - 1] + " " + year;
+  }
+
   function prepareAttendance() {
     if (!attDate.value) attDate.value = todayIso();
     if (attPeriod.options.length === 0) {
@@ -3364,6 +3423,7 @@
       });
     }
     if (attendanceAssignments === null) loadAttendanceSubjects();
+    loadAttendanceHistory();
   }
 
   // Subject choices come from the caller's VERIFIED assignments, because the
@@ -3628,6 +3688,8 @@
         "Attendance saved · " + present + " present, " + absent + " absent.",
         "success"
       );
+      // The just-saved lecture belongs in the history list.
+      loadAttendanceHistory();
     } catch (error) {
       showMessage(attendanceMessage, "Could not save attendance. Check your connection.", "error");
     } finally {
@@ -3642,6 +3704,190 @@
       resetAttendanceSheet("Lecture changed - load the class again.");
     }
   }
+
+  // ------------------------------------------------- recent sessions (delete)
+  // A session is one lecture: date + period + subject + class group. Deleting
+  // it soft-deletes every row, so the students stop seeing it while the audit
+  // trail stays in the database. The server decides `can_delete`, because only
+  // it can judge the lecture window on the college clock.
+  function resetAttendanceHistory(message) {
+    attendanceHistory = [];
+    attendanceHistoryBody.textContent = "";
+    var row = document.createElement("tr");
+    var cell = document.createElement("td");
+    cell.colSpan = 8;
+    cell.className = "state";
+    cell.textContent = message || "Open this tab to load past sessions.";
+    row.appendChild(cell);
+    attendanceHistoryBody.appendChild(row);
+  }
+
+  async function loadAttendanceHistory() {
+    if (attendanceHistoryLoading) return;
+    attendanceHistoryLoading = true;
+    refreshAttendanceHistoryBtn.disabled = true;
+    hideMessage(attendanceHistoryMessage);
+    if (attendanceHistory.length === 0) {
+      resetAttendanceHistory("Loading past sessions…");
+    }
+
+    try {
+      var result = await api("/teacher/attendance/history?limit=50");
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        if (attendanceHistory.length === 0) {
+          resetAttendanceHistory("Could not load past sessions.");
+        }
+        showMessage(
+          attendanceHistoryMessage,
+          errorText(result.body, "Could not load past sessions (" + result.response.status + ")."),
+          "error"
+        );
+        return;
+      }
+
+      attendanceHistory = Array.isArray(result.body) ? result.body : [];
+      renderAttendanceHistory();
+    } catch (error) {
+      if (attendanceHistory.length === 0) {
+        resetAttendanceHistory("Could not load past sessions.");
+      }
+      showMessage(
+        attendanceHistoryMessage,
+        "Could not load past sessions. Check your connection.",
+        "error"
+      );
+    } finally {
+      attendanceHistoryLoading = false;
+      refreshAttendanceHistoryBtn.disabled = false;
+    }
+  }
+
+  function renderAttendanceHistory() {
+    attendanceHistoryBody.textContent = "";
+
+    if (attendanceHistory.length === 0) {
+      resetAttendanceHistory("No saved sessions yet.");
+      return;
+    }
+
+    attendanceHistory.forEach(function (session) {
+      var tr = document.createElement("tr");
+
+      var date = document.createElement("td");
+      date.textContent = dateLabel(session.class_date);
+
+      var period = document.createElement("td");
+      period.textContent = period12h(session.period);
+
+      var subject = document.createElement("td");
+      subject.textContent = session.subject || "—";
+
+      var division = document.createElement("td");
+      division.textContent = session.division || "—";
+
+      var batch = document.createElement("td");
+      batch.textContent = session.batch || "Whole division";
+
+      var present = document.createElement("td");
+      present.textContent = String(session.present == null ? 0 : session.present);
+
+      var absent = document.createElement("td");
+      absent.textContent = String(session.absent == null ? 0 : session.absent);
+
+      var actions = document.createElement("td");
+      if (session.can_delete) {
+        var remove = document.createElement("button");
+        remove.className = "ghost small";
+        remove.type = "button";
+        remove.textContent = "Delete";
+        remove.setAttribute(
+          "aria-label",
+          "Delete " + (session.subject || "session") +
+            " attendance for " + (session.class_date || "")
+        );
+        remove.addEventListener("click", function () {
+          deleteAttendanceSession(session, remove);
+        });
+        actions.appendChild(remove);
+      } else {
+        // Not a permission this caller has, or its lecture window has closed.
+        actions.textContent = "—";
+      }
+
+      tr.appendChild(date);
+      tr.appendChild(period);
+      tr.appendChild(subject);
+      tr.appendChild(division);
+      tr.appendChild(batch);
+      tr.appendChild(present);
+      tr.appendChild(absent);
+      tr.appendChild(actions);
+      attendanceHistoryBody.appendChild(tr);
+    });
+  }
+
+  async function deleteAttendanceSession(session, button) {
+    var count = session.total == null ? 0 : session.total;
+    var confirmed = window.confirm(
+      "Delete this attendance session?\n\n" +
+        "This will delete " + count + " attendance record(s) for " +
+        (session.subject || "this lecture") + " on " + dateLabel(session.class_date) +
+        " (" + period12h(session.period) + ")" +
+        (session.batch ? " · " + session.batch : "") +
+        ". Students will no longer see these records. This cannot be undone, " +
+        "though the deletion is retained for administrators."
+    );
+    if (!confirmed) return;
+
+    button.disabled = true;
+    hideMessage(attendanceHistoryMessage);
+
+    try {
+      var result = await api("/teacher/attendance/session", {
+        method: "DELETE",
+        json: {
+          class_date: session.class_date,
+          period: session.period,
+          subject: session.subject,
+          division: session.division,
+          batch: session.batch || ""
+        }
+      });
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        showMessage(
+          attendanceHistoryMessage,
+          errorText(result.body, "Could not delete the session (" + result.response.status + ")."),
+          "error"
+        );
+        return;
+      }
+
+      var removed = (result.body && result.body.deleted_count) || count;
+      showMessage(
+        attendanceHistoryMessage,
+        "Session deleted · " + removed + " record(s) hidden from students and the teacher app.",
+        "success"
+      );
+      // Never leave a deleted session on screen as if it still counted.
+      await loadAttendanceHistory();
+    } catch (error) {
+      showMessage(
+        attendanceHistoryMessage,
+        "Could not delete the session. Check your connection.",
+        "error"
+      );
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  refreshAttendanceHistoryBtn.addEventListener("click", loadAttendanceHistory);
 
   loadAttendanceBtn.addEventListener("click", loadAttendanceRoster);
   submitAttendanceBtn.addEventListener("click", submitAttendance);

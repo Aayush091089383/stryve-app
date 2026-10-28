@@ -57,6 +57,29 @@ Map<String, dynamic> studentJson({
   'batch': batch,
 };
 
+/// One saved lecture as `GET /teacher/attendance/history` returns it.
+Map<String, dynamic> sessionJson({
+  String subject = 'M-1',
+  String date = '2026-10-26',
+  String period = '13:00-14:00',
+  String batch = '',
+  int total = 2,
+  int present = 1,
+  bool canDelete = true,
+}) => {
+  'class_date': date,
+  'period': period,
+  'subject': subject,
+  'division': 'D',
+  'batch': batch,
+  'total': total,
+  'present': present,
+  'absent': total - present,
+  // The backend decides this from the role and the college clock; the screen
+  // must render it and never compute it.
+  'can_delete': canDelete,
+};
+
 /// A mock backend for the whole flow. [saved] is what
 /// `GET /teacher/attendance` returns for the selected lecture.
 class AttendanceBackend {
@@ -64,11 +87,16 @@ class AttendanceBackend {
     this.saved = const [],
     this.roster,
     List<Map<String, dynamic>>? assignments,
-  }) : assignments = assignments ?? [assignmentJson()];
+    List<Map<String, dynamic>>? history,
+  }) : assignments = assignments ?? [assignmentJson()],
+       history = history ?? const [];
 
   List<Map<String, dynamic>> saved;
   List<Map<String, dynamic>>? roster;
   final List<Map<String, dynamic>> assignments;
+
+  /// `GET /teacher/attendance/history`; empty means no saved sessions yet.
+  List<Map<String, dynamic>> history;
   int submitStatus = 200;
   Map<String, dynamic>? submitError;
   final List<http.Request> requests = [];
@@ -89,6 +117,22 @@ class AttendanceBackend {
     }
     if (request.url.path == '/teacher/attendance' && request.method == 'GET') {
       return jsonResponse(saved);
+    }
+    if (request.url.path == '/teacher/attendance/history') {
+      return jsonResponse(history);
+    }
+    if (request.url.path == '/teacher/attendance/session' &&
+        request.method == 'DELETE') {
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      return jsonResponse({
+        'message': 'Attendance session deleted',
+        'deleted_count': 2,
+        'class_date': body['class_date'],
+        'period': body['period'],
+        'subject': body['subject'],
+        'division': body['division'],
+        'batch': body['batch'],
+      });
     }
     if (request.url.path == '/teacher/attendance/submit') {
       if (submitStatus != 200) {
@@ -496,5 +540,51 @@ void main() {
     expect(find.textContaining('not assigned to teach'), findsOneWidget);
     // The teacher stays on the review screen so the work is not lost.
     expect(find.text('CONFIRM & SUBMIT'), findsOneWidget);
+  });
+
+  testWidgets('Delete appears only on a session the server says is deletable', (
+    tester,
+  ) async {
+    final backend = AttendanceBackend(
+      history: [
+        sessionJson(subject: 'M-1', date: '2026-10-26', canDelete: true),
+        sessionJson(subject: 'PHY', date: '2026-10-25', canDelete: false),
+      ],
+    );
+    await pumpAttendance(tester, backend);
+
+    expect(find.text('Past sessions'), findsOneWidget);
+    // Two sessions are listed, but only the backend-approved one offers Delete.
+    expect(find.textContaining('25 Oct 2026'), findsOneWidget);
+    expect(find.textContaining('26 Oct 2026'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
+
+    // Deleting is never one tap: the confirmation names the removal first.
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete attendance session?'), findsOneWidget);
+    expect(find.textContaining('Students will no longer see'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(backend.requests.where((r) => r.method == 'DELETE'), isEmpty);
+
+    // Confirming sends the session exactly as it was listed.
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('attendance_delete_confirm')));
+    await tester.pumpAndSettle();
+
+    final deletes = backend.requests
+        .where((r) => r.method == 'DELETE')
+        .toList();
+    expect(deletes, hasLength(1));
+    expect(deletes.single.url.path, '/teacher/attendance/session');
+    final body = jsonDecode(deletes.single.body) as Map<String, dynamic>;
+    expect(body['class_date'], '2026-10-26');
+    expect(body['period'], '13:00-14:00');
+    expect(body['subject'], 'M-1');
+    expect(body['division'], 'D');
+    expect(body['batch'], '');
   });
 }

@@ -3800,6 +3800,272 @@ check(
 
 shutil.rmtree(unmigrated_dir, ignore_errors=True)
 
+# ==========================================================================
+section("3d. Soft-deleting an attendance session")
+# ==========================================================================
+# A session is one lecture (date + period + subject + class group). Deleting it
+# must hide it everywhere without destroying the audit trail, a teacher must be
+# able to undo their own mistake only while the lecture window is open, and an
+# admin must always be able to. Re-marking a deleted lecture must revive the
+# rows rather than trip the unique key.
+delete_monday = MONDAY + timedelta(days=7)
+delete_monday_str = delete_monday.strftime("%Y-%m-%d")
+# The suite's shared connection is closed by this point; this section needs its
+# own read-only handle on the throwaway database.
+delete_db = sqlite3.connect(f"file:{DB_FILE.as_posix()}?mode=ro", uri=True)
+delete_student_id = delete_db.execute(
+    "SELECT id FROM students WHERE roll_number='1'"
+).fetchone()[0]
+
+freeze_attendance_clock(13, 5, day=delete_monday)
+session_body = {
+    "class_date": delete_monday_str,
+    "period": "13:00-14:00",
+    "subject": "M-1",
+    "division": "D",
+    "batch": "",
+    "records": [{"student_id": delete_student_id, "status": "present"}],
+}
+delete_target = {
+    "class_date": delete_monday_str,
+    "period": "13:00-14:00",
+    "subject": "M-1",
+    "division": "D",
+    "batch": "",
+}
+marked = requests.post(
+    f"{BASE}/teacher/attendance/submit", json=session_body, headers=auth(smg_token), timeout=10
+)
+check("a teacher marks a session for the delete tests", marked.status_code == 200, marked.text[:200])
+
+in_window = requests.get(
+    f"{BASE}/teacher/attendance/history?subject=M-1", headers=auth(smg_token), timeout=10
+)
+mine = [
+    row for row in in_window.json()
+    if row["class_date"] == delete_monday_str and row["period"] == "13:00-14:00"
+]
+check(
+    "history marks the marker's own session as deletable",
+    bool(mine) and mine[0]["can_delete"] is True,
+    str(mine),
+)
+
+check(
+    "another teacher cannot delete a session they did not mark -> 403",
+    requests.request(
+        "DELETE",
+        f"{BASE}/teacher/attendance/session",
+        json=delete_target,
+        headers=auth(spk_token),
+        timeout=10,
+    ).status_code == 403,
+)
+check(
+    "a student token cannot delete attendance -> 403",
+    requests.request(
+        "DELETE",
+        f"{BASE}/teacher/attendance/session",
+        json=delete_target,
+        headers=auth(TOKENS["1"]),
+        timeout=10,
+    ).status_code == 403,
+)
+check(
+    "an unknown session -> 404",
+    requests.request(
+        "DELETE",
+        f"{BASE}/teacher/attendance/session",
+        json={**delete_target, "period": "14:00-15:00"},
+        headers=auth(smg_token),
+        timeout=10,
+    ).status_code == 404,
+)
+check(
+    "a period outside the official grid is refused -> 400",
+    requests.request(
+        "DELETE",
+        f"{BASE}/teacher/attendance/session",
+        json={**delete_target, "period": "09:00-10:00"},
+        headers=auth(smg_token),
+        timeout=10,
+    ).status_code == 400,
+)
+
+deleted = requests.request(
+    "DELETE",
+    f"{BASE}/teacher/attendance/session",
+    json=delete_target,
+    headers=auth(smg_token),
+    timeout=10,
+)
+check(
+    "the teacher can delete their own session inside the window",
+    deleted.status_code == 200,
+    deleted.text[:200],
+)
+check(
+    "the delete reports how many rows it soft-deleted",
+    deleted.json().get("deleted_count") == 1,
+    str(deleted.json()),
+)
+soft = delete_db.execute(
+    "SELECT deleted_at, deleted_by FROM attendance_records "
+    "WHERE student_id=? AND session_date=? AND slot_start='13:00' AND subject='M-1'",
+    (delete_student_id, delete_monday_str),
+).fetchone()
+check(
+    "the rows are kept and stamped with who and when",
+    soft is not None and soft[0] is not None and soft[1] == smg_id,
+    str(soft),
+)
+check(
+    "the student dashboard no longer shows the deleted lecture",
+    all(
+        lecture["date"] != delete_monday_str
+        for subject in requests.get(
+            f"{BASE}/student/attendance", headers=auth(TOKENS["1"]), timeout=10
+        ).json()["subjects"]
+        for lecture in subject["lectures"]
+    ),
+)
+check(
+    "the deleted lecture is gone from the session history",
+    not [
+        row for row in requests.get(
+            f"{BASE}/teacher/attendance/history", headers=auth(smg_token), timeout=10
+        ).json()
+        if row["class_date"] == delete_monday_str and row["period"] == "13:00-14:00"
+    ],
+)
+check(
+    "the deleted lecture reads back as an empty sheet",
+    requests.get(
+        f"{BASE}/teacher/attendance?subject=M-1&division=D"
+        f"&session_date={delete_monday_str}&slot_start=13:00&slot_end=14:00",
+        headers=auth(smg_token),
+        timeout=10,
+    ).json() == [],
+)
+check(
+    "deleting the same session twice -> 404 (nothing live left)",
+    requests.request(
+        "DELETE",
+        f"{BASE}/teacher/attendance/session",
+        json=delete_target,
+        headers=auth(smg_token),
+        timeout=10,
+    ).status_code == 404,
+)
+
+# Re-marking must revive the rows: the unique key covers (roll, date, slot,
+# subject) and knows nothing about deletion, so an insert would fail.
+revived = requests.post(
+    f"{BASE}/teacher/attendance/submit", json=session_body, headers=auth(smg_token), timeout=10
+)
+check("a deleted lecture can be marked again", revived.status_code == 200, revived.text[:200])
+check("the revived sheet reports its rows", revived.json().get("created") == 1, str(revived.json()))
+revived_row = delete_db.execute(
+    "SELECT deleted_at, deleted_by, status FROM attendance_records "
+    "WHERE student_id=? AND session_date=? AND slot_start='13:00' AND subject='M-1'",
+    (delete_student_id, delete_monday_str),
+).fetchone()
+check(
+    "the revived row is live again and keeps one audit trail",
+    revived_row is not None and revived_row[0] is None and revived_row[1] is None
+    and revived_row[2] == "present",
+    str(revived_row),
+)
+check(
+    "the student sees the revived lecture again",
+    any(
+        lecture["date"] == delete_monday_str
+        for subject in requests.get(
+            f"{BASE}/student/attendance", headers=auth(TOKENS["1"]), timeout=10
+        ).json()["subjects"]
+        for lecture in subject["lectures"]
+    ),
+)
+
+# Once the lecture window closes, a teacher may no longer delete; an admin may
+# - that is the recovery path that keeps a late mistake fixable.
+late_monday = MONDAY + timedelta(days=14)
+late_monday_str = late_monday.strftime("%Y-%m-%d")
+freeze_attendance_clock(13, 5, day=late_monday)
+late_body = {
+    **session_body,
+    "class_date": late_monday_str,
+}
+late_target = {**delete_target, "class_date": late_monday_str}
+check(
+    "a second teacher-marked session saves",
+    requests.post(
+        f"{BASE}/teacher/attendance/submit", json=late_body, headers=auth(smg_token), timeout=10
+    ).status_code == 200,
+)
+freeze_attendance_clock(16, 0, day=late_monday)
+late_history = requests.get(
+    f"{BASE}/teacher/attendance/history", headers=auth(smg_token), timeout=10
+).json()
+late_row = [
+    row for row in late_history
+    if row["class_date"] == late_monday_str and row["period"] == "13:00-14:00"
+]
+check(
+    "history stops offering delete once the window closes",
+    bool(late_row) and late_row[0]["can_delete"] is False,
+    str(late_row),
+)
+refused_late = requests.request(
+    "DELETE",
+    f"{BASE}/teacher/attendance/session",
+    json=late_target,
+    headers=auth(smg_token),
+    timeout=10,
+)
+check(
+    "a teacher cannot delete after the lecture window -> 403",
+    refused_late.status_code == 403,
+    refused_late.text[:200],
+)
+check(
+    "the refusal points the teacher at an administrator",
+    "administrator" in refused_late.text.lower(),
+    refused_late.text[:200],
+)
+check(
+    "an admin can still delete that session at any time",
+    requests.request(
+        "DELETE",
+        f"{BASE}/teacher/attendance/session",
+        json=late_target,
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code == 200,
+)
+check(
+    "and the admin's delete hid the lecture from the student",
+    all(
+        lecture["date"] != late_monday_str
+        for subject in requests.get(
+            f"{BASE}/student/attendance", headers=auth(TOKENS["1"]), timeout=10
+        ).json()["subjects"]
+        for lecture in subject["lectures"]
+    ),
+)
+check(
+    "an admin may also delete a session they did not mark",
+    requests.request(
+        "DELETE",
+        f"{BASE}/teacher/attendance/session",
+        json=delete_target,
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code == 200,
+)
+
+delete_db.close()
+
 real_stamp_end = (
     (REAL_DB.stat().st_size, REAL_DB.stat().st_mtime_ns) if REAL_DB.exists() else None
 )

@@ -44,6 +44,40 @@ String formatPeriod12h(List<String> slot) {
   return '${formatClock12h(slot[0])} - ${formatClock12h(slot[1])}';
 }
 
+/// "13:00-14:00" (the stored wire format) -> "1:00 PM - 2:00 PM".
+String formatStoredPeriod12h(String period) {
+  final parts = period.split('-');
+  if (parts.length != 2) return period;
+  return '${formatClock12h(parts[0].trim())} - ${formatClock12h(parts[1].trim())}';
+}
+
+const List<String> _monthNames = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/// "2026-10-24" -> "24 Oct 2026". Anything unparseable is left alone.
+String formatSessionDate(String isoDate) {
+  final parts = isoDate.split('-');
+  if (parts.length != 3) return isoDate;
+  final year = int.tryParse(parts[0]);
+  final month = int.tryParse(parts[1]);
+  final day = int.tryParse(parts[2]);
+  if (year == null || month == null || day == null) return isoDate;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return isoDate;
+  return '$day ${_monthNames[month - 1]} $year';
+}
+
 enum _AttendanceStage { setup, marking, review }
 
 class _ClassStudent {
@@ -80,6 +114,53 @@ class _ClassStudent {
       batch: (json['batch'] as String?)?.trim() ?? '',
       branch: (json['branch'] as String?)?.trim() ?? '',
       isRegistered: (json['is_registered'] as bool?) ?? json['id'] is int,
+    );
+  }
+}
+
+/// One saved lecture from `GET /teacher/attendance/history`.
+class _PastSession {
+  const _PastSession({
+    required this.classDate,
+    required this.period,
+    required this.subject,
+    required this.division,
+    required this.batch,
+    required this.total,
+    required this.present,
+    required this.absent,
+    required this.canDelete,
+  });
+
+  final String classDate;
+  final String period;
+  final String subject;
+  final String division;
+  final String batch;
+  final int total;
+  final int present;
+  final int absent;
+
+  /// Decided by the backend, never by this screen: admins may delete any
+  /// session, a teacher only one they marked while its lecture window is open.
+  /// The clock is the college's, so a client cannot judge it.
+  final bool canDelete;
+
+  /// Identifies the session on screen (the request itself is built from the
+  /// fields, not from this string).
+  String get key => '$subject|$classDate|$period|$batch';
+
+  factory _PastSession.fromJson(Map<String, dynamic> json) {
+    return _PastSession(
+      classDate: (json['class_date'] as String?)?.trim() ?? '',
+      period: (json['period'] as String?)?.trim() ?? '',
+      subject: (json['subject'] as String?)?.trim() ?? '',
+      division: (json['division'] as String?)?.trim() ?? '',
+      batch: (json['batch'] as String?)?.trim() ?? '',
+      total: (json['total'] as num?)?.toInt() ?? 0,
+      present: (json['present'] as num?)?.toInt() ?? 0,
+      absent: (json['absent'] as num?)?.toInt() ?? 0,
+      canDelete: json['can_delete'] == true,
     );
   }
 }
@@ -144,6 +225,16 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
   bool _isSaving = false;
   String? _loadError;
   int? _savedSessionCount;
+
+  /// Saved lectures already on the server, newest first.
+  List<_PastSession> _pastSessions = const [];
+  bool _isLoadingHistory = false;
+  bool _historyLoaded = false;
+  String? _historyError;
+
+  /// The session whose delete request is in flight, so only its own button
+  /// shows a spinner and a repeated tap cannot send a second request.
+  String? _deletingSessionKey;
 
   @override
   void initState() {
@@ -225,6 +316,7 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
           _slot = _slotForSubject(_subject) ?? _slot;
           _isLoading = false;
         });
+        await _loadHistory();
         return;
       } else if (response.statusCode == 401) {
         await _sessionLost();
@@ -483,6 +575,8 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
           color: GlassColors.success,
         );
         _resetToSetup();
+        // The lecture just saved belongs in the Past sessions list at once.
+        await _loadHistory();
       } else if (response.statusCode == 401) {
         await _sessionLost();
       } else {
@@ -493,6 +587,159 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
       _showSnackBar(kTeacherUnreachableMessage);
     } finally {
       if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Past sessions (history + soft delete)
+  // -------------------------------------------------------------------------
+
+  /// Loads the lectures already saved on the server.
+  ///
+  /// A failure is reported inside the section and never shown as "no sessions":
+  /// a teacher who cannot reach the server must not conclude that attendance
+  /// disappeared.
+  Future<void> _loadHistory() async {
+    if (_isLoadingHistory) return;
+
+    setState(() {
+      _isLoadingHistory = true;
+      _historyError = null;
+    });
+
+    try {
+      final token = await _authService.getToken();
+      if (!mounted) return;
+      if (token == null) {
+        await _sessionLost();
+        return;
+      }
+
+      final response = await _client
+          .get(
+            Uri.parse(
+              '${Environment.backendUrl}/teacher/attendance/history?limit=50',
+            ),
+            headers: teacherHeaders(token),
+          )
+          .timeout(kTeacherRequestTimeout);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final sessions = teacherJsonList(response.body)
+            .map(_PastSession.fromJson)
+            .toList();
+        setState(() {
+          _pastSessions = sessions;
+          _historyError = null;
+        });
+        return;
+      } else if (response.statusCode == 401) {
+        await _sessionLost();
+        return;
+      } else {
+        setState(() => _historyError = teacherMessageFromBody(response));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _historyError = kTeacherUnreachableMessage);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingHistory = false;
+          _historyLoaded = true;
+        });
+      }
+    }
+  }
+
+  /// Soft-deletes one saved lecture after an explicit confirmation.
+  Future<void> _deleteSession(_PastSession session) async {
+    if (_deletingSessionKey != null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete attendance session?'),
+        content: Text(
+          'This will delete ${session.total} attendance '
+          '${session.total == 1 ? 'record' : 'records'} for '
+          '${session.subject} on ${formatSessionDate(session.classDate)} '
+          '(${formatStoredPeriod12h(session.period)})'
+          '${session.batch.isEmpty ? '' : ' · ${session.batch}'}. '
+          'Students will no longer see these records. This cannot be undone, '
+          'though the deletion is retained for administrators.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('attendance_delete_confirm'),
+            style: FilledButton.styleFrom(backgroundColor: GlassColors.error),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final token = await _authService.getToken();
+    if (!mounted) return;
+    if (token == null) {
+      await _sessionLost();
+      return;
+    }
+
+    setState(() => _deletingSessionKey = session.key);
+
+    try {
+      final response = await _client
+          .delete(
+            Uri.parse('${Environment.backendUrl}/teacher/attendance/session'),
+            headers: teacherHeaders(token),
+            body: jsonEncode({
+              'class_date': session.classDate,
+              'period': session.period,
+              'subject': session.subject,
+              'division': session.division,
+              'batch': session.batch,
+            }),
+          )
+          .timeout(kTeacherRequestTimeout);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        var count = session.total;
+        try {
+          final body = jsonDecode(response.body);
+          if (body is Map && body['deleted_count'] is num) {
+            count = (body['deleted_count'] as num).toInt();
+          }
+        } catch (_) {
+          // Non-JSON success body: the session's own tally is the same number.
+        }
+        _showSnackBar(
+          'Session deleted · $count ${count == 1 ? 'record' : 'records'}. '
+          'It can be re-marked during the lecture window.',
+          color: GlassColors.success,
+        );
+        await _loadHistory();
+      } else if (response.statusCode == 401) {
+        await _sessionLost();
+      } else {
+        _showSnackBar(teacherMessageFromBody(response));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _showSnackBar(kTeacherUnreachableMessage);
+    } finally {
+      if (mounted) setState(() => _deletingSessionKey = null);
     }
   }
 
@@ -531,7 +778,11 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
               else if (_assignments.isEmpty)
                 _buildNoAssignmentsCard()
               else ...[
-                if (_stage == _AttendanceStage.setup) _buildSelector(),
+                if (_stage == _AttendanceStage.setup) ...[
+                  _buildSelector(),
+                  const SizedBox(height: 20),
+                  _buildPastSessions(),
+                ],
                 if (_stage == _AttendanceStage.marking) ...[
                   _buildLectureHeader(),
                   const SizedBox(height: 16),
@@ -810,6 +1061,162 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Saved lectures, with a Delete action only where the server allows it.
+  Widget _buildPastSessions() {
+    final hasError = _historyError != null;
+
+    return GlassContainer(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      borderRadius: 18,
+      blurStrength: 15,
+      opacity: 0.75,
+      borderOpacity: 0.4,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Past sessions',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: GlassColors.headingOf(context),
+                  ),
+                ),
+              ),
+              IconButton(
+                key: const Key('attendance_history_refresh'),
+                tooltip: 'Refresh past sessions',
+                onPressed: _isLoadingHistory ? null : _loadHistory,
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+              ),
+            ],
+          ),
+          Text(
+            'A session can be deleted by the teacher who marked it while its '
+            'lecture window is open; an administrator can delete any session.',
+            style: TextStyle(
+              fontSize: 11,
+              color: GlassColors.disabledOf(context),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_isLoadingHistory && !_historyLoaded)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.4),
+                ),
+              ),
+            )
+          else if (hasError && _pastSessions.isEmpty)
+            Column(
+              children: [
+                Text(
+                  _historyError!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: GlassColors.headingOf(context),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: _loadHistory,
+                  child: const Text('Retry'),
+                ),
+              ],
+            )
+          else if (_pastSessions.isEmpty)
+            Text(
+              'No saved sessions yet. Lectures you submit will be listed here.',
+              style: TextStyle(
+                fontSize: 13,
+                color: GlassColors.secondaryTextOf(context),
+              ),
+            )
+          else ...[
+            if (hasError)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Could not refresh the list: $_historyError',
+                  style: TextStyle(fontSize: 12, color: GlassColors.error),
+                ),
+              ),
+            for (final session in _pastSessions) _buildPastSessionCard(session),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPastSessionCard(_PastSession session) {
+    final isDeleting = _deletingSessionKey == session.key;
+    final group = session.batch.isEmpty ? 'Whole division' : session.batch;
+
+    return GlassCard(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  session.subject,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: GlassColors.headingOf(context),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${formatSessionDate(session.classDate)} · '
+                  '${formatStoredPeriod12h(session.period)} · $group',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: GlassColors.secondaryTextOf(context),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${session.present} present · ${session.absent} absent · '
+                  '${session.total} total',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: GlassColors.disabledOf(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (session.canDelete)
+            TextButton(
+              key: Key('attendance_delete_${session.key}'),
+              onPressed: isDeleting ? null : () => _deleteSession(session),
+              style: TextButton.styleFrom(foregroundColor: GlassColors.error),
+              child: isDeleting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Delete'),
+            ),
         ],
       ),
     );

@@ -466,9 +466,16 @@ class AttendanceRecord(Base):
     updated_by = Column(Integer, ForeignKey("teachers.id"), nullable=True)
     updated_at = Column(DateTime, nullable=True)
 
+    # Soft delete: a deleted session keeps its rows so the audit trail survives.
+    # Every read filters these out; the row is only revived when the same
+    # lecture is marked again (the unique constraint forbids a second copy).
+    deleted_at = Column(DateTime, nullable=True, index=True)
+    deleted_by = Column(Integer, ForeignKey("teachers.id"), nullable=True)
+
     student = relationship("Student", foreign_keys=[student_id])
     marker = relationship("Teacher", foreign_keys=[marked_by])
     updater = relationship("Teacher", foreign_keys=[updated_by])
+    deleter = relationship("Teacher", foreign_keys=[deleted_by])
 
     __table_args__ = (
         UniqueConstraint(

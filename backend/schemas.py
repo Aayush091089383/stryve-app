@@ -539,8 +539,49 @@ class AttendanceSubmitResponse(BaseModel):
     corrected: int
 
 
+class AttendanceDeleteRequest(BaseModel):
+    """One saved lecture to soft-delete.
+
+    A session is identified exactly as it was submitted: the calendar date, the
+    printed period, the subject and the class group. ``period`` is resolved to
+    the stored slot pair by the endpoint, so a client cannot delete a period the
+    official timetable does not have.
+    """
+
+    class_date: str  # YYYY-MM-DD
+    period: str
+    subject: str
+    division: str = "D"
+    batch: str = ""
+
+    @field_validator("batch")
+    @classmethod
+    def valid_batch(cls, v: str) -> str:
+        cleaned = (v or "").strip().upper()
+        if cleaned and cleaned not in VALID_BATCHES:
+            raise ValueError(f"Batch must be one of {sorted(VALID_BATCHES)} or empty")
+        return cleaned
+
+
+class AttendanceDeleteResponse(BaseModel):
+    """The result of a soft delete: rows touched, never rows destroyed."""
+
+    message: str
+    deleted_count: int
+    class_date: str
+    period: str
+    subject: str
+    division: str
+    batch: str
+
+
 class AttendanceHistorySessionOut(BaseModel):
-    """One saved lecture (a date + period + subject), with its tallies."""
+    """One saved lecture (a date + period + subject), with its tallies.
+
+    ``can_delete`` is decided by the server, because the lecture window is
+    judged on the college clock: a client cannot be trusted to know whether a
+    session is still inside it.
+    """
 
     class_date: str
     period: str
@@ -550,6 +591,7 @@ class AttendanceHistorySessionOut(BaseModel):
     total: int
     present: int
     absent: int
+    can_delete: bool = False
 
 
 class AttendanceLectureOut(BaseModel):

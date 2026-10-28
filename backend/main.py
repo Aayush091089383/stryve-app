@@ -81,6 +81,8 @@ from schemas import (
     TeacherAssignmentCreate,
     AttendanceClassStudentOut,
     AttendanceHistorySessionOut,
+    AttendanceDeleteRequest,
+    AttendanceDeleteResponse,
     AttendanceSaveRequest,
     AttendanceSaveResponse,
     AttendanceSessionOut,
@@ -1482,6 +1484,21 @@ def _lecture_moment(day_date: date, hhmm: str) -> datetime:
     )
 
 
+def _attendance_window_open(
+    session_date: str, slot_start: str, slot_end: str
+) -> bool:
+    """Is the lecture still inside its save window?
+
+    One implementation for both the write path (which refuses outside it) and
+    the history listing (which decides whether a Delete button is offered), so
+    the two can never disagree about a lecture being "still open".
+    """
+    day_date = _parse_date(session_date)
+    opens = _lecture_moment(day_date, slot_start) - ATTENDANCE_GRACE
+    closes = _lecture_moment(day_date, slot_end) + ATTENDANCE_GRACE
+    return opens <= _attendance_now() <= closes
+
+
 def _require_attendance_window(
     teacher: models.Teacher,
     *,
@@ -1499,13 +1516,12 @@ def _require_attendance_window(
     if teacher.role == "admin":
         return
 
+    if _attendance_window_open(session_date, slot_start, slot_end):
+        return
+
     day_date = _parse_date(session_date)
     opens = _lecture_moment(day_date, slot_start) - ATTENDANCE_GRACE
     closes = _lecture_moment(day_date, slot_end) + ATTENDANCE_GRACE
-    now = _attendance_now()
-
-    if opens <= now <= closes:
-        return
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
@@ -2045,6 +2061,7 @@ def get_attendance(
         models.AttendanceRecord.division == division,
         models.AttendanceRecord.session_date == session_date,
         models.AttendanceRecord.slot_start == slot_start,
+        models.AttendanceRecord.deleted_at.is_(None),
     ).all()
 
     batch_filter = _normalise_batch(batch)
@@ -2150,6 +2167,21 @@ def save_attendance(
         ).first()
 
         if existing:
+            if existing.deleted_at is not None:
+                # Re-marking a deleted lecture restores it. The row has to be
+                # revived rather than duplicated: the unique key covers
+                # (roll, date, slot, subject) and knows nothing about deletion,
+                # and "delete the wrong session, take it again" must work.
+                existing.deleted_at = None
+                existing.deleted_by = None
+                existing.status = record.status
+                existing.updated_by = teacher.id
+                existing.updated_at = now
+                if student is not None:
+                    existing.student_id = student.id
+                created += 1
+                continue
+
             # Keep the account link current: a student who registers after the
             # lecture was marked is attached on the next save of that lecture.
             if student is not None and existing.student_id != student.id:
@@ -2551,9 +2583,13 @@ def attendance_history(
 
     A teacher sees the lectures they marked (or last corrected); an admin sees
     every saved lecture. Tallies come from the stored rows, never from a
-    client-side count.
+    client-side count. Soft-deleted sessions are omitted entirely, and each
+    session says whether *this* caller may delete it, so no client has to guess
+    at the lecture clock.
     """
-    query = db.query(models.AttendanceRecord)
+    query = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.deleted_at.is_(None)
+    )
     if subject:
         query = query.filter(models.AttendanceRecord.subject == subject)
     if division:
@@ -2570,22 +2606,35 @@ def attendance_history(
             row.batch or "",
         )
 
+    deletable: set[tuple] | None = None
     if teacher.role != "admin":
         # A teacher sees each lecture they took part in, as a lecture - not just
         # the rows they personally wrote. Correcting one student must not make
         # the other students of the same session disappear from the tally.
+        live = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.deleted_at.is_(None)
+        )
         mine = {
             session_key(row)
-            for row in db.query(models.AttendanceRecord)
-            .filter(
+            for row in live.filter(
                 or_(
                     models.AttendanceRecord.marked_by == teacher.id,
                     models.AttendanceRecord.updated_by == teacher.id,
                 )
-            )
-            .all()
+            ).all()
         }
         rows = [row for row in rows if session_key(row) in mine]
+
+        # Deletion is narrower than visibility: only the teacher who wrote the
+        # marks owns the session, and only while its lecture window is open. A
+        # correction alone is not ownership. The endpoint enforces the same
+        # rule; this flag only keeps the button off a session that would 403.
+        deletable = {
+            session_key(row)
+            for row in live.filter(
+                models.AttendanceRecord.marked_by == teacher.id
+            ).all()
+        }
 
     # (date, slot_start, slot_end, subject, division, batch) -> tallies
     sessions: dict[tuple, dict[str, int]] = {}
@@ -2608,9 +2657,116 @@ def attendance_history(
             total=sessions[key]["total"],
             present=sessions[key]["present"],
             absent=sessions[key]["total"] - sessions[key]["present"],
+            can_delete=(
+                True
+                if deletable is None
+                else (
+                    key in deletable
+                    and _attendance_window_open(key[0], key[1], key[2])
+                )
+            ),
         )
         for key in keys
     ]
+
+
+@app.delete(
+    "/teacher/attendance/session",
+    response_model=AttendanceDeleteResponse,
+)
+def delete_attendance_session(
+    payload: AttendanceDeleteRequest,
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Soft-delete one saved lecture for the whole class group.
+
+    Nothing is destroyed: ``deleted_at``/``deleted_by`` record the deletion on
+    every row, so the audit trail survives and every read path (student
+    dashboard, teacher history, the correction sheet) simply hides them. Marking
+    the same lecture again revives those rows (see ``save_attendance``).
+
+    An administrator may delete any session at any time - that is the recovery
+    path once the lecture window has closed. A teacher may delete only a session
+    they themselves marked, and only while that lecture's window is still open,
+    which keeps a marking mistake fixable without letting history be rewritten
+    later.
+    """
+    subject = (payload.subject or "").strip()
+    if not subject:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Subject is required"
+        )
+
+    pair = _period_pair(payload.period)
+    if pair is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "That period is not part of the official timetable "
+                f"({payload.period})"
+            ),
+        )
+    slot_start, slot_end = pair
+
+    session_date = (payload.class_date or "").strip()
+    day_date = _parse_date(session_date)
+    division = payload.division
+    batch = _normalise_batch(payload.batch)
+
+    rows = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.subject == subject,
+            models.AttendanceRecord.division == division,
+            models.AttendanceRecord.batch == batch,
+            models.AttendanceRecord.session_date == session_date,
+            models.AttendanceRecord.slot_start == slot_start,
+            models.AttendanceRecord.slot_end == slot_end,
+            models.AttendanceRecord.deleted_at.is_(None),
+        )
+        .all()
+    )
+
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No attendance session found for that lecture.",
+        )
+
+    if teacher.role != "admin":
+        if not any(row.marked_by == teacher.id for row in rows):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only delete a session you marked.",
+            )
+        if not _attendance_window_open(session_date, slot_start, slot_end):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "This session can no longer be deleted by a teacher: the "
+                    f"lecture's window on {day_date.isoformat()} has closed "
+                    f"({COLLEGE_TIMEZONE_LABEL}). An administrator can still "
+                    "delete it."
+                ),
+            )
+
+    now = datetime.utcnow()
+    for row in rows:
+        row.deleted_at = now
+        row.deleted_by = teacher.id
+
+    db.commit()
+
+    return AttendanceDeleteResponse(
+        message="Attendance session deleted",
+        deleted_count=len(rows),
+        class_date=session_date,
+        period=f"{slot_start}-{slot_end}",
+        subject=subject,
+        division=division,
+        batch=batch,
+    )
 
 
 @app.get("/student/attendance", response_model=StudentAttendanceOut)
@@ -2636,7 +2792,8 @@ def my_attendance(
             or_(
                 models.AttendanceRecord.roll_number == roll_number,
                 models.AttendanceRecord.student_id == student.id,
-            )
+            ),
+            models.AttendanceRecord.deleted_at.is_(None),
         )
         .all()
     )
