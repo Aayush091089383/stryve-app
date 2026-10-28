@@ -205,3 +205,29 @@ is a sixth free period (see `official_data.UNCONFIRMED`).
 Stop and report: what you inspected, what you changed, the exact commands and
 exit codes, what remains unverified, and any risk that could lock out users or
 corrupt data. A clear blocker is better than a silent workaround.
+
+## 9. Security audit skill
+
+The Cloudflare `security-audit` skill is installed globally at
+`~/.agents/skills/security-audit/` (symlinked into `~/.claude/skills/`). It is a
+six-phase harness — reconnaissance → coverage-led hunting → candidate
+validation → structured output → record verification → reporting — with
+per-attack-class reference files (`WEB-PROTOCOL-AND-AUTH.md`, `CLIENT-SIDE.md`,
+`DESKTOP-MOBILE-AND-LOCAL-IPC.md`, …) and two JSON validators.
+
+* **When**: only for an explicit audit, pen-test or "find vulnerabilities"
+  request. Ordinary bug fixes and feature work do not load it — it says so
+  itself (guidance mode vs. full audit mode).
+* **Entry point**: read `SKILL.md` in that directory first. It defines the
+  evidence bar: a candidate needs a named principal, resource, crossed trust
+  boundary and a concrete result; a missing best practice is not a finding.
+* **The validators need Node.js**, which is *not* on `PATH` by default:
+  `export PATH="$HOME/.local/opt/node-v24.22.1-linux-x64/bin:$PATH"`. Then
+  `node validate-findings.cjs <findings.json>` against `report-schema.json`, and
+  `node validate-coverage-ledger.cjs <coverage-ledger.json>`. Do not report an
+  audit as finished unless both pass.
+* **Output lives outside the repo**: `~/security-audit-skill/<repo>/run-<N>/`,
+  never in the working tree, so an audit leaves `git status` clean.
+* **An audit is read-only.** It must not modify application code, `backend/
+  campussync.db`, the running backend, or any test. Applying fixes is a
+  separate, explicitly requested change that follows §2–§4 like any other edit.
