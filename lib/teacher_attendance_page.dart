@@ -9,6 +9,7 @@ import 'teacher_login_page.dart';
 import 'teacher_models.dart';
 import 'utils/glass_container.dart';
 import 'utils/official_subjects.dart';
+import 'utils/subject_aliases.dart';
 import 'utils/teacher_api.dart';
 
 /// The periods of the official Division D timetable, used only to offer choices.
@@ -650,13 +651,16 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
   Future<Map<String, String>> _fetchSavedSession(String token) async {
     final subject = _subject;
     if (subject == null) return const {};
+    // Query the same label the save uses: an admin picks the official name,
+    // but the lecture is stored under the sheet code.
+    final storedSubject = attendanceSubjectFor(subject);
 
     try {
       final response = await _client
           .get(
             Uri.parse(
               '${Environment.backendUrl}/teacher/attendance'
-              '?subject=${Uri.encodeQueryComponent(subject)}'
+              '?subject=${Uri.encodeQueryComponent(storedSubject)}'
               '&division=${Uri.encodeQueryComponent(_division)}'
               '&batch=${Uri.encodeQueryComponent(_batch)}'
               '&session_date=$_dateIso'
@@ -725,6 +729,10 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
     if (subject == null || _students.isEmpty || _isSaving) return;
     if (_unmarkedCount > 0) return;
 
+    // The picker shows the official name for an admin; the record is stored
+    // under the sheet code so it joins the teacher's marks of the same class.
+    final storedSubject = attendanceSubjectFor(subject);
+
     final token = await _authService.getToken();
     if (!mounted) return;
     if (token == null) {
@@ -742,7 +750,7 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
             body: jsonEncode({
               'class_date': _dateIso,
               'period': _periodLabel,
-              'subject': subject,
+              'subject': storedSubject,
               'division': _division,
               'batch': _batch,
               'records': _students

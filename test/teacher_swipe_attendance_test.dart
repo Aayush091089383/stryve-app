@@ -772,4 +772,37 @@ void main() {
     expect(find.text('Year 4'), findsOneWidget);
     expect(find.text('D-3'), findsOneWidget);
   });
+
+  testWidgets('an admin\'s official subject is saved under its sheet code', (
+    tester,
+  ) async {
+    final backend = AttendanceBackend(assignments: const []);
+    await pumpAttendance(tester, backend, role: 'admin');
+    await loadRoster(tester);
+
+    // The saved-marks read-back already asks for the stored code, so an admin
+    // re-opening the lecture sees what the teacher marked.
+    final readBack = backend.requests.firstWhere(
+      (request) =>
+          request.url.path == '/teacher/attendance' && request.method == 'GET',
+    );
+    expect(readBack.url.queryParameters['subject'], 'M-1');
+
+    await tester.tap(find.byKey(const Key('attendance_mark_absent')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('attendance_mark_present')));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('attendance_submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('attendance_submit')));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    final post = backend.requests.firstWhere(
+      (request) => request.url.path == '/teacher/attendance/submit',
+    );
+    final body = jsonDecode(post.body) as Map<String, dynamic>;
+    expect(body['subject'], 'M-1');
+  });
 }
