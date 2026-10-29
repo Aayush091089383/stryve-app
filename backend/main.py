@@ -1871,6 +1871,17 @@ def _clock_label(moment: datetime) -> str:
     return f"{hour}:{moment.minute:02d} {suffix}"
 
 
+def _clock_face(hhmm: str) -> str:
+    """'15:15' -> '3:15 PM'; anything unparseable comes back untouched."""
+    try:
+        hour, minute = (int(part) for part in (hhmm or "").split(":"))
+    except (TypeError, ValueError):
+        return hhmm
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        return hhmm
+    return f"{hour % 12 or 12}:{minute:02d} {'AM' if hour < 12 else 'PM'}"
+
+
 def _lecture_moment(day_date: date, hhmm: str) -> datetime:
     """A printed time on a calendar day, read on the college clock."""
     hour, minute = (int(part) for part in hhmm.split(":"))
@@ -4028,6 +4039,65 @@ def _teacher_timetable_links(
     ]
 
 
+def _claim_teaching_subject(
+    db: Session,
+    teacher: models.Teacher,
+    *,
+    day: str,
+    named: str | None = None,
+) -> str | None:
+    """The subject a teacher is taking a free period for, when it is knowable.
+
+    The claim's own subject wins. Otherwise the timetable link/assignments are
+    consulted: a subject is named only when exactly one distinct subject is
+    verified for that day (or, failing that, at all). A teacher with several
+    subjects gets no invented answer - the notification then says "Class".
+    """
+    chosen = (named or "").strip()
+    if chosen:
+        return chosen
+
+    links = [
+        entry
+        for entry in _teacher_timetable_links(db, teacher)
+        if not entry.is_break and not entry.is_free_period
+    ]
+    manual = (
+        db.query(models.TeacherAssignment)
+        .filter(models.TeacherAssignment.teacher_id == teacher.id)
+        .all()
+    )
+
+    def subjects_for(wanted_day: str | None) -> set[str]:
+        found = {
+            entry.subject.strip()
+            for entry in links
+            if (entry.subject or "").strip()
+            and (wanted_day is None or entry.day == wanted_day)
+        }
+        found.update(
+            row.subject.strip()
+            for row in manual
+            if (row.subject or "").strip()
+            and (
+                wanted_day is None
+                or not (row.day or "").strip()
+                or (row.day or "").strip().lower() == wanted_day.lower()
+            )
+        )
+        return found
+
+    same_day = subjects_for(day)
+    if len(same_day) == 1:
+        return next(iter(same_day))
+
+    every_day = subjects_for(None)
+    if len(every_day) == 1:
+        return next(iter(every_day))
+
+    return None
+
+
 def _other_teacher_covering(
     db: Session,
     *,
@@ -4510,12 +4580,25 @@ def claim_free_period(
     audience = _approved_students(
         db, division=row.division, batch=batch
     )
-    notice_title = "Free period claimed"
-    notice_message = f"{day}, {payload.start_time}-{payload.end_time} is now free"
+    # A claim is a teacher TAKING the slot for a class, not freeing it: the slot
+    # was already free (that is what made it claimable). Say what is now being
+    # taught and by whom, on the 12-hour clock every surface uses.
+    subject = _claim_teaching_subject(
+        db, teacher, day=day, named=payload.subject
+    )
+    who = (teacher.short_code or "").strip().upper() or teacher.name
+    start_label = _clock_face(payload.start_time)
+    end_label = _clock_face(payload.end_time)
+    notice_title = "New class scheduled"
+    if subject:
+        notice_message = (
+            f"{subject} is now scheduled for {start_label} - {end_label} "
+            f"with {who}"
+        )
+    else:
+        notice_message = f"Class with {who} at {start_label} - {end_label}"
     if batch:
         notice_message = f"{notice_message} ({batch})"
-    if (payload.subject or "").strip():
-        notice_message = f"{notice_message} · {payload.subject.strip()}"
     _add_student_bells(db, audience, notice_title, notice_message)
 
     try:
@@ -4567,11 +4650,24 @@ def release_free_period(
     audience = _approved_students(
         db, division=row.division, batch=row.batch or ""
     )
-    notice_title = "Free period released"
-    notice_message = (
-        f"{row.day}, {row.start_time}-{row.end_time} is no longer a claimed "
-        "free period."
+    subject = _claim_teaching_subject(
+        db, row.teacher, day=row.day, named=row.subject
     )
+    who = ((row.teacher.short_code or "").strip().upper() if row.teacher else "") or (
+        row.teacher.name if row.teacher else "the teacher"
+    )
+    when = f"{_clock_face(row.start_time)} - {_clock_face(row.end_time)}"
+    notice_title = "Free period released"
+    if subject:
+        notice_message = (
+            f"{subject} with {who} at {when} is cancelled; the period is free "
+            "again."
+        )
+    else:
+        notice_message = (
+            f"The class with {who} at {when} is cancelled; the period is free "
+            "again."
+        )
     _add_student_bells(db, audience, notice_title, notice_message)
 
     db.delete(row)
@@ -4626,7 +4722,7 @@ def list_schedule_changes(
             id=claim.id,
             claim_date=claim.claim_date,
             day=claim.day,
-            time=f"{claim.start_time} - {claim.end_time}",
+            time=f"{_clock_face(claim.start_time)} - {_clock_face(claim.end_time)}",
             division=claim.division,
             batch=claim.batch or "",
             subject=claim.subject,

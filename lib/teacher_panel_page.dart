@@ -452,19 +452,6 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
         .showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
-  void _openApprovals() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => TeacherApprovalsPage(
-          authService: _authService,
-          client: widget.client,
-          onSessionExpired: _handleSessionExpired,
-        ),
-      ),
-    );
-  }
-
   /// Opening attendance from Home selects the Attendance tab instead of
   /// pushing a second copy of the same screen over the panel.
   void _openAttendance() {
@@ -718,6 +705,20 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
         )
         .toList();
 
+    // A claim is only a schedule change while its day is here or ahead. The
+    // list endpoint returns history too, but yesterday's claimed period is not
+    // something the teacher still needs on Home.
+    final collegeNow = DateTime.now().toUtc().add(
+      const Duration(hours: 5, minutes: 30),
+    );
+    final todayIso =
+        '${collegeNow.year.toString().padLeft(4, '0')}-'
+        '${collegeNow.month.toString().padLeft(2, '0')}-'
+        '${collegeNow.day.toString().padLeft(2, '0')}';
+    final upcomingClaims = _claims
+        .where((claim) => claim.claimDate.compareTo(todayIso) >= 0)
+        .toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 110),
       child: Center(
@@ -819,9 +820,9 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
               _buildActionCard(
                 icon: Icons.event_busy_rounded,
                 title: 'Claim Free Period',
-                subtitle: _claims.isEmpty
+                subtitle: upcomingClaims.isEmpty
                     ? 'Claim a period in which your class group is free.'
-                    : '${_claims.length} period(s) already claimed.',
+                    : '${upcomingClaims.length} period(s) already claimed.',
                 onTap: _openClaimFreePeriod,
               ),
               const SizedBox(height: 12),
@@ -832,7 +833,7 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                     'Send a notice to your class group or to every student.',
                 onTap: _openAnnouncements,
               ),
-              if (_claims.isNotEmpty) ...[
+              if (upcomingClaims.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 GlassCard(
                   margin: EdgeInsets.zero,
@@ -849,7 +850,7 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      ..._claims
+                      ...upcomingClaims
                           .take(4)
                           .map(
                             (claim) => Padding(
@@ -868,87 +869,6 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
                   ),
                 ),
               ],
-              const SizedBox(height: 24),
-              const _SectionTitle('Student Registration Approvals'),
-              const SizedBox(height: 12),
-              if (_canReviewRegistrations)
-                _buildActionCard(
-                  icon: Icons.how_to_reg_rounded,
-                  title: 'Review Pending Registrations',
-                  subtitle:
-                      'A separate section - it is not part of the bottom '
-                      'navigation.',
-                  onTap: _openApprovals,
-                )
-              else
-                _buildInfoCard(
-                  icon: Icons.lock_outline_rounded,
-                  title: 'Approval access not granted',
-                  body:
-                      'Reviewing student registrations is a permission an '
-                      'administrator grants explicitly. Your account does not '
-                      'have it, so the backend refuses those requests.',
-                ),
-              const SizedBox(height: 24),
-              const _SectionTitle('My Assignments'),
-              const SizedBox(height: 12),
-              if (_assignments.isEmpty)
-                _buildInfoCard(
-                  icon: Icons.assignment_ind_outlined,
-                  title: 'No verified teaching assignments',
-                  body:
-                      'Assignments are taken from the official Division D '
-                      'timetable or added by an administrator. Nothing is '
-                      'inferred from your name.',
-                )
-              else
-                ..._assignments.map(
-                  (assignment) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: GlassCard(
-                      margin: EdgeInsets.zero,
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  assignment.subject,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: GlassColors.headingOf(context),
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${assignment.dayLabel} • '
-                                  '${assignment.slotLabel} • '
-                                  '${assignment.batchLabel}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: GlassColors.secondaryTextOf(context),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            assignment.source == 'timetable'
-                                ? 'timetable'
-                                : 'admin',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: GlassColors.disabledOf(context),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
             ],
           ),
         ),

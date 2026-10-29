@@ -702,14 +702,16 @@ void main() {
         await pumpPanel(tester, panelRouter(recorder: recorder));
         await pumpUntilFound(tester, find.text('Dr. Meera Rao'));
 
-        expect(find.text('Approval access not granted'), findsOneWidget);
+        // The approval card lives on the Approvals tab only now; Home must
+        // not offer a second doorway (or a duplicate permission notice).
         expect(find.text('Review Pending Registrations'), findsNothing);
+        expect(find.text('Approval access not granted'), findsNothing);
         expect(recorder.paths, isNot(contains(pendingPath)));
         expect(recorder.paths, isNot(contains(teacherListPath)));
       },
     );
 
-    testWidgets('a permitted teacher reaches the section from Home', (
+    testWidgets('a permitted teacher reaches the section from the Approvals tab', (
       tester,
     ) async {
       final recorder = Recorder();
@@ -721,10 +723,10 @@ void main() {
           recorder: recorder,
         ),
       );
-      await pumpUntilFound(tester, find.text('Review Pending Registrations'));
+      await pumpUntilFound(tester, find.text('Dr. Meera Rao'));
+      expect(find.text('Review Pending Registrations'), findsNothing);
 
-      await tester.tap(find.text('Review Pending Registrations'));
-      await tester.pumpAndSettle();
+      await openTab(tester, Icons.assignment_ind_outlined);
 
       await pumpUntilFound(tester, find.text('Aarav Sharma'));
       expect(recorder.paths, contains(pendingPath));
@@ -736,10 +738,12 @@ void main() {
       await pumpPanel(tester, panelRouter());
       await pumpUntilFound(tester, find.text('Dr. Meera Rao'));
 
-      expect(find.text('No verified teaching assignments'), findsOneWidget);
       expect(find.text('Faculty code not linked yet'), findsOneWidget);
-      // No class is claimed for the teacher.
+      // No class is claimed for the teacher, and Home no longer repeats the
+      // full assignment list under "My Assignments".
       expect(find.textContaining('No classes assigned for'), findsOneWidget);
+      expect(find.text('My Assignments'), findsNothing);
+      expect(find.text('No verified teaching assignments'), findsNothing);
     });
 
     testWidgets('today\'s classes come from the verified assignments', (
@@ -777,8 +781,60 @@ void main() {
       await pumpUntilFound(tester, find.text('M-1'));
 
       expect(find.text('Faculty code SMG'), findsOneWidget);
-      expect(find.textContaining('13:00 - 14:00'), findsWidgets);
+      expect(find.textContaining('1:00 PM - 2:00 PM'), findsWidgets);
+      expect(find.textContaining('13:00'), findsNothing);
       expect(find.textContaining('Whole division'), findsWidgets);
+    });
+
+    testWidgets('claimed periods are 12-hour and past days are hidden', (
+      tester,
+    ) async {
+      final now = DateTime.now().toUtc().add(
+        const Duration(hours: 5, minutes: 30),
+      );
+      final today =
+          '${now.year.toString().padLeft(4, '0')}-'
+          '${now.month.toString().padLeft(2, '0')}-'
+          '${now.day.toString().padLeft(2, '0')}';
+      final yesterday = now.subtract(const Duration(days: 1));
+      final yesterdayIso =
+          '${yesterday.year.toString().padLeft(4, '0')}-'
+          '${yesterday.month.toString().padLeft(2, '0')}-'
+          '${yesterday.day.toString().padLeft(2, '0')}';
+
+      await pumpPanel(
+        tester,
+        panelRouter(
+          me: meJson(shortCode: 'RVS'),
+          claims: [
+            {
+              'id': 1,
+              'claim_date': yesterdayIso,
+              'day': 'Thursday',
+              'start_time': '10:15',
+              'end_time': '11:15',
+              'division': 'D',
+              'batch': '',
+              'subject': null,
+            },
+            {
+              'id': 2,
+              'claim_date': today,
+              'day': 'Friday',
+              'start_time': '15:15',
+              'end_time': '16:15',
+              'division': 'D',
+              'batch': '',
+              'subject': null,
+            },
+          ],
+        ),
+      );
+      await pumpUntilFound(tester, find.text('Your claimed periods'));
+
+      expect(find.textContaining('3:15 PM - 4:15 PM'), findsOneWidget);
+      expect(find.textContaining('10:15 - 11:15'), findsNothing);
+      expect(find.textContaining(yesterdayIso), findsNothing);
     });
 
     testWidgets('logout lives on Profile and returns to the teacher login', (

@@ -750,7 +750,7 @@ class AdminScheduleChangeOut(BaseModel):
 
     ``can_delete`` mirrors the release endpoint's rule (an admin may release any
     claim, a teacher only their own), so the portal never offers a button the
-    backend would refuse.
+    backend would refuse. ``time`` is the 12-hour form the portal prints.
     """
 
     id: int

@@ -388,6 +388,12 @@ RELM_DATE_3_STR = (RELM_DATE + timedelta(days=14)).strftime("%Y-%m-%d")
 YESTERDAY_STR = (TODAY - timedelta(days=1)).strftime("%Y-%m-%d")
 YESTERDAY_NAME = (TODAY - timedelta(days=1)).strftime("%A")
 
+
+def _clock12(hhmm: str) -> str:
+    """The 12-hour form the app and the notifications print."""
+    hour, minute = (int(part) for part in hhmm.split(":"))
+    return f"{hour % 12 or 12}:{minute:02d} {'AM' if hour < 12 else 'PM'}"
+
 # ==========================================================================
 section("1. Timetable: common lectures and batch filtering (HTTP)")
 # ==========================================================================
@@ -4619,13 +4625,13 @@ check(
     str(admin_body.get("claims")),
 )
 check(
-    "rows are ordered by division then start time",
+    "rows are ordered by division then start time, printed on the 12-hour clock",
     [(row["division"], row["time"]) for row in admin_body["claims"]]
     == [
-        ("D", "10:15 - 11:15"),
-        ("D", "14:00 - 15:00"),
-        ("D", "15:15 - 16:15"),
-        ("F", "10:15 - 11:15"),
+        ("D", "10:15 AM - 11:15 AM"),
+        ("D", "2:00 PM - 3:00 PM"),
+        ("D", "3:15 PM - 4:15 PM"),
+        ("F", "10:15 AM - 11:15 AM"),
     ],
     str([(row["division"], row["time"]) for row in admin_body["claims"]]),
 )
@@ -4689,7 +4695,7 @@ yesterday = requests.get(
 check(
     "another date returns that date's claims only",
     yesterday["count"] == 1
-    and yesterday["claims"][0]["time"] == "09:00 - 10:00"
+    and yesterday["claims"][0]["time"] == "9:00 AM - 10:00 AM"
     and yesterday["claims"][0]["batch"] == "",
     str(yesterday["claims"]),
 )
@@ -5250,18 +5256,24 @@ claim_probe = requests.post(
         "division": "D",
         "batch": "",
         "claim_date": free_date,
-        "subject": "M-1",
+        # The app sends no subject: the notice must resolve it from this
+        # teacher's verified assignments (SMG teaches only M-1).
     },
     headers=auth(smg_token),
     timeout=10,
 )
 check("the free-period claim probe succeeded", claim_probe.status_code == 201, claim_probe.text[:200])
-claim_message_fragment = f"{free_view['day']}, {whole_slot['start_time']}-{whole_slot['end_time']} is now free"
+# The slot was already free; the notice must say what is now being taught,
+# by whom, on the 12-hour clock - never the old "is now free" wording.
+claim_when = (
+    f"{_clock12(whole_slot['start_time'])} - {_clock12(whole_slot['end_time'])}"
+)
+claim_message_fragment = f"M-1 is now scheduled for {claim_when} with SMG"
 claim_rows = {
     row[0]: row[1]
     for row in conn.execute(
         "SELECT student_id, COUNT(*) FROM notifications "
-        "WHERE title='Free period claimed' AND message LIKE ? "
+        "WHERE title='New class scheduled' AND message LIKE ? "
         "AND created_at >= ? GROUP BY student_id",
         (f"%{claim_message_fragment}%", claim_probe_started),
     )
@@ -5292,7 +5304,7 @@ release_rows = {
         "WHERE title='Free period released' AND message LIKE ? "
         "AND created_at >= ? GROUP BY student_id",
         (
-            f"%{free_view['day']}, {whole_slot['start_time']}-{whole_slot['end_time']}%",
+            f"%M-1 with SMG at {claim_when} is cancelled%",
             release_probe_started,
         ),
     )

@@ -374,7 +374,7 @@ void main() {
 
       expect(find.text('Available periods'), findsOneWidget);
       expect(find.text('1 available'), findsOneWidget);
-      expect(find.text('15:15 - 16:15'), findsOneWidget);
+      expect(find.text('3:15 PM - 4:15 PM'), findsOneWidget);
       // The free period is identified as such...
       expect(find.text('Free period'), findsOneWidget);
       // ...and is offered for claiming.
@@ -452,7 +452,7 @@ void main() {
       expect(claimed, isTrue, reason: 'the claim was never sent');
       // The teacher sees the claim saved...
       await pumpUntilFound(tester, find.text('My claimed periods'));
-      expect(find.text('Tuesday 15:15 - 16:15'), findsOneWidget);
+      expect(find.text('Tuesday 3:15 PM - 4:15 PM'), findsOneWidget);
       expect(find.text('0 available'), findsOneWidget);
       // ...and the slot is no longer offered as available.
       expect(find.text('CLAIM'), findsNothing);

@@ -3,6 +3,8 @@
 // They only ever hold what the backend actually returned: a missing field stays
 // null so the UI can omit it instead of inventing a placeholder.
 
+import 'utils/clock_format.dart';
+
 /// A teacher/admin account from `GET /teacher/list` (admin only).
 class TeacherAccount {
   final int id;
@@ -159,7 +161,7 @@ class TeachingAssignment {
 
   String get slotLabel {
     if (startTime.isEmpty || endTime.isEmpty) return 'All periods';
-    return '$startTime - $endTime';
+    return '${formatClock(startTime)} - ${formatClock(endTime)}';
   }
 
   String get dayLabel => day.isEmpty ? 'Any day' : day;
@@ -203,7 +205,7 @@ class FreePeriodClaim {
 
   String get batchLabel => batch.isEmpty ? 'Whole division' : batch;
 
-  String get time => '$startTime - $endTime';
+  String get time => '${formatClock(startTime)} - ${formatClock(endTime)}';
 
   factory FreePeriodClaim.fromJson(Map<String, dynamic> json) {
     return FreePeriodClaim(
@@ -249,7 +251,7 @@ class FreePeriodSlot {
 
   String get batchLabel => batch.isEmpty ? 'Whole division' : batch;
 
-  String get time => '$startTime - $endTime';
+  String get time => '${formatClock(startTime)} - ${formatClock(endTime)}';
 
   /// What the slot is, for the UI: an official free period, or the class the
   /// slot is not available because of.
