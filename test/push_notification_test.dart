@@ -37,11 +37,18 @@ Student studentFixture() => Student(
 /// Records what Home asked of it instead of touching Firebase.
 class RecordingPushService extends PushNotificationService {
   final List<String> startedWith = [];
+  final List<String> tokenPaths = [];
   bool disposed = false;
 
   @override
-  Future<void> start({required String authToken, VoidCallback? onMessage}) async {
+  Future<void> start({
+    required String authToken,
+    VoidCallback? onMessage,
+    String deviceTokenPath = '/notifications/device-token',
+    String fallbackTitle = 'New assignment',
+  }) async {
     startedWith.add(authToken);
+    tokenPaths.add(deviceTokenPath);
   }
 
   @override
@@ -57,7 +64,11 @@ void main() {
     final requests = <String>[];
     final client = MockClient((request) async {
       requests.add(request.url.path);
-      return http.Response('[]', 200, headers: {'content-type': 'application/json'});
+      return http.Response(
+        '[]',
+        200,
+        headers: {'content-type': 'application/json'},
+      );
     });
 
     final push = RecordingPushService();

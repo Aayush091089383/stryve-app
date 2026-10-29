@@ -69,11 +69,20 @@ class PushNotificationService {
   /// per-category settings silence both together.
   static const String channelId = 'stryve_assignments';
 
-  /// Starts push for the signed-in student.
+  /// Starts push for the signed-in account.
   ///
   /// Safe to call more than once and safe to call on a platform without FCM:
   /// the first call wins, and every failure is swallowed.
-  Future<void> start({required String authToken, VoidCallback? onMessage}) async {
+  ///
+  /// The two endpoints differ by role - a student's token is stored against
+  /// their student account, a teacher's against their teacher account - so the
+  /// caller names its own path. The feed behind it is still the durable record.
+  Future<void> start({
+    required String authToken,
+    VoidCallback? onMessage,
+    String deviceTokenPath = '/notifications/device-token',
+    String fallbackTitle = 'New assignment',
+  }) async {
     if (_started) return;
     _started = true;
 
@@ -96,22 +105,22 @@ class PushNotificationService {
 
       final token = await messaging.getToken();
       if (token != null && token.isNotEmpty) {
-        await _register(authToken, token);
+        await _register(authToken, token, deviceTokenPath);
       }
 
       _tokenRefreshes = messaging.onTokenRefresh.listen((refreshed) {
-        unawaited(_register(authToken, refreshed));
+        unawaited(_register(authToken, refreshed, deviceTokenPath));
       });
 
       _foregroundMessages = FirebaseMessaging.onMessage.listen((message) {
         // Android only draws a pushed notification itself when the app is in
-        // the background, so a message that arrives while the student is
+        // the background, so a message that arrives while the account is
         // looking at the app is shown here through the same presenter the
         // in-app alert uses.
         final title = _titleOf(message);
         final body = _bodyOf(message);
         if (title == null && body == null) return;
-        unawaited(_notifications.show(title ?? 'New assignment', body ?? ''));
+        unawaited(_notifications.show(title ?? fallbackTitle, body ?? ''));
         onMessage?.call();
       });
     } catch (_) {
@@ -121,8 +130,8 @@ class PushNotificationService {
   }
 
   /// Stops listening. Does not unregister the token: the row is re-pointed to
-  /// the next student who signs in on this phone, which is what stops an old
-  /// student's alerts from ringing a handed-over device.
+  /// the next account that signs in on this phone, which is what stops an old
+  /// account's alerts from ringing a handed-over device.
   Future<void> dispose() async {
     await _foregroundMessages?.cancel();
     await _tokenRefreshes?.cancel();
@@ -130,13 +139,17 @@ class PushNotificationService {
     _tokenRefreshes = null;
   }
 
-  Future<void> _register(String authToken, String deviceToken) async {
+  Future<void> _register(
+    String authToken,
+    String deviceToken,
+    String deviceTokenPath,
+  ) async {
     final httpClient = client ?? http.Client();
     final shouldCloseClient = client == null;
 
     try {
       await httpClient.post(
-        Uri.parse('${Environment.backendUrl}/notifications/device-token'),
+        Uri.parse('${Environment.backendUrl}$deviceTokenPath'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $authToken',

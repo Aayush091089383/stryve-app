@@ -541,6 +541,61 @@ class FcmToken(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class TeacherFcmToken(Base):
+    """One Firebase Cloud Messaging token owned by one teacher/admin account.
+
+    Kept separate from ``fcm_tokens`` (students) so the two audiences never
+    share a delivery list: a student's phone must not receive staff alerts and
+    a teacher's phone must not receive another class's attendance warnings.
+
+    The same physical device may legitimately appear in both tables - both
+    accounts are signed in on it - so registering a teacher token never deletes
+    a student row. A token is UNIQUE here for the same reason as the student
+    table: one FCM token rings exactly one install, so signing a different
+    teacher in on it re-points the row instead of duplicating it.
+    """
+
+    __tablename__ = "teacher_fcm_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    teacher_id = Column(Integer, ForeignKey("teachers.id"), nullable=False, index=True)
+
+    token = Column(String, unique=True, index=True, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class TeacherNotification(Base):
+    """One in-app message for one teacher/admin (the panel's bell feed).
+
+    Mirrors the student ``notifications`` table plus ``kind``/``ref_id``, which
+    let the panel distinguish a pending registration from a system note without
+    parsing the title. ``ref_id`` is the id of the thing that happened (the
+    student, the claim, ...) and is not a foreign key: the row is a historical
+    record and must survive the source being deleted.
+    """
+
+    __tablename__ = "teacher_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    teacher_id = Column(Integer, ForeignKey("teachers.id"), nullable=False, index=True)
+
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+
+    is_read = Column(Boolean, default=False, nullable=False)
+
+    # "registration", "general", ... - a client hint, never authorization.
+    kind = Column(String, nullable=False, default="general")
+    ref_id = Column(Integer, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    teacher = relationship("Teacher", foreign_keys=[teacher_id])
+
+
 class FreePeriodClaim(Base):
     """A period a teacher has claimed as free (no class of their own in it)."""
 

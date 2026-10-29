@@ -4667,6 +4667,541 @@ check(
     str(after_release["claims"]),
 )
 
+# ==========================================================================
+section("12. Teacher and event notifications (bell + push trigger points)")
+# ==========================================================================
+# Every trigger writes its durable bell row in the same transaction as the
+# action, then hands device tokens to FCM after the response. These checks
+# cover the audience rules: only absentees (never the whole class), only the
+# targeted year/division for an announcement, only the claimed class group for
+# a free period, and one row per event rather than one per read.
+
+# The earlier sections closed their connection; this section reads and writes
+# the same throwaway file, so open a fresh one rather than reuse a closed handle.
+conn = sqlite3.connect(DB_FILE)
+
+admin_id = conn.execute(
+    "SELECT id FROM teachers WHERE email='admin@campusync.edu'"
+).fetchone()[0]
+
+# --- teacher device token: idempotent, and re-pointed on a different account
+token_probe = "teacher-device-probe-token"
+first_token = requests.post(
+    f"{BASE}/teacher/notifications/device-token",
+    json={"token": token_probe},
+    headers=auth(smg_token),
+    timeout=10,
+)
+check(
+    "a teacher can register a device token",
+    first_token.status_code == 200 and first_token.json().get("registered") is True,
+    first_token.text[:160],
+)
+requests.post(
+    f"{BASE}/teacher/notifications/device-token",
+    json={"token": token_probe},
+    headers=auth(smg_token),
+    timeout=10,
+)
+check(
+    "registering the same token twice keeps one row",
+    conn.execute(
+        "SELECT COUNT(*) FROM teacher_fcm_tokens WHERE token=?", (token_probe,)
+    ).fetchone()[0]
+    == 1,
+)
+requests.post(
+    f"{BASE}/teacher/notifications/device-token",
+    json={"token": token_probe},
+    headers=auth(spk_token),
+    timeout=10,
+)
+check(
+    "a different teacher signing in on the device re-points the token",
+    conn.execute(
+        "SELECT teacher_id FROM teacher_fcm_tokens WHERE token=?", (token_probe,)
+    ).fetchone()[0]
+    == spk_id,
+)
+check(
+    "the device token is never echoed back",
+    token_probe not in first_token.text,
+    first_token.text[:160],
+)
+check(
+    "a student session cannot register a teacher device token -> 403",
+    requests.post(
+        f"{BASE}/teacher/notifications/device-token",
+        json={"token": "student-should-not-register"},
+        headers=auth(TOKENS["1"]),
+        timeout=10,
+    ).status_code
+    == 403,
+)
+
+# --- registration -> every active reviewer gets one bell row
+registered_rolls = {
+    row[0] for row in conn.execute("SELECT roll_number FROM students").fetchall()
+}
+probe_rolls = [
+    entry["roll_number"]
+    for entry in main.STUDENT_REGISTRY
+    if entry["roll_number"] not in registered_rolls
+    and entry["year"] == 1
+    and entry["division"] == "D"
+]
+check("a free registry roll is available for the registration probe", len(probe_rolls) >= 2, str(probe_rolls))
+approve_roll, reject_roll = probe_rolls[0], probe_rolls[1]
+
+registration = requests.post(
+    f"{BASE}/register",
+    json={
+        "roll_number": approve_roll,
+        "email": f"notice{approve_roll}@example.com",
+        "password": PASSWORD,
+        "confirm_password": PASSWORD,
+    },
+    timeout=10,
+)
+check(
+    "the notification probe student registered",
+    registration.status_code == 201,
+    registration.text[:200],
+)
+probe_student_id = registration.json().get("student_id")
+check(
+    "the pending student is stored",
+    conn.execute(
+        "SELECT status FROM students WHERE id=?", (probe_student_id,)
+    ).fetchone()[0]
+    == "pending",
+)
+
+reviewer_ids = {
+    row[0]
+    for row in conn.execute(
+        "SELECT id FROM teachers WHERE is_active=1 AND "
+        "(role='admin' OR can_approve_registrations=1)"
+    )
+}
+notified_reviewers = {
+    row[0]
+    for row in conn.execute(
+        "SELECT teacher_id FROM teacher_notifications "
+        "WHERE kind='registration' AND ref_id=?",
+        (probe_student_id,),
+    )
+}
+check(
+    "every active reviewer receives exactly one pending-registration notice",
+    notified_reviewers == reviewer_ids,
+    f"got={sorted(notified_reviewers)} expected={sorted(reviewer_ids)}",
+)
+check(
+    "an account without the permission is not notified as a reviewer",
+    conn.execute(
+        "SELECT COUNT(*) FROM teacher_notifications WHERE kind='registration' AND ref_id=?",
+        (probe_student_id,),
+    ).fetchone()[0]
+    == len(reviewer_ids),
+)
+notice_row = conn.execute(
+    "SELECT title, message, is_read FROM teacher_notifications "
+    "WHERE teacher_id=? ORDER BY id DESC LIMIT 1",
+    (admin_id,),
+).fetchone()
+check(
+    "the notice names the student and their roll number",
+    "New registration pending" in notice_row[0]
+    and approve_roll in notice_row[1]
+    and notice_row[2] == 0,
+    str(notice_row),
+)
+
+feed = requests.get(
+    f"{BASE}/teacher/notifications", headers=auth(admin_token), timeout=10
+)
+check(
+    "a teacher can read their bell feed",
+    feed.status_code == 200,
+    feed.text[:200],
+)
+feed_body = feed.json()
+check(
+    "the feed is newest first and carries the unread count",
+    [row["id"] for row in feed_body["notifications"]]
+    == sorted((row["id"] for row in feed_body["notifications"]), reverse=True)
+    and feed_body["unread_count"]
+    == sum(1 for row in feed_body["notifications"] if not row["is_read"]),
+    str(feed_body)[:300],
+)
+first_notice = feed_body["notifications"][0]
+check(
+    "the feed row carries its kind and ref id",
+    first_notice.get("kind") == "registration"
+    and first_notice.get("ref_id") == probe_student_id,
+    str(first_notice)[:200],
+)
+check(
+    "another teacher cannot mark this notice read -> 404",
+    requests.put(
+        f"{BASE}/teacher/notifications/{first_notice['id']}/read",
+        headers=auth(smg_token),
+        timeout=10,
+    ).status_code
+    == 404,
+)
+read_one = requests.put(
+    f"{BASE}/teacher/notifications/{first_notice['id']}/read",
+    headers=auth(admin_token),
+    timeout=10,
+)
+check(
+    "the owner can mark one notice read",
+    read_one.status_code == 200 and read_one.json().get("is_read") is True,
+    read_one.text[:200],
+)
+marked_all = requests.put(
+    f"{BASE}/teacher/notifications/read-all",
+    headers=auth(admin_token),
+    timeout=10,
+)
+check(
+    "mark-all-as-read clears the badge",
+    marked_all.status_code == 200
+    and requests.get(
+        f"{BASE}/teacher/notifications", headers=auth(admin_token), timeout=10
+    ).json()["unread_count"]
+    == 0,
+    marked_all.text[:200],
+)
+check(
+    "the teacher feed needs a staff session -> 401",
+    requests.get(f"{BASE}/teacher/notifications", timeout=10).status_code == 401,
+)
+
+# --- approval -> the student gets a welcome bell row
+approved = requests.post(
+    f"{BASE}/teacher/registrations/{probe_student_id}/approve",
+    json={},
+    headers=auth(admin_token),
+    timeout=10,
+)
+check("the probe student was approved", approved.status_code == 200, approved.text[:200])
+approval_rows = conn.execute(
+    "SELECT title, message, is_read FROM notifications WHERE student_id=?",
+    (probe_student_id,),
+).fetchall()
+check(
+    "the student receives the welcome notice",
+    any("approved" in row[0].lower() and "Welcome" in row[1] for row in approval_rows)
+    and all(row[2] == 0 for row in approval_rows),
+    str(approval_rows),
+)
+
+# --- rejection -> the student gets the reason
+rejected_registration = requests.post(
+    f"{BASE}/register",
+    json={
+        "roll_number": reject_roll,
+        "email": f"notice{reject_roll}@example.com",
+        "password": PASSWORD,
+        "confirm_password": PASSWORD,
+    },
+    timeout=10,
+)
+reject_id = rejected_registration.json().get("student_id")
+rejected = requests.post(
+    f"{BASE}/teacher/registrations/{reject_id}/reject",
+    json={"reason": "Documents incomplete"},
+    headers=auth(admin_token),
+    timeout=10,
+)
+check("the probe student was rejected", rejected.status_code == 200, rejected.text[:200])
+reject_rows = conn.execute(
+    "SELECT title, message FROM notifications WHERE student_id=?",
+    (reject_id,),
+).fetchall()
+check(
+    "the rejection notice carries the reason",
+    any("Documents incomplete" in row[1] for row in reject_rows),
+    str(reject_rows),
+)
+
+# --- attendance -> only absentees, and only the student whose mark flipped
+att_date = main._college_today().isoformat()
+att_subject = "Notification probe"
+att_rolls = [
+    row[0]
+    for row in conn.execute(
+        "SELECT roll_number FROM students WHERE division='D' AND batch='D-3' "
+        "AND status='approved' ORDER BY CAST(roll_number AS INTEGER) LIMIT 2"
+    )
+]
+check("two D-3 students exist for the attendance probe", len(att_rolls) == 2, str(att_rolls))
+present_roll, absent_roll = att_rolls[0], att_rolls[1]
+
+def attendance_sheet(present_status, absent_status):
+    return {
+        "subject": att_subject,
+        "division": "D",
+        "batch": "D-3",
+        "session_date": att_date,
+        "slot_start": "11:15",
+        "slot_end": "12:15",
+        "records": [
+            {"roll_number": present_roll, "status": present_status},
+            {"roll_number": absent_roll, "status": absent_status},
+        ],
+    }
+
+saved_sheet = requests.post(
+    f"{BASE}/teacher/attendance",
+    json=attendance_sheet("present", "absent"),
+    headers=auth(admin_token),
+    timeout=10,
+)
+check(
+    "the attendance probe saved",
+    saved_sheet.status_code == 200,
+    saved_sheet.text[:200],
+)
+att_absence_title = "Marked absent"
+absent_rows = conn.execute(
+    "SELECT student_id, message FROM notifications WHERE title=? AND message LIKE ?",
+    (att_absence_title, f"%{att_subject}%{att_date}%11:15-12:15%absent%"),
+).fetchall()
+absent_student_ids = {row[0] for row in absent_rows}
+check(
+    "only the student marked absent is notified",
+    len(absent_student_ids) == 1
+    and conn.execute(
+        "SELECT s.roll_number FROM notifications n JOIN students s ON s.id=n.student_id "
+        "WHERE n.id=(SELECT MAX(id) FROM notifications WHERE title=?)",
+        (att_absence_title,),
+    ).fetchone()[0]
+    == absent_roll,
+    str(absent_rows),
+)
+absent_student_id = absent_rows[0][0]
+check(
+    "the message names the subject, date and slot",
+    absent_rows
+    and att_subject in absent_rows[0][1]
+    and att_date in absent_rows[0][1]
+    and "11:15-12:15" in absent_rows[0][1],
+    str(absent_rows)[:250],
+)
+
+requests.post(
+    f"{BASE}/teacher/attendance",
+    json=attendance_sheet("present", "absent"),
+    headers=auth(admin_token),
+    timeout=10,
+)
+check(
+    "saving the unchanged sheet again does not duplicate the bell row",
+    conn.execute(
+        "SELECT COUNT(*) FROM notifications WHERE title=? AND message LIKE ?",
+        (att_absence_title, f"%{att_subject}%{att_date}%absent%"),
+    ).fetchone()[0]
+    == 1,
+)
+
+absent_record_id = conn.execute(
+    "SELECT id FROM attendance_records WHERE roll_number=? AND subject=? "
+    "AND session_date=? AND slot_start='11:15'",
+    (absent_roll, att_subject, att_date),
+).fetchone()[0]
+flipped = requests.patch(
+    f"{BASE}/teacher/attendance/record/{absent_record_id}",
+    json={"status": "present"},
+    headers=auth(admin_token),
+    timeout=10,
+)
+check("the attendance probe flipped", flipped.status_code == 200, flipped.text[:200])
+check(
+    "the flipped student is told about the new status",
+    conn.execute(
+        "SELECT COUNT(*) FROM notifications WHERE student_id=? AND title='Attendance updated' "
+        "AND message LIKE '%now marked present%'",
+        (absent_student_id,),
+    ).fetchone()[0]
+    == 1,
+)
+
+# --- announcements -> one bell row per matching approved student
+announcement_title = "Notification probe announcement"
+targeted = requests.post(
+    f"{BASE}/teacher/announcements",
+    data={
+        "title": announcement_title,
+        "message": "Division D only.",
+        "year": "1",
+        "division": "D",
+    },
+    headers=auth(admin_token),
+    timeout=10,
+)
+check(
+    "the targeted announcement was posted",
+    targeted.status_code == 201,
+    targeted.text[:200],
+)
+
+def bell_counts(message):
+    return {
+        row[0]: row[1]
+        for row in conn.execute(
+            "SELECT s.roll_number, COUNT(*) FROM notifications n "
+            "JOIN students s ON s.id=n.student_id WHERE n.message=? GROUP BY s.roll_number",
+            (message,),
+        )
+    }
+
+approved_d = {
+    row[0]
+    for row in conn.execute(
+        "SELECT roll_number FROM students WHERE year=1 AND division='D' AND status='approved'"
+    )
+}
+# Keyed by account id, not roll: a roll is unique per real student, but the
+# throwaway database deliberately contains both an account and a roster-style
+# row for some rolls, and both are separate recipients.
+approved_d_recipients = {
+    row[0]
+    for row in conn.execute(
+        "SELECT id FROM students WHERE division='D' AND status='approved'"
+    )
+}
+targeted_counts = bell_counts(announcement_title)
+check(
+    "every approved Division D student gets exactly one bell row",
+    set(targeted_counts) == approved_d
+    and all(count == 1 for count in targeted_counts.values()),
+    f"got={sorted(targeted_counts)} expected={sorted(approved_d)}",
+)
+check(
+    "another division gets none of the targeted announcement",
+    len(targeted_counts) == len(approved_d),
+    f"got={sorted(targeted_counts)}",
+)
+
+untargeted_title = "Notification probe everyone"
+untargeted = requests.post(
+    f"{BASE}/teacher/announcements",
+    data={"title": untargeted_title, "message": "Everyone."},
+    headers=auth(admin_token),
+    timeout=10,
+)
+check("the untargeted announcement was posted", untargeted.status_code == 201, untargeted.text[:200])
+all_approved = {
+    row[0]
+    for row in conn.execute(
+        "SELECT roll_number FROM students WHERE status='approved'"
+    )
+}
+untargeted_counts = bell_counts(untargeted_title)
+check(
+    "an untargeted announcement reaches every approved student once",
+    set(untargeted_counts) == all_approved
+    and all(count == 1 for count in untargeted_counts.values()),
+    f"got={sorted(untargeted_counts)} expected={sorted(all_approved)}",
+)
+
+# --- free period claim/release -> the class group that can see the change
+# Three weeks out, on a day the timetable actually has a free period: far
+# enough that no earlier section's claim can sit in the slot, near enough that
+# the claim is still for a real RELM period.
+free_day = TODAY + timedelta(days=21)
+while free_day.strftime("%A") not in RELM_DAY_NAMES:
+    free_day += timedelta(days=1)
+free_date = free_day.strftime("%Y-%m-%d")
+free_view = requests.get(
+    f"{BASE}/teacher/free-periods?date={free_date}",
+    headers=auth(smg_token),
+    timeout=10,
+).json()
+whole_slot = next(
+    (
+        slot
+        for slot in free_view["slots"]
+        if slot["batch"] == "" and slot["eligible"]
+    ),
+    None,
+)
+check(
+    "a whole-division free period is available for the claim probe",
+    whole_slot is not None,
+    str(free_view["slots"])[:300],
+)
+# The bell message names the weekday and slot but not the calendar date, so an
+# earlier section's claim on another Thursday would match the same text. The
+# probe is scoped by its own start time to keep the assertion about THIS claim.
+claim_probe_started = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")
+claim_probe = requests.post(
+    f"{BASE}/teacher/free-periods/claim",
+    json={
+        "day": free_view["day"],
+        "start_time": whole_slot["start_time"],
+        "end_time": whole_slot["end_time"],
+        "division": "D",
+        "batch": "",
+        "claim_date": free_date,
+        "subject": "M-1",
+    },
+    headers=auth(smg_token),
+    timeout=10,
+)
+check("the free-period claim probe succeeded", claim_probe.status_code == 201, claim_probe.text[:200])
+claim_message_fragment = f"{free_view['day']}, {whole_slot['start_time']}-{whole_slot['end_time']} is now free"
+claim_rows = {
+    row[0]: row[1]
+    for row in conn.execute(
+        "SELECT student_id, COUNT(*) FROM notifications "
+        "WHERE title='Free period claimed' AND message LIKE ? "
+        "AND created_at >= ? GROUP BY student_id",
+        (f"%{claim_message_fragment}%", claim_probe_started),
+    )
+}
+check(
+    "the whole-division claim reaches every approved Division D student",
+    set(claim_rows) == approved_d_recipients
+    and all(count == 1 for count in claim_rows.values()),
+    f"got={sorted(claim_rows)} expected={sorted(approved_d_recipients)}",
+)
+check(
+    "another division is not told about the claim",
+    len(claim_rows) == len(approved_d_recipients),
+    f"got={sorted(claim_rows)}",
+)
+
+release_probe_started = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")
+released_probe = requests.delete(
+    f"{BASE}/teacher/free-periods/claims/{claim_probe.json()['id']}",
+    headers=auth(smg_token),
+    timeout=10,
+)
+check("the free-period claim probe was released", released_probe.status_code == 200, released_probe.text[:200])
+release_rows = {
+    row[0]: row[1]
+    for row in conn.execute(
+        "SELECT student_id, COUNT(*) FROM notifications "
+        "WHERE title='Free period released' AND message LIKE ? "
+        "AND created_at >= ? GROUP BY student_id",
+        (
+            f"%{free_view['day']}, {whole_slot['start_time']}-{whole_slot['end_time']}%",
+            release_probe_started,
+        ),
+    )
+}
+check(
+    "the release reaches the same class group once",
+    set(release_rows) == approved_d_recipients
+    and all(count == 1 for count in release_rows.values()),
+    f"got={sorted(release_rows)} expected={sorted(approved_d_recipients)}",
+)
+
 real_stamp_end = (
     (REAL_DB.stat().st_size, REAL_DB.stat().st_mtime_ns) if REAL_DB.exists() else None
 )

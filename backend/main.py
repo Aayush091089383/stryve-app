@@ -2,6 +2,7 @@ import csv
 import io
 import re
 import uuid
+from collections.abc import Iterable
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -106,6 +107,8 @@ from schemas import (
     ScheduleChangesResponse,
     AdminScheduleChangeOut,
     AdminScheduleChangesOut,
+    TeacherNotificationOut,
+    TeacherNotificationsOut,
     FreePeriodSlotOut,
     FacultyOut,
     LabRoomOut,
@@ -296,7 +299,11 @@ def health():
 
 
 @app.post("/register", status_code=status.HTTP_201_CREATED, response_model=StudentRegisterResponse)
-def register_student(student: StudentRegister, db: Session = Depends(get_db)):
+def register_student(
+    student: StudentRegister,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """
     Register a new student account.
 
@@ -373,20 +380,53 @@ def register_student(student: StudentRegister, db: Session = Depends(get_db)):
         status="pending",  # New registrations are pending approval
     )
 
+    notice_title = "New registration pending"
+    notice_message = (
+        f"{new_student.name} (roll {new_student.roll_number}) is waiting "
+        "for approval."
+    )
+
     try:
         db.add(new_student)
+        # The id is needed by the notice below; still one transaction, so a
+        # duplicate registration rolls the notice back with it.
+        db.flush()
+
+        reviewer_ids = _active_reviewer_ids(db)
+        _add_teacher_bells(
+            db,
+            reviewer_ids,
+            notice_title,
+            notice_message,
+            kind="registration",
+            ref_id=new_student.id,
+        )
+
         db.commit()
         db.refresh(new_student)
-
-        return StudentRegisterResponse(
-            message="Registration submitted for approval. You will be notified once approved.",
-            student_id=new_student.id,
-            status=new_student.status,
-        )
     except IntegrityError:
         db.rollback()
         # Race condition - another registration happened simultaneously
         raise DuplicateEmailError("Registration conflict - please try again")
+
+    # Push after the response: a slow or unconfigured Firebase must not delay a
+    # student's registration. The bell rows above are the durable record.
+    reviewer_tokens = _push_tokens_for_teachers(db, reviewer_ids)
+    if reviewer_tokens:
+        background.add_task(
+            _deliver_push,
+            reviewer_tokens,
+            notice_title,
+            notice_message,
+            {"type": "registration", "student_id": new_student.id},
+            teacher_tokens=True,
+        )
+
+    return StudentRegisterResponse(
+        message="Registration submitted for approval. You will be notified once approved.",
+        student_id=new_student.id,
+        status=new_student.status,
+    )
 
 
 # ------------------------------------------------------------------
@@ -768,6 +808,7 @@ def get_pending_registrations(
 def approve_registration(
     student_id: int,
     request: ApproveRequest,
+    background: BackgroundTasks,
     teacher: models.Teacher = Depends(require_registration_reviewer),
     db: Session = Depends(get_db)
 ):
@@ -794,7 +835,24 @@ def approve_registration(
     student.approved_by = teacher.id
     student.approved_at = datetime.utcnow()
     student.rejection_reason = None
+
+    notice_title = "Account approved 🎉"
+    notice_message = (
+        "Welcome to Stryve! You can now log in and see your timetable."
+    )
+    # Same transaction as the status change: a student is never approved
+    # without the welcome notice, and a failed commit keeps neither.
+    _add_student_bells(db, [student], notice_title, notice_message)
     db.commit()
+
+    _schedule_student_push(
+        background,
+        db,
+        [student.id],
+        notice_title,
+        notice_message,
+        {"type": "approved", "student_id": student.id},
+    )
 
     return ApprovalActionResponse(
         message="Student registration approved",
@@ -807,6 +865,7 @@ def approve_registration(
 def reject_registration(
     student_id: int,
     request: RejectRequest,
+    background: BackgroundTasks,
     teacher: models.Teacher = Depends(require_registration_reviewer),
     db: Session = Depends(get_db)
 ):
@@ -833,7 +892,23 @@ def reject_registration(
     student.approved_by = teacher.id
     student.approved_at = datetime.utcnow()
     student.rejection_reason = request.reason
+
+    notice_title = "Registration update"
+    reason = (request.reason or "").strip()
+    notice_message = "Your registration was not approved."
+    if reason:
+        notice_message = f"{notice_message} Reason: {reason}"
+    _add_student_bells(db, [student], notice_title, notice_message)
     db.commit()
+
+    _schedule_student_push(
+        background,
+        db,
+        [student.id],
+        notice_title,
+        notice_message,
+        {"type": "rejected", "student_id": student.id},
+    )
 
     return ApprovalActionResponse(
         message="Student registration rejected",
@@ -1117,6 +1192,301 @@ def mark_notification_read(
 
 
 # ==================================================================
+# Notification writers shared by every trigger
+# ==================================================================
+# The durable in-app row is written in the same transaction as the action it
+# describes; the FCM hand-off happens afterwards, in a background task. A push
+# failure can never undo, delay or duplicate the action itself - the bell is
+# the record and the tray is only a convenience.
+
+
+def _active_reviewer_ids(db: Session) -> list[int]:
+    """Admins and teachers who may act on a pending registration.
+
+    Inactive accounts are excluded: deactivating a teacher must stop their
+    phone from buzzing about work they can no longer do.
+    """
+    rows = (
+        db.query(models.Teacher.id)
+        .filter(
+            models.Teacher.is_active.is_(True),
+            or_(
+                models.Teacher.role == "admin",
+                models.Teacher.can_approve_registrations.is_(True),
+            ),
+        )
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+def _approved_students(
+    db: Session,
+    *,
+    year: int | None = None,
+    division: str | None = None,
+    batch: str = "",
+) -> list[models.Student]:
+    """Approved students matching the audience filters, in one query.
+
+    ``batch`` is compared after normalisation so "D-3" and "D3" both match; an
+    empty batch means the whole division. Unapproved accounts are never part of
+    an audience - they cannot log in to read the bell yet.
+    """
+    query = db.query(models.Student).filter(
+        models.Student.status == models.StudentStatus.approved
+    )
+    if year is not None:
+        query = query.filter(models.Student.year == year)
+    if division:
+        query = query.filter(
+            models.Student.division == (division or "").strip().upper()
+        )
+
+    students = query.all()
+    wanted = _normalise_batch(batch)
+    if wanted:
+        students = [
+            student
+            for student in students
+            if _normalise_batch(student.batch) == wanted
+        ]
+    return students
+
+
+def _add_student_bells(
+    db: Session,
+    students: Iterable[models.Student],
+    title: str,
+    message: str,
+    *,
+    created_at: datetime | None = None,
+) -> None:
+    """Queue one bell row per student (no commit; the caller commits)."""
+    when = created_at or datetime.utcnow()
+    for student in students:
+        db.add(
+            models.Notification(
+                student_id=student.id,
+                title=title,
+                message=message,
+                is_read=False,
+                created_at=when,
+            )
+        )
+
+
+def _add_teacher_bells(
+    db: Session,
+    teacher_ids: Iterable[int],
+    title: str,
+    message: str,
+    *,
+    kind: str = "general",
+    ref_id: int | None = None,
+    created_at: datetime | None = None,
+) -> None:
+    """Queue one bell row per teacher (no commit; the caller commits)."""
+    when = created_at or datetime.utcnow()
+    seen: set[int] = set()
+    for teacher_id in teacher_ids:
+        if teacher_id in seen:
+            continue
+        seen.add(teacher_id)
+        db.add(
+            models.TeacherNotification(
+                teacher_id=teacher_id,
+                title=title,
+                message=message,
+                is_read=False,
+                kind=kind,
+                ref_id=ref_id,
+                created_at=when,
+            )
+        )
+
+
+def _push_tokens_for_teachers(db: Session, teacher_ids: list[int]) -> list[str]:
+    """Every registered device token belonging to ``teacher_ids``."""
+    if not teacher_ids:
+        return []
+    rows = (
+        db.query(models.TeacherFcmToken.token)
+        .filter(models.TeacherFcmToken.teacher_id.in_(teacher_ids))
+        .all()
+    )
+    return [row[0] for row in rows if row[0]]
+
+
+def _deliver_push(
+    tokens: list[str],
+    title: str,
+    body: str,
+    data: dict,
+    *,
+    teacher_tokens: bool = False,
+) -> None:
+    """Background job: send the tray alert and prune dead tokens.
+
+    Runs after the response, in its own short-lived session. Every failure is
+    swallowed: the in-app row is already committed and is what the bell shows.
+    """
+    try:
+        result = firebase_service.send_push_notification(
+            tokens, title, body, data=data
+        )
+    except Exception:
+        return
+
+    if not result.invalid_tokens:
+        return
+
+    db = SessionLocal()
+    try:
+        model = (
+            models.TeacherFcmToken if teacher_tokens else models.FcmToken
+        )
+        db.query(model).filter(
+            model.token.in_(result.invalid_tokens)
+        ).delete(synchronize_session=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+def _schedule_student_push(
+    background: BackgroundTasks,
+    db: Session,
+    student_ids: list[int],
+    title: str,
+    message: str,
+    data: dict,
+) -> None:
+    """Queue one push to the devices of ``student_ids`` (no-op without tokens)."""
+    tokens = _push_tokens_for_students(db, student_ids)
+    if tokens:
+        background.add_task(_deliver_push, tokens, title, message, data)
+
+
+@app.post("/teacher/notifications/device-token", response_model=DeviceTokenOut)
+def register_teacher_device_token(
+    payload: DeviceTokenRegister,
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Remember this device's Firebase token for the signed-in teacher.
+
+    Same idempotency and hand-over rule as the student endpoint: a token is a
+    device, so signing a different teacher in on it re-points the row instead of
+    creating a second delivery address.
+    """
+    row = (
+        db.query(models.TeacherFcmToken)
+        .filter(models.TeacherFcmToken.token == payload.token)
+        .first()
+    )
+
+    if row is None:
+        db.add(
+            models.TeacherFcmToken(
+                teacher_id=teacher.id,
+                token=payload.token,
+                created_at=datetime.utcnow(),
+            )
+        )
+    elif row.teacher_id != teacher.id:
+        row.teacher_id = teacher.id
+        row.created_at = datetime.utcnow()
+
+    db.commit()
+    return DeviceTokenOut(registered=True)
+
+
+@app.get("/teacher/notifications", response_model=TeacherNotificationsOut)
+def list_teacher_notifications(
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """The caller's bell feed, newest first, with the unread count.
+
+    Scoped by the authenticated account, never by a client-supplied id.
+    """
+    rows = (
+        db.query(models.TeacherNotification)
+        .filter(models.TeacherNotification.teacher_id == teacher.id)
+        .order_by(
+            models.TeacherNotification.created_at.desc(),
+            models.TeacherNotification.id.desc(),
+        )
+        .all()
+    )
+    return TeacherNotificationsOut(
+        notifications=rows,
+        unread_count=sum(1 for row in rows if not row.is_read),
+    )
+
+
+@app.put("/teacher/notifications/read-all")
+def mark_all_teacher_notifications_read(
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Mark every unread notification of the caller as read (idempotent)."""
+    marked = (
+        db.query(models.TeacherNotification)
+        .filter(
+            models.TeacherNotification.teacher_id == teacher.id,
+            models.TeacherNotification.is_read.is_(False),
+        )
+        .update(
+            {models.TeacherNotification.is_read: True},
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+    return {"message": "Notifications marked as read", "marked_read": marked}
+
+
+@app.put(
+    "/teacher/notifications/{notification_id}/read",
+    response_model=TeacherNotificationOut,
+)
+def mark_teacher_notification_read(
+    notification_id: int,
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Mark one of the caller's notifications as read (idempotent).
+
+    Somebody else's row answers 404, not 403: whether another account has a
+    notification with that id is not this caller's business.
+    """
+    row = (
+        db.query(models.TeacherNotification)
+        .filter(
+            models.TeacherNotification.id == notification_id,
+            models.TeacherNotification.teacher_id == teacher.id,
+        )
+        .first()
+    )
+
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found",
+        )
+
+    if not row.is_read:
+        row.is_read = True
+        db.commit()
+        db.refresh(row)
+
+    return row
+
+
+# ==================================================================
 # Announcements - a teacher posts, the whole class group (or everyone) reads.
 # ==================================================================
 # The seven subjects of Division D's first-year sheet. The portal and the app
@@ -1139,6 +1509,7 @@ ANNOUNCEMENT_SUBJECTS = (
     status_code=status.HTTP_201_CREATED,
 )
 def create_announcement(
+    background: BackgroundTasks,
     title: str = Form(...),
     message: str = Form(...),
     year: int | None = Form(None),
@@ -1252,8 +1623,20 @@ def create_announcement(
         for _stored_path, stored_name, original_name, size in stored_files
     ]
 
+    # Audience for both channels: approved students in the target year and
+    # division, or every approved student when neither filter is set. The bell
+    # rows commit with the announcement, so a notice never exists without them.
+    audience = _approved_students(
+        db, year=year, division=clean_division or None
+    )
+    notice_title = "New announcement"
+    notice_message = clean_title
+    if clean_subject:
+        notice_message = f"{clean_title} · {clean_subject}"
+
     try:
         db.add(announcement)
+        _add_student_bells(db, audience, notice_title, notice_message)
         db.commit()
         db.refresh(announcement)
     except IntegrityError:
@@ -1264,6 +1647,15 @@ def create_announcement(
             status_code=status.HTTP_409_CONFLICT,
             detail="Could not save the announcement - please try again",
         )
+
+    _schedule_student_push(
+        background,
+        db,
+        [student.id for student in audience],
+        notice_title,
+        notice_message,
+        {"type": "announcement", "announcement_id": announcement.id},
+    )
 
     return announcement
 
@@ -2153,6 +2545,7 @@ def get_attendance(
 @app.post("/teacher/attendance", response_model=AttendanceSaveResponse)
 def save_attendance(
     payload: AttendanceSaveRequest,
+    background: BackgroundTasks,
     teacher: models.Teacher = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
@@ -2213,6 +2606,12 @@ def save_attendance(
     created = 0
     corrected = 0
 
+    # Only absentees ring - never the whole class - and a correction rings the
+    # one student whose mark actually changed. Saving an unchanged sheet again
+    # therefore writes no second notification.
+    absent_students: list[models.Student] = []
+    flipped: list[tuple[models.Student, str]] = []
+
     for record, roll, student in resolved:
         existing = db.query(models.AttendanceRecord).filter(
             models.AttendanceRecord.roll_number == roll,
@@ -2234,6 +2633,8 @@ def save_attendance(
                 existing.updated_at = now
                 if student is not None:
                     existing.student_id = student.id
+                    if record.status == "absent":
+                        absent_students.append(student)
                 created += 1
                 continue
 
@@ -2246,6 +2647,8 @@ def save_attendance(
                 existing.updated_by = teacher.id
                 existing.updated_at = now
                 corrected += 1
+                if student is not None:
+                    flipped.append((student, record.status))
             elif existing.updated_at is not None or existing.updated_by is not None:
                 # unchanged correction request: leave the audit trail alone
                 pass
@@ -2266,7 +2669,37 @@ def save_attendance(
                 marked_at=now,
             )
         )
+        if record.status == "absent" and student is not None:
+            absent_students.append(student)
         created += 1
+
+    slot_label = f"{payload.slot_start}-{payload.slot_end}"
+    absent_title = "Marked absent"
+    absent_message = (
+        f"{subject} on {session_date} ({slot_label}): you were marked absent."
+    )
+    if absent_students:
+        _add_student_bells(
+            db,
+            absent_students,
+            absent_title,
+            absent_message,
+            created_at=now,
+        )
+
+    flipped_title = "Attendance updated"
+    flipped_messages = [
+        (
+            student,
+            f"{subject} on {session_date} ({slot_label}): you are now marked "
+            f"{status}.",
+        )
+        for student, status in flipped
+    ]
+    for student, text in flipped_messages:
+        _add_student_bells(
+            db, [student], flipped_title, text, created_at=now
+        )
 
     try:
         db.commit()
@@ -2275,6 +2708,34 @@ def save_attendance(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Attendance for this lecture was saved by another request",
+        )
+
+    if absent_students:
+        _schedule_student_push(
+            background,
+            db,
+            [student.id for student in absent_students],
+            absent_title,
+            absent_message,
+            {
+                "type": "attendance",
+                "subject": subject,
+                "date": session_date,
+            },
+        )
+
+    for student, text in flipped_messages:
+        _schedule_student_push(
+            background,
+            db,
+            [student.id],
+            flipped_title,
+            text,
+            {
+                "type": "attendance",
+                "subject": subject,
+                "date": session_date,
+            },
         )
 
     return AttendanceSaveResponse(
@@ -2574,6 +3035,7 @@ def list_attendance_students(
 @app.post("/teacher/attendance/submit", response_model=AttendanceSubmitResponse)
 def submit_attendance(
     payload: AttendanceSubmitRequest,
+    background: BackgroundTasks,
     teacher: models.Teacher = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
@@ -2605,6 +3067,7 @@ def submit_attendance(
             slot_end=slot_end,
             records=payload.records,
         ),
+        background,
         teacher,
         db,
     )
@@ -2979,6 +3442,7 @@ def get_attendance_session(
 def update_attendance_record(
     record_id: int,
     payload: AttendanceRecordUpdate,
+    background: BackgroundTasks,
     teacher: models.Teacher = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
@@ -3031,11 +3495,46 @@ def update_attendance_record(
                 ),
             )
 
+    student = row.student
     if row.status != payload.status:
         row.status = payload.status
         row.updated_at = datetime.utcnow()
         row.updated_by = teacher.id
+
+        # The student whose mark actually changed hears about it: one durable
+        # bell row commits with the correction, and the tray alert follows the
+        # response. A no-op tap (same status) writes nothing, so re-opening a
+        # session and saving it again cannot spam the class.
+        if student is not None:
+            notice_title = "Attendance updated"
+            notice_message = (
+                f"{row.subject} on {row.session_date} "
+                f"({row.slot_start}-{row.slot_end}): you are now marked "
+                f"{row.status}."
+            )
+            _add_student_bells(
+                db,
+                [student],
+                notice_title,
+                notice_message,
+                created_at=row.updated_at,
+            )
+
         db.commit()
+
+        if student is not None:
+            _schedule_student_push(
+                background,
+                db,
+                [student.id],
+                notice_title,
+                notice_message,
+                {
+                    "type": "attendance",
+                    "subject": row.subject,
+                    "date": row.session_date,
+                },
+            )
 
     roll, name, _ = _attendance_row_identity(
         db, row, division=row.division, batch=row.batch
@@ -3867,6 +4366,7 @@ def list_my_claims(
 )
 def claim_free_period(
     payload: FreePeriodClaimRequest,
+    background: BackgroundTasks,
     teacher: models.Teacher = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
@@ -3959,6 +4459,19 @@ def claim_free_period(
     )
     db.add(row)
 
+    # The audience mirrors who can actually see the change: a whole-division
+    # claim reaches the division, a batch practical only its own batch.
+    audience = _approved_students(
+        db, division=row.division, batch=batch
+    )
+    notice_title = "Free period claimed"
+    notice_message = f"{day}, {payload.start_time}-{payload.end_time} is now free"
+    if batch:
+        notice_message = f"{notice_message} ({batch})"
+    if (payload.subject or "").strip():
+        notice_message = f"{notice_message} · {payload.subject.strip()}"
+    _add_student_bells(db, audience, notice_title, notice_message)
+
     try:
         db.commit()
     except IntegrityError:
@@ -3969,12 +4482,23 @@ def claim_free_period(
         )
 
     db.refresh(row)
+
+    _schedule_student_push(
+        background,
+        db,
+        [student.id for student in audience],
+        notice_title,
+        notice_message,
+        {"type": "free_period", "claim_id": row.id},
+    )
+
     return row
 
 
 @app.delete("/teacher/free-periods/claims/{claim_id}")
 def release_free_period(
     claim_id: int,
+    background: BackgroundTasks,
     teacher: models.Teacher = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
@@ -3994,8 +4518,28 @@ def release_free_period(
             detail="You can only release your own claimed periods",
         )
 
+    audience = _approved_students(
+        db, division=row.division, batch=row.batch or ""
+    )
+    notice_title = "Free period released"
+    notice_message = (
+        f"{row.day}, {row.start_time}-{row.end_time} is no longer a claimed "
+        "free period."
+    )
+    _add_student_bells(db, audience, notice_title, notice_message)
+
     db.delete(row)
     db.commit()
+
+    _schedule_student_push(
+        background,
+        db,
+        [student.id for student in audience],
+        notice_title,
+        notice_message,
+        {"type": "free_period_released", "claim_id": claim_id},
+    )
+
     return {"message": "Claim released", "claim_id": claim_id}
 
 

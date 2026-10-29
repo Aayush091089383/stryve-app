@@ -881,6 +881,28 @@ class DeviceTokenOut(BaseModel):
     registered: bool
 
 
+class TeacherNotificationOut(BaseModel):
+    """One notification in a teacher's/admin's bell feed."""
+
+    id: int
+    title: str
+    message: str
+    is_read: bool
+    kind: str = "general"
+    ref_id: int | None = None
+    created_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class TeacherNotificationsOut(BaseModel):
+    """A teacher's feed plus the count the bell badge shows."""
+
+    notifications: list[TeacherNotificationOut]
+    unread_count: int
+
+
 # ======================================================================
 # Announcements (teacher posts a notice, students read the feed)
 # ======================================================================

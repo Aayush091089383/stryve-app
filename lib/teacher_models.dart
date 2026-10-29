@@ -47,7 +47,8 @@ class TeacherAccount {
       role: ((json['role'] as String?) ?? 'teacher').trim(),
       isActive: json['is_active'] as bool? ?? true,
       shortCode: (code == null || code.isEmpty) ? null : code,
-      canReviewRegistrations: json['can_review_registrations'] as bool? ?? false,
+      canReviewRegistrations:
+          json['can_review_registrations'] as bool? ?? false,
       plainPassword: (json['plain_password'] as String?)?.isEmpty == true
           ? null
           : json['plain_password'] as String?,
@@ -309,7 +310,8 @@ class FreePeriodAvailability {
       day: (json['day'] as String?)?.trim() ?? '',
       teacherShortCode: (json['teacher_short_code'] as String?)?.trim(),
       canClaimFreePeriods: json['can_claim_free_periods'] as bool? ?? false,
-      hasVerifiedAssignments: json['has_verified_assignments'] as bool? ?? false,
+      hasVerifiedAssignments:
+          json['has_verified_assignments'] as bool? ?? false,
       message: (json['message'] as String?)?.trim(),
       slots: rawSlots is List
           ? rawSlots
@@ -382,3 +384,65 @@ class AssignmentRecord {
     );
   }
 }
+
+/// One row of the teacher's bell feed (`GET /teacher/notifications`).
+///
+/// The endpoint is already scoped to the authenticated account, so the row
+/// carries no recipient id - only what the panel displays. [kind] is the
+/// event that produced it (registration, attendance, free period, ...), which
+/// the page uses to pick an icon, never to grant anything.
+class TeacherNotification {
+  const TeacherNotification({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.isRead,
+    this.kind = 'general',
+    this.refId,
+    this.createdAt,
+  });
+
+  final int id;
+  final String title;
+  final String message;
+  final bool isRead;
+  final String kind;
+  final int? refId;
+  final DateTime? createdAt;
+
+  factory TeacherNotification.fromJson(Map<String, dynamic> json) {
+    final rawCreatedAt = json['created_at'];
+    final rawKind = (json['kind'] as String?)?.trim();
+
+    return TeacherNotification(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      title: (json['title'] as String?)?.trim().isNotEmpty == true
+          ? (json['title'] as String).trim()
+          : 'Notification',
+      message: (json['message'] as String?) ?? '',
+      // Our own API always sends a bool; anything else is treated as unread, so
+      // a malformed row cannot silently hide the badge.
+      isRead: json['is_read'] == true,
+      kind: (rawKind == null || rawKind.isEmpty) ? 'general' : rawKind,
+      refId: (json['ref_id'] as num?)?.toInt(),
+      createdAt: rawCreatedAt is String
+          ? DateTime.tryParse(rawCreatedAt)
+          : null,
+    );
+  }
+
+  TeacherNotification copyWith({bool? isRead}) => TeacherNotification(
+    id: id,
+    title: title,
+    message: message,
+    isRead: isRead ?? this.isRead,
+    kind: kind,
+    refId: refId,
+    createdAt: createdAt,
+  );
+}
+
+/// Number of unread rows in a teacher feed, shared by the bell badge and the
+/// page so they can never disagree about what "unread" means.
+int unreadTeacherNotificationCount(List<TeacherNotification> notifications) =>
+    notifications.where((notification) => !notification.isRead).length;

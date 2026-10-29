@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'claim_free_period_page.dart';
 import 'config/environment.dart';
+import 'services/push_notification_service.dart';
 import 'services/teacher_auth_service.dart';
 import 'teacher_announcements_page.dart';
 import 'teacher_approvals_page.dart';
@@ -13,6 +15,7 @@ import 'teacher_attendance_page.dart';
 import 'teacher_login_page.dart';
 import 'teacher_management_page.dart';
 import 'teacher_models.dart';
+import 'teacher_notifications_page.dart';
 import 'teacher_profile_page.dart';
 import 'utils/animated_count_badge.dart';
 import 'utils/glass_container.dart';
@@ -37,14 +40,21 @@ export 'teacher_models.dart';
 /// permission the server would refuse - approvals still need
 /// `can_approve_registrations` on the account (admins always have it).
 class TeacherPanelPage extends StatefulWidget {
-  const TeacherPanelPage({super.key, this.authService, this.client});
+  const TeacherPanelPage({
+    super.key,
+    this.authService,
+    this.client,
+    this.pushNotifications,
+  });
 
   /// Optional injected services, used by tests.
   ///
-  /// Production leaves both null: the page then uses the real
-  /// [TeacherAuthService] (secure storage) and a short-lived `http.Client`.
+  /// Production leaves all of them null: the page then uses the real
+  /// [TeacherAuthService] (secure storage), a short-lived `http.Client` and the
+  /// real [PushNotificationService].
   final TeacherAuthService? authService;
   final http.Client? client;
+  final PushNotificationService? pushNotifications;
 
   @override
   State<TeacherPanelPage> createState() => _TeacherPanelPageState();
@@ -67,6 +77,18 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
 
   /// Faculty short code linked to this account (null when not linked).
   String? _shortCode;
+
+  /// The session token, kept only so the bell can fetch and open its feed. It
+  /// is re-read from [TeacherAuthService] on every load, never persisted here.
+  String? _token;
+
+  /// Unread rows in this account's bell feed. A failed fetch leaves the badge
+  /// hidden rather than showing a count the server did not send.
+  int _unreadNotifications = 0;
+
+  PushNotificationService? _pushNotifications;
+  PushNotificationService get _pushService => _pushNotifications ??=
+      widget.pushNotifications ?? PushNotificationService();
 
   List<TeachingAssignment> _assignments = const [];
   List<FreePeriodClaim> _claims = const [];
@@ -110,6 +132,7 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
 
   @override
   void dispose() {
+    _pushNotifications?.dispose();
     _ownedClient?.close();
     super.dispose();
   }
@@ -147,6 +170,22 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
         _goToTeacherLogin();
         return;
       }
+
+      _token = token;
+
+      // Push is only a delivery channel on top of the bell: a missing Firebase
+      // project, denied permission or unreachable backend leaves the feed as it
+      // was. Starting it here (rather than at sign-in) means a teacher's token
+      // is registered on the first panel load, before any registration arrives.
+      unawaited(
+        _pushService.start(
+          authToken: token,
+          deviceTokenPath: '/teacher/notifications/device-token',
+          fallbackTitle: 'Stryve',
+          onMessage: () => unawaited(_loadUnreadNotifications(token)),
+        ),
+      );
+      unawaited(_loadUnreadNotifications(token));
 
       final me = await _client
           .get(
@@ -193,6 +232,45 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
         });
       }
     }
+  }
+
+  /// Refreshes the bell badge. Failures are silent: the bell is an enhancement
+  /// and a hidden badge is better than a wrong count.
+  Future<void> _loadUnreadNotifications(String token) async {
+    try {
+      final response = await _client
+          .get(
+            Uri.parse('${Environment.backendUrl}/teacher/notifications'),
+            headers: teacherHeaders(token),
+          )
+          .timeout(kTeacherRequestTimeout);
+
+      if (!mounted || response.statusCode != 200) return;
+
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final count = (body['unread_count'] as num?)?.toInt() ?? 0;
+      if (!mounted || count == _unreadNotifications) return;
+      setState(() => _unreadNotifications = count);
+    } catch (_) {
+      // Keep whatever the last successful load showed.
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    final token = _token;
+    if (token == null) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TeacherNotificationsPage(
+          authService: _authService,
+          client: widget.client,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    unawaited(_loadUnreadNotifications(token));
   }
 
   Future<void> _loadAssignments(String token) async {
@@ -495,12 +573,23 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
         ),
         automaticallyImplyLeading: false,
         actions: [
-          // Same affordance as the student Home: a notification bell. The
-          // app-bar refresh is gone; the Retry button on a load error, the
-          // refresh on each tab and re-entering a tab still reload data.
+          // Same affordance as the student Home: a bell with the unread count
+          // of this account's feed. The app-bar refresh is gone; the Retry
+          // button on a load error, the refresh on each tab and re-entering a
+          // tab still reload data.
           IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
+            key: const Key('teacher_bell'),
+            tooltip: 'Notifications',
+            icon: Badge(
+              isLabelVisible: _unreadNotifications > 0,
+              backgroundColor: GlassColors.error,
+              textColor: Colors.white,
+              label: Text(
+                _unreadNotifications > 99 ? '99+' : '$_unreadNotifications',
+              ),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+            onPressed: _token == null ? null : _openNotifications,
           ),
         ],
       ),
