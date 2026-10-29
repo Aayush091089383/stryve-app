@@ -28,6 +28,18 @@ dependencies:
   video_player: ^2.14.1
   chewie: ^1.8.5
   url_launcher: ^6.3.3
+  # In-app update check against GitHub Releases.
+  github_release_apk_updater: ^1.0.11
+  package_info_plus: ^9.0.1
+
+dependency_overrides:
+  # The updater asks for package_info_plus ^10.2.1, which pulls win32 6.
+  # flutter_secure_storage 9 (the stored session) still needs win32 5, so the
+  # two cannot coexist. The updater only reads PackageInfo.version, whose API is
+  # unchanged since v9; lifting this override means migrating secure storage to
+  # v10 first (v11 cannot read v9 data without that migration).
+  package_info_plus: ^9.0.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

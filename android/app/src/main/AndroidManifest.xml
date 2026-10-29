@@ -14,6 +14,14 @@
          time one is raised; the in-app bell and Notifications screen work
          whether or not this is granted. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- In-app updates: the downloaded APK is handed to Android's installer.
+         Android 8+ needs this permission for that hand-off; the user must also
+         allow "Install unknown apps" for Stryve the first time. The updater
+         plugin declares the same permission and its own FileProvider (with
+         the applicationId.github_release_apk_updater.fileprovider authority),
+         so neither is repeated here - a duplicate provider with the same
+         authority would fail the manifest merge. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application
         android:label="Stryve"
         android:name="${applicationName}"

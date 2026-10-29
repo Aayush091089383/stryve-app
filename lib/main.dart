@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'role_selection_page.dart';
 import 'home_page.dart';
 import 'teacher_panel_page.dart';
+import 'services/app_updater.dart';
 import 'services/auth_service.dart';
 import 'services/push_notification_service.dart';
 import 'services/teacher_auth_service.dart';
@@ -52,10 +53,21 @@ void main() {
   }
 
   runApp(const StryveApp());
+
+  // One update check per cold start, Android only, once the first frame is up
+  // and after a short delay so it never competes with the session check.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    AppUpdater.scheduleStartupCheck(StryveApp.navigatorKey);
+  });
 }
 
 class StryveApp extends StatelessWidget {
   const StryveApp({super.key});
+
+  /// The root navigator. The update prompt is pushed from `main()` against this
+  /// key, not against a page that the startup check is about to replace.
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 
   /// One transition for every route, in both themes. Every screen is pushed
   /// with MaterialPageRoute, so this changes the motion without touching a
@@ -78,6 +90,7 @@ class StryveApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, theme, _) {
           return MaterialApp(
+            navigatorKey: navigatorKey,
             debugShowCheckedModeBanner: false,
             title: 'Stryve',
 

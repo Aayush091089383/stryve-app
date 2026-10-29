@@ -129,6 +129,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.15"
+  dio:
+    dependency: transitive
+    description:
+      name: dio
+      sha256: "852ec3b48cc431ac04fff978413c541502b67ffc3e26921e74e3d994694192c1"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.11.1"
+  dio_web_adapter:
+    dependency: transitive
+    description:
+      name: dio_web_adapter
+      sha256: "3a1b2cd7be71086f38504956e3ebcd2837288d231ff454bafa78021244102bfc"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.2"
   fake_async:
     dependency: transitive
     description:
@@ -397,6 +413,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  github_release_apk_updater:
+    dependency: "direct main"
+    description:
+      name: github_release_apk_updater
+      sha256: e48a2508ced03ac6549f4f47bbd4bb6b4a6ab7b0aeeb4fffbb3557d7bf6131e1
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.11"
   hooks:
     dependency: transitive
     description:
@@ -646,7 +670,7 @@ packages:
     source: hosted
     version: "3.0.0"
   package_info_plus:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: package_info_plus
       sha256: "468c26b4254ab01979fa5e4a98cb343ea3631b9acee6f21028997419a80e1a20"
