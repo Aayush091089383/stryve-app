@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import 'claim_free_period_page.dart';
@@ -102,6 +103,10 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
   bool _isLoggingOut = false;
   String? _loadError;
   int _tabIndex = 0;
+
+  /// When the system back request last asked to leave. A second request within
+  /// two seconds exits; see [_handleBackPress].
+  DateTime? _lastBackPress;
 
   /// Tab positions in the shared five-tab bar.
   static const int _approvalsTabIndex = 2;
@@ -518,8 +523,43 @@ class _TeacherPanelPageState extends State<TeacherPanelPage> {
   // Build
   // -------------------------------------------------------------------------
 
+  /// Standard Android two-step exit: the first back asks for confirmation, a
+  /// second one within two seconds leaves the app.
+  ///
+  /// The panel is the root route after login, so without this a stray back
+  /// would close the app outright.
+  void _handleBackPress() {
+    final now = DateTime.now();
+    final last = _lastBackPress;
+    if (last != null && now.difference(last) <= const Duration(seconds: 2)) {
+      SystemNavigator.pop();
+      return;
+    }
+
+    _lastBackPress = now;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Press back again to exit'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackPress();
+      },
+      child: _buildPanel(context),
+    );
+  }
+
+  Widget _buildPanel(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
         body: Center(

@@ -120,9 +120,13 @@ class _LoginPageState extends State<LoginPage> {
 
         if (!mounted) return;
 
-        Navigator.pushReplacement(
+        // Clear the stack instead of replacing just this page: the role
+        // chooser and this login screen must not sit under Home, or a back
+        // press would drop the signed-in student onto them.
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => HomePage(student: student)),
+          (route) => false,
         );
       } else {
         // ------------------------------------------------------

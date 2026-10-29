@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import 'announcements_page.dart';
@@ -80,6 +81,10 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int selectedIndex = 0;
+
+  /// When the system back request last asked to leave. A second request within
+  /// two seconds exits; see [_handleBackPress].
+  DateTime? _lastBackPress;
 
   /// Cached [HomePage.navInsetOf] value, refreshed in [didChangeDependencies].
   ///
@@ -281,8 +286,43 @@ class _HomePageState extends State<HomePage> {
     return _pages[index] ??= _buildPage(index);
   }
 
+  /// Standard Android two-step exit: the first back asks for confirmation, a
+  /// second one within two seconds leaves the app.
+  ///
+  /// Home is the root route after login, so without this a stray back would
+  /// close the app outright; the snackbar is the only confirmation.
+  void _handleBackPress() {
+    final now = DateTime.now();
+    final last = _lastBackPress;
+    if (last != null && now.difference(last) <= const Duration(seconds: 2)) {
+      SystemNavigator.pop();
+      return;
+    }
+
+    _lastBackPress = now;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Press back again to exit'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackPress();
+      },
+      child: _buildShell(context),
+    );
+  }
+
+  Widget _buildShell(BuildContext context) {
     return Scaffold(
       extendBody: true,
       extendBodyBehindAppBar: true,

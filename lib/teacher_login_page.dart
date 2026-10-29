@@ -78,9 +78,13 @@ class _TeacherLoginPageState extends State<TeacherLoginPage> {
 
         if (!mounted) return;
 
-        Navigator.pushReplacement(
+        // Clear the stack instead of replacing just this page: the role
+        // chooser and this login screen must not sit under the panel, or a back
+        // press would drop the signed-in teacher onto them.
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const TeacherPanelPage()),
+          (route) => false,
         );
       } else {
         // LOGIN FAILED
