@@ -154,9 +154,12 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
       child: ListView(
         key: const Key('attendance_list'),
         physics: const AlwaysScrollableScrollPhysics(),
+        // `extendBodyBehindAppBar` draws the list under the app bar, and the
+        // Scaffold reports the bar's footprint in `padding.top`; without it the
+        // overall ring was painted behind the bar. Only the small gap is ours.
         padding: EdgeInsets.fromLTRB(
           24,
-          24,
+          MediaQuery.paddingOf(context).top + 16,
           24,
           widget.embedded ? widget.bottomInset + 24 : 40,
         ),
