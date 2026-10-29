@@ -24,6 +24,7 @@ import 'timetable.dart';
 import 'profile.dart';
 import 'utils/glass_container.dart';
 import 'utils/motion.dart';
+import 'utils/subject_aliases.dart';
 import 'utils/sliding_nav_bar.dart';
 
 class HomePage extends StatefulWidget {
@@ -518,6 +519,16 @@ class _HomeTabState extends State<_HomeTab> {
     super.dispose();
   }
 
+  /// True when the end of a printed "HH:mm - HH:mm" pair is at or before
+  /// [now]. An unparseable value is never treated as ended.
+  static bool _hasEnded(String time, DateTime now) {
+    final parts = time.split('-');
+    if (parts.length != 2) return false;
+    final end = _minutesOfDay(parts[1].trim());
+    if (end == null) return false;
+    return end <= now.hour * 60 + now.minute;
+  }
+
   static const List<String> _dayNames = [
     'Monday',
     'Tuesday',
@@ -551,6 +562,13 @@ class _HomeTabState extends State<_HomeTab> {
       // yesterday's changes on screen.
       _fetchScheduleChanges();
       return;
+    }
+
+    // A claim whose period has passed must stop advertising itself even when
+    // the app has been open since the morning. The backend drops it on the
+    // next request; this only nudges the stale copy.
+    if (_scheduleChanges.any((change) => _hasEnded(change.time, DateTime.now()))) {
+      _fetchScheduleChanges();
     }
 
     setState(() {});
@@ -1266,18 +1284,24 @@ class _HomeTabState extends State<_HomeTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // The cancelled class is the point of the card, so
+                        // it is the bold line; the slot and claimant sit
+                        // underneath as supporting detail.
                         Text(
-                          change.time,
+                          change.hasCancelledSubject
+                              ? '${subjectLabelFor(change.cancelledSubject!)} '
+                                    'is cancelled'
+                              : 'Free period',
                           style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
                             color: GlassColors.headingOf(context),
                           ),
                         ),
+                        const SizedBox(height: 2),
                         Text(
-                          change.hasSubject
-                              ? '${change.subject} — now free period'
-                              : 'Free period (${change.claimedByName})',
+                          '${change.time} · Claimed by '
+                          '${change.claimedByLabel}',
                           style: TextStyle(
                             fontSize: 12,
                             color: GlassColors.secondaryTextOf(context),

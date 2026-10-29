@@ -4419,6 +4419,12 @@ section("4b. Student schedule changes (claimed free periods)")
 # Today's claims for the student's own division and class group, and nothing
 # else: another batch's practical is not their change, yesterday is history, and
 # another division is somebody else's timetable.
+# Pin the clock inside the printed slots below: after 15:00 every claim has
+# ended, and the honest answer would be an empty list (covered deliberately at
+# the end of this section). A fixed clock keeps the set deterministic.
+_previous_attendance_now = main._attendance_now
+freeze_attendance_clock(9, 0)
+
 schedule_db = sqlite3.connect(DB_FILE)
 today_iso = main._college_today().isoformat()
 yesterday_iso = (main._college_today() - timedelta(days=1)).isoformat()
@@ -4502,14 +4508,16 @@ check(
     and whole_change["division"] == "D"
     and whole_change["subject"] is None
     and whole_change["claimed_by_name"] == "S M Gangurde"
+    and whole_change["claimed_by_code"] == "SMG"
     and whole_change["is_today"] is True,
     str(whole_change),
 )
 check(
-    "a batch claim carries its subject",
+    "a batch claim carries the class it cancelled",
     any(
         change["batch"] == "D-3"
         and change["subject"] == "EG"
+        and change["cancelled_subject"] == "EG"
         and change["claimed_by_name"] == "S P Kulkarni"
         for change in changes_body["changes"]
     ),
@@ -4533,6 +4541,32 @@ check(
     changes_body.get("message") == "2 free periods claimed today.",
     str(changes_body.get("message")),
 )
+
+# A period that has already ended is history, not a live schedule change.
+freeze_attendance_clock(12, 0)
+midday_body = requests.get(
+    f"{BASE}/student/schedule-changes", headers=auth(TOKENS["71"]), timeout=10
+).json()
+check(
+    "an ended free period is no longer advertised",
+    midday_body["count"] == 1
+    and midday_body["changes"][0]["time"] == "14:00 - 15:00",
+    str(midday_body["changes"]),
+)
+
+freeze_attendance_clock(18, 0)
+evening_body = requests.get(
+    f"{BASE}/student/schedule-changes", headers=auth(TOKENS["71"]), timeout=10
+).json()
+check(
+    "after the last claim the card is honestly empty",
+    evening_body["count"] == 0
+    and evening_body["changes"] == []
+    and evening_body["message"] == "No schedule changes today.",
+    str(evening_body),
+)
+
+main._attendance_now = _previous_attendance_now
 
 other_division = requests.get(
     f"{BASE}/student/schedule-changes", headers=auth(division_e_token), timeout=10

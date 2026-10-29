@@ -719,9 +719,20 @@ class ScheduleChangeOut(BaseModel):
     day: str
     time: str
     subject: Optional[str] = None
+
+    # The class this period frees the student from: the claim's own subject
+    # when the teacher named one, otherwise the printed lecture for the slot.
+    # None when the sheet already prints the period as free ("RELM").
+    cancelled_subject: Optional[str] = None
+
     division: str
     batch: str
     claimed_by_name: str
+
+    # The claimant's faculty code ("SMG"), so the card can show the code the
+    # timetable prints instead of the account's display name.
+    claimed_by_code: Optional[str] = None
+
     is_today: bool = True
 
 

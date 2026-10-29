@@ -3549,6 +3549,40 @@ def update_attendance_record(
     )
 
 
+def _cancelled_subject_for(
+    db: Session, claim: models.FreePeriodClaim
+) -> str | None:
+    """The class a claimed free period cancels, when the sheet names one.
+
+    A teacher may name the cancelled class on the claim itself. Otherwise the
+    printed lecture for the same day/slot and class group is the answer. A
+    period the sheet already prints as free ("RELM") cancels nothing, so None
+    is the honest result rather than inventing a subject.
+    """
+    named = (claim.subject or "").strip()
+    if named:
+        return named
+
+    query = db.query(models.TimetableEntry).filter(
+        models.TimetableEntry.day == claim.day,
+        models.TimetableEntry.division == claim.division,
+        models.TimetableEntry.start_time == claim.start_time,
+        models.TimetableEntry.end_time == claim.end_time,
+        models.TimetableEntry.is_break == False,  # noqa: E712
+        models.TimetableEntry.is_free_period == False,  # noqa: E712
+    )
+    batch = _normalise_batch(claim.batch)
+    if batch:
+        query = query.filter(models.TimetableEntry.batch == batch)
+    else:
+        # A division-wide claim frees the common lecture; a batch practical is
+        # somebody else's class and must never be named as this student's.
+        query = query.filter(models.TimetableEntry.batch.is_(None))
+
+    entry = query.first()
+    return entry.subject if entry is not None else None
+
+
 @app.get("/student/schedule-changes", response_model=ScheduleChangesResponse)
 def student_schedule_changes(
     student: models.Student = Depends(get_current_student),
@@ -3588,16 +3622,28 @@ def student_schedule_changes(
         .all()
     )
 
+    # A period that has already ended is history, not a change the student can
+    # act on; without this a 10:15 claim was still advertised at 2 PM. The time
+    # is read on the college clock, the same seam attendance uses.
+    now_hm = _attendance_now().strftime("%H:%M")
+    claims = [claim for claim in claims if claim.end_time > now_hm]
+
     changes = [
         ScheduleChangeOut(
             id=claim.id,
             day=claim.day,
             time=f"{claim.start_time} - {claim.end_time}",
             subject=claim.subject,
+            cancelled_subject=_cancelled_subject_for(db, claim),
             division=claim.division,
             batch=claim.batch or "",
             claimed_by_name=(
                 claim.teacher.name if claim.teacher is not None else "A teacher"
+            ),
+            claimed_by_code=(
+                (claim.teacher.short_code or "").strip().upper() or None
+                if claim.teacher is not None
+                else None
             ),
             is_today=True,
         )

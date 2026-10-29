@@ -23,3 +23,18 @@ const Map<String, String> kSubjectAliasMap = <String, String>{
 /// assignment subject) is returned unchanged, so both roles write one column.
 String attendanceSubjectFor(String subject) =>
     kSubjectAliasMap[subject] ?? subject;
+
+/// The official name for a timetable code, or the label unchanged.
+///
+/// The schedule-change card must read "Engineering Graphics is cancelled",
+/// while the sheet stores "EG". A full name (or an unknown label such as
+/// "LIB") is returned as it is, so nothing is guessed.
+String subjectLabelFor(String subject) {
+  final cleaned = subject.trim();
+  if (cleaned.isEmpty) return cleaned;
+
+  for (final entry in kSubjectAliasMap.entries) {
+    if (entry.value.toUpperCase() == cleaned.toUpperCase()) return entry.key;
+  }
+  return cleaned;
+}

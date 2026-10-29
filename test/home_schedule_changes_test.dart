@@ -37,15 +37,19 @@ Map<String, dynamic> changeJson({
   int id = 1,
   String time = '10:15 - 11:15',
   String? subject,
+  String? cancelledSubject,
   String claimedBy = 'Teacher 1',
+  String? claimedByCode,
 }) => {
   'id': id,
   'day': 'Thursday',
   'time': time,
   'subject': subject,
+  'cancelled_subject': cancelledSubject,
   'division': 'D',
   'batch': '',
   'claimed_by_name': claimedBy,
+  'claimed_by_code': claimedByCode,
   'is_today': true,
 };
 
@@ -99,23 +103,27 @@ void main() {
       tester,
       scheduleClient(
         (_) async => changesResponse([
-          changeJson(id: 1),
+          changeJson(id: 1, claimedByCode: 'SMG'),
           changeJson(
             id: 2,
             time: '14:00 - 15:00',
             subject: 'EG',
+            cancelledSubject: 'EG',
             claimedBy: 'Teacher 2',
+            claimedByCode: 'SPK',
           ),
         ]),
       ),
     );
 
     expect(find.text('2 Schedule Changes'), findsOneWidget);
-    expect(find.text('10:15 - 11:15'), findsOneWidget);
-    expect(find.text('14:00 - 15:00'), findsOneWidget);
-    // No subject: name who claimed it. With a subject: name the subject.
-    expect(find.text('Free period (Teacher 1)'), findsOneWidget);
-    expect(find.text('EG — now free period'), findsOneWidget);
+    // The cancelled class is the headline; the slot and claimant support it.
+    expect(find.text('Free period'), findsOneWidget);
+    expect(find.text('Engineering Graphics is cancelled'), findsOneWidget);
+    expect(find.text('10:15 - 11:15 · Claimed by SMG'), findsOneWidget);
+    expect(find.text('14:00 - 15:00 · Claimed by SPK'), findsOneWidget);
+    expect(find.text('EG — now free period'), findsNothing);
+    expect(find.text('Free period (Teacher 1)'), findsNothing);
     expect(find.text('No Schedule Changes'), findsNothing);
   });
 
@@ -161,7 +169,25 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('1 Schedule Change'), findsOneWidget);
-    expect(find.text('10:15 - 11:15'), findsOneWidget);
+    expect(find.text('10:15 - 11:15 · Claimed by Teacher 1'), findsOneWidget);
     expect(find.text('Could not load schedule updates.'), findsNothing);
+  });
+
+  testWidgets('an older payload falls back to its subject and account name', (
+    tester,
+  ) async {
+    // `cancelled_subject`/`claimed_by_code` absent: the card must still name
+    // the class from `subject` and the claimant from `claimed_by_name`.
+    await pumpHome(
+      tester,
+      scheduleClient(
+        (_) async => changesResponse([
+          changeJson(subject: 'EG', claimedBy: 'Teacher 2'),
+        ]),
+      ),
+    );
+
+    expect(find.text('Engineering Graphics is cancelled'), findsOneWidget);
+    expect(find.text('10:15 - 11:15 · Claimed by Teacher 2'), findsOneWidget);
   });
 }
