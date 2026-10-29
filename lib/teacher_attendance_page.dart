@@ -8,6 +8,7 @@ import 'services/teacher_auth_service.dart';
 import 'teacher_login_page.dart';
 import 'teacher_models.dart';
 import 'utils/glass_container.dart';
+import 'utils/official_subjects.dart';
 import 'utils/teacher_api.dart';
 
 /// The periods of the official Division D timetable, used only to offer choices.
@@ -21,6 +22,13 @@ const List<List<String>> kTimetableSlots = [
   ['15:15', '16:15'],
   ['16:15', '17:15'],
 ];
+
+/// Every class group an attendance sheet may cover: the whole division, or one
+/// of the three practical batches.
+const List<String> kAttendanceBatches = ['', 'D-1', 'D-2', 'D-3'];
+
+/// Stryve's college runs a four-year BE programme, so year five does not exist.
+const List<int> kAttendanceYears = [1, 2, 3, 4];
 
 /// "15:15" -> "3:15 PM".
 ///
@@ -264,12 +272,14 @@ int _compareRolls(String a, String b) {
 
 /// Swipe-based lecture attendance.
 ///
-/// The subject list comes from the teacher's VERIFIED assignments
+/// A teacher's subject list comes from their VERIFIED assignments
 /// (`GET /teacher/assignments`), and the backend refuses any save for a class or
 /// subject the caller is not assigned to teach, so this screen can never mark
-/// attendance beyond what the teacher actually teaches. Swiping right marks a
-/// student present, swiping left absent; nothing is written until the review
-/// screen is confirmed.
+/// attendance beyond what the teacher actually teaches. An admin has no
+/// assignments but may mark any class, so their pickers offer the official
+/// subjects, batches, years and periods - the backend still validates the save.
+/// Swiping right marks a student present, swiping left absent; nothing is
+/// written until the review screen is confirmed.
 class TeacherAttendancePage extends StatefulWidget {
   const TeacherAttendancePage({
     super.key,
@@ -305,6 +315,13 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
   String? _subject;
   String _batch = '';
   int _year = 1;
+
+  /// Whether the signed-in account is an admin.
+  ///
+  /// An admin has no teaching assignments of their own, but may mark any class
+  /// (the backend already allows that), so the pickers fall back to the full
+  /// official lists instead of an empty assignment list.
+  bool _isAdmin = false;
   String _division = 'D';
   DateTime _date = DateTime.now();
   List<String> _slot = kTimetableSlots.first;
@@ -401,6 +418,11 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
         return;
       }
 
+      // The role was stored at login, so no extra round trip is needed to
+      // decide which lists to offer.
+      final account = await _authService.getTeacher();
+      final isAdmin = account?.isAdmin ?? false;
+
       final response = await _client
           .get(
             Uri.parse('${Environment.backendUrl}/teacher/assignments'),
@@ -415,10 +437,12 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
             .map(TeachingAssignment.fromJson)
             .toList();
         setState(() {
+          _isAdmin = isAdmin;
           _assignments = assignments;
-          _subject = assignments.isEmpty
+          final subjects = _subjectChoices;
+          _subject = subjects.isEmpty
               ? null
-              : (_subject ?? assignments.first.subject);
+              : (subjects.contains(_subject) ? _subject : subjects.first);
           _batch = _batchForSubject(_subject);
           _slot = _slotForSubject(_subject) ?? _slot;
           _isLoading = false;
@@ -468,12 +492,75 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
     return null;
   }
 
+  /// The subjects the picker offers.
+  ///
+  /// A teacher only sees the subjects they hold a verified assignment for. An
+  /// admin has no assignments of their own, so the seven official subjects are
+  /// offered instead; the backend validates whatever is saved either way.
+  List<String> get _subjectChoices => _isAdmin
+      ? kOfficialSubjects
+      : <String>{for (final assignment in _assignments) assignment.subject}
+            .toList();
+
+  /// The class groups the picker offers for the selected subject.
+  ///
+  /// An admin may mark any group. A teacher sees the batches their own
+  /// assignment covers, plus the whole division.
   List<String> get _batchChoices {
+    if (_isAdmin) return kAttendanceBatches;
     return <String>{
       '',
       for (final assignment in _assignments)
         if (assignment.subject == _subject) assignment.batch,
     }.toList();
+  }
+
+  /// The periods the picker offers for the selected subject.
+  ///
+  /// A teacher sees only the slots their own assignment prints for that
+  /// subject, so the picker cannot suggest a period the backend would refuse.
+  /// When nothing pins the subject down - an admin has no assignments - the
+  /// official slot grid is offered instead; the server still validates the
+  /// period, so this can only ever offer choices, not widen what is accepted.
+  List<List<String>> get _periodChoices {
+    final subject = _subject;
+    if (subject == null) return kTimetableSlots;
+
+    final assigned = <String>{
+      for (final assignment in _assignments)
+        if (assignment.subject == subject &&
+            assignment.startTime.isNotEmpty &&
+            assignment.endTime.isNotEmpty)
+          '${assignment.startTime}-${assignment.endTime}',
+    };
+    if (assigned.isEmpty) return kTimetableSlots;
+
+    // Keep the sheet's order, then append any verified slot that is not one of
+    // the printed periods (a practical block such as 13:00-15:00).
+    final ordered = <List<String>>[];
+    for (final slot in kTimetableSlots) {
+      if (assigned.contains('${slot[0]}-${slot[1]}')) ordered.add(slot);
+    }
+    for (final raw in assigned) {
+      if (ordered.any((slot) => '${slot[0]}-${slot[1]}' == raw)) continue;
+      final parts = raw.split('-');
+      if (parts.length == 2) ordered.add([parts[0], parts[1]]);
+    }
+    return ordered.isEmpty ? kTimetableSlots : ordered;
+  }
+
+  /// Applies a new subject and keeps the batch and period valid for it.
+  void _selectSubject(String subject) {
+    setState(() {
+      _subject = subject;
+      if (!_isAdmin) _batch = _batchForSubject(subject);
+      final assignedSlot = _slotForSubject(subject);
+      if (assignedSlot != null) _slot = assignedSlot;
+      final periods = _periodChoices;
+      if (!periods.any((slot) => slot[0] == _slot[0] && slot[1] == _slot[1])) {
+        _slot = periods.first;
+      }
+    });
   }
 
   /// Loads the class roster and starts the swipe stage.
@@ -802,17 +889,17 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
         return;
       }
 
-      final uri = Uri.parse(
-        '${Environment.backendUrl}/teacher/attendance/session',
-      ).replace(
-        queryParameters: {
-          'class_date': session.classDate,
-          'period': session.period,
-          'subject': session.subject,
-          'division': session.division,
-          'batch': session.batch,
-        },
-      );
+      final uri =
+          Uri.parse('${Environment.backendUrl}/teacher/attendance/session')
+              .replace(
+                queryParameters: {
+                  'class_date': session.classDate,
+                  'period': session.period,
+                  'subject': session.subject,
+                  'division': session.division,
+                  'batch': session.batch,
+                },
+              );
 
       final response = await _client
           .get(uri, headers: teacherHeaders(token))
@@ -1074,7 +1161,7 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
                 )
               else if (_loadError != null)
                 _buildErrorCard()
-              else if (_assignments.isEmpty)
+              else if (_assignments.isEmpty && !_isAdmin)
                 _buildNoAssignmentsCard()
               else ...[
                 if (_stage == _AttendanceStage.setup) ...[
@@ -1193,7 +1280,16 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
   }
 
   Widget _buildSelector() {
+    final subjects = _subjectChoices;
     final batches = _batchChoices;
+    final periods = _periodChoices;
+    final subjectValue = subjects.contains(_subject)
+        ? _subject
+        : (subjects.isEmpty ? null : subjects.first);
+    final periodValue =
+        periods.any((slot) => '${slot[0]}-${slot[1]}' == _periodLabel)
+        ? _periodLabel
+        : '${periods.first[0]}-${periods.first[1]}';
 
     return GlassContainer(
       width: double.infinity,
@@ -1215,13 +1311,11 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            key: ValueKey<String>('attendance-subject-$_subject'),
-            initialValue: _subject,
+            key: ValueKey<String>('attendance-subject-$subjectValue'),
+            initialValue: subjectValue,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Subject'),
-            items: _assignments
-                .map((a) => a.subject)
-                .toSet()
+            items: subjects
                 .map(
                   (subject) => DropdownMenuItem<String>(
                     value: subject,
@@ -1231,11 +1325,7 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
                 .toList(),
             onChanged: (value) {
               if (value == null) return;
-              setState(() {
-                _subject = value;
-                _batch = _batchForSubject(value);
-                _slot = _slotForSubject(value) ?? _slot;
-              });
+              _selectSubject(value);
             },
           ),
           const SizedBox(height: 12),
@@ -1244,10 +1334,12 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
               Expanded(
                 child: DropdownButtonFormField<int>(
                   key: ValueKey<int>(_year),
-                  initialValue: _year,
+                  initialValue: kAttendanceYears.contains(_year)
+                      ? _year
+                      : kAttendanceYears.first,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Year'),
-                  items: const [1, 2, 3, 4, 5]
+                  items: kAttendanceYears
                       .map(
                         (year) => DropdownMenuItem<int>(
                           value: year,
@@ -1305,11 +1397,11 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
               const SizedBox(width: 12),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  key: ValueKey<String>('attendance-period-$_periodLabel'),
-                  initialValue: _periodLabel,
+                  key: ValueKey<String>('attendance-period-$periodValue'),
+                  initialValue: periodValue,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Period'),
-                  items: kTimetableSlots
+                  items: periods
                       .map(
                         (slot) => DropdownMenuItem<String>(
                           value: '${slot[0]}-${slot[1]}',
@@ -1321,9 +1413,9 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
                       )
                       .toList(),
                   onChanged: (value) {
-                    final match = kTimetableSlots.firstWhere(
+                    final match = periods.firstWhere(
                       (slot) => '${slot[0]}-${slot[1]}' == value,
-                      orElse: () => kTimetableSlots.first,
+                      orElse: () => periods.first,
                     );
                     setState(() => _slot = match);
                   },
@@ -1431,10 +1523,7 @@ class _TeacherAttendancePageState extends State<TeacherAttendancePage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                TextButton(
-                  onPressed: _loadHistory,
-                  child: const Text('Retry'),
-                ),
+                TextButton(onPressed: _loadHistory, child: const Text('Retry')),
               ],
             )
           else if (_pastSessions.isEmpty)

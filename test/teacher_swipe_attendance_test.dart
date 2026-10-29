@@ -222,15 +222,16 @@ class AttendanceBackend {
 
 Future<void> pumpAttendance(
   WidgetTester tester,
-  AttendanceBackend backend,
-) async {
+  AttendanceBackend backend, {
+  String role = 'teacher',
+}) async {
   FlutterSecureStorage.setMockInitialValues({
     'teacher_auth_token': kTeacherToken,
     'teacher_token_expiry': _futureExpiry(),
     'teacher_id': '5',
     'teacher_name': 'Dr. Meera Rao',
     'teacher_email': 'meera@campussync.edu',
-    'teacher_role': 'teacher',
+    'teacher_role': role,
   });
 
   tester.view.physicalSize = const Size(420, 900);
@@ -705,9 +706,7 @@ void main() {
     await tester.tap(flip);
     await tester.pumpAndSettle();
 
-    final patches = backend.requests
-        .where((r) => r.method == 'PATCH')
-        .toList();
+    final patches = backend.requests.where((r) => r.method == 'PATCH').toList();
     expect(patches, hasLength(1));
     expect(patches.single.url.path, '/teacher/attendance/record/7');
     expect(jsonDecode(patches.single.body)['status'], 'absent');
@@ -716,5 +715,61 @@ void main() {
     expect(find.text('Present (0)'), findsOneWidget);
     expect(find.text('Absent (2)'), findsOneWidget);
     expect(find.text('Nobody is marked present.'), findsOneWidget);
+  });
+
+  testWidgets('a teacher is offered only the periods assigned for a subject', (
+    tester,
+  ) async {
+    // The one verified assignment is 13:00-14:00, so no other college period
+    // may be offered - the backend would refuse it.
+    await pumpAttendance(tester, AttendanceBackend());
+
+    await tester.tap(find.text('1:00 PM - 2:00 PM'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1:00 PM - 2:00 PM'), findsNWidgets(2));
+    expect(find.text('10:15 AM - 11:15 AM'), findsNothing);
+    expect(find.text('3:15 PM - 4:15 PM'), findsNothing);
+  });
+
+  testWidgets('an admin gets the official subjects, batches and years', (
+    tester,
+  ) async {
+    // An admin has no teaching assignments, but may mark any class.
+    await pumpAttendance(
+      tester,
+      AttendanceBackend(assignments: const []),
+      role: 'admin',
+    );
+
+    expect(find.text('No verified teaching assignments'), findsNothing);
+    expect(find.byKey(const Key('attendance_load_students')), findsOneWidget);
+
+    await tester.tap(find.text('Engineering Mathematics-I'));
+    await tester.pumpAndSettle();
+    expect(find.text('Engineering Physics'), findsOneWidget);
+    expect(find.text('Fundamentals of Programming Languages'), findsOneWidget);
+    await tester.tap(find.text('Engineering Physics'));
+    await tester.pumpAndSettle();
+
+    // A four-year programme: year five must not be offered.
+    await tester.tap(find.text('Year 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Year 4'), findsOneWidget);
+    expect(find.text('Year 5'), findsNothing);
+    await tester.tap(find.text('Year 4'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Whole division'));
+    await tester.pumpAndSettle();
+    expect(find.text('D-1'), findsOneWidget);
+    expect(find.text('D-2'), findsOneWidget);
+    expect(find.text('D-3'), findsOneWidget);
+    await tester.tap(find.text('D-3'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Engineering Physics'), findsOneWidget);
+    expect(find.text('Year 4'), findsOneWidget);
+    expect(find.text('D-3'), findsOneWidget);
   });
 }
