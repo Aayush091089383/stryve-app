@@ -1137,21 +1137,32 @@
                   </div>
                   <div class="field">
                     <label for="year">Year</label>
-                    <input id="year" name="year" type="number" min="1" max="5" step="1" value="1" required />
+                    <select id="year" name="year" required>
+                      <option value="1" selected>1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                    </select>
                   </div>
                 </div>
 
                 <div class="field">
                   <label for="division">Division</label>
-                  <input id="division" name="division" type="text" maxlength="8" value="D" required />
+                  <select id="division" name="division" required>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D" selected>D</option>
+                    <option value="E">E</option>
+                  </select>
                 </div>
 
                 <div class="field">
-                  <label for="file">Files</label>
+                  <label for="file">Files (optional)</label>
                   <div class="file-drop">
                     <input id="file" name="file" type="file" multiple
-                           accept=".pdf,.mp4,.mov,.mkv,application/pdf,video/mp4,video/quicktime,video/x-matroska" required />
-                    <p class="file-note">Select up to 10 files · PDF or video (MP4, MOV, MKV) · up to 100 MB each</p>
+                           accept=".pdf,.mp4,.mov,.mkv,application/pdf,video/mp4,video/quicktime,video/x-matroska" />
+                    <p class="file-note">Optional — attach up to 10 files · PDF or video (MP4, MOV, MKV) · up to 100 MB each</p>
                   </div>
                 </div>
 
@@ -2254,9 +2265,9 @@
     if (!title) { showMessage(uploadMessage, "Enter a title.", "error"); return; }
     if (description.length > 2000) { showMessage(uploadMessage, "The description must be 2000 characters or fewer.", "error"); return; }
     if (!dueDate) { showMessage(uploadMessage, "Choose a due date.", "error"); return; }
-    if (!/^[1-5]$/.test(year)) { showMessage(uploadMessage, "Year must be 1 to 5.", "error"); return; }
-    if (!division) { showMessage(uploadMessage, "Enter a division.", "error"); return; }
-    if (files.length === 0) { showMessage(uploadMessage, "Choose at least one file to upload.", "error"); return; }
+    if (!/^[1-4]$/.test(year)) { showMessage(uploadMessage, "Year must be 1 to 4.", "error"); return; }
+    if (!division) { showMessage(uploadMessage, "Choose a division.", "error"); return; }
+    // Files are optional: a text-only assignment ("Read chapter 4") is valid.
     if (files.length > MAX_FILES) {
       showMessage(uploadMessage, "At most " + MAX_FILES + " files can be attached (you selected " + files.length + ").", "error");
       return;
@@ -2300,11 +2311,13 @@
 
       if (response.status === 201) {
         var attached = (body.attachments && body.attachments.length) || files.length;
+        var attachmentNote = attached === 0
+          ? "no files attached"
+          : (attached === 1 ? "1 file attached" : attached + " files attached");
         showMessage(
           uploadMessage,
           "Uploaded “" + (body.title || title) + "” for " + (body.subject || subject) +
-            ", due " + (body.due_date || dueDate) + " · " + attached +
-            (attached === 1 ? " file attached" : " files attached") +
+            ", due " + (body.due_date || dueDate) + " · " + attachmentNote +
             ". Students in Year " + (body.year || year) + " · Division " +
             (body.division || division.toUpperCase()) + " can see it now.",
           "success"

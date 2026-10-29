@@ -4847,19 +4847,21 @@ def upload_assignment(
     teacher: models.Teacher = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
-    """Upload a PDF/video assignment, with one or more attached files.
+    """Create an assignment, optionally with PDF/video files attached.
 
-    Validates the file type (magic bytes, not just a header), the size, the
-    metadata and the caller's authorization, for EVERY file. PDFs and
-    MP4/MOV/MKV video are accepted; the stored extension follows what the bytes
-    are, and the client's name is kept only for display.
+    A text-only assignment ("Read chapter 4") needs no file; any file that IS
+    sent is validated (magic bytes, not just a header), size-checked, and every
+    file is authorized the same way. PDFs and MP4/MOV/MKV video are accepted;
+    the stored extension follows what the bytes are, and the client's name is
+    kept only for display.
 
     ``files`` is the multi-file field; the older single ``file`` field is still
     accepted so an existing CLI or app build keeps working unchanged.
 
     Uploading the real PDF for a subject replaces that class group's text-only
     rows for the same subject/year/division, so a student sees one card per
-    subject instead of a placeholder next to the file.
+    subject instead of a placeholder next to the file. Creating another
+    text-only assignment does not delete the earlier one.
     """
     clean_title = title.strip()
     clean_subject = subject.strip()
@@ -4906,11 +4908,6 @@ def upload_assignment(
         for item in ([file] if file is not None else []) + list(files or [])
         if item is not None
     ]
-    if not uploads:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one file is required",
-        )
     if len(uploads) > MAX_ASSIGNMENT_ATTACHMENTS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -4947,26 +4944,34 @@ def upload_assignment(
             path.unlink(missing_ok=True)
         raise
 
-    # The text-only rows this upload supersedes: same subject, year and
-    # division, and no PDF. They are replaced, never edited, and only after the
-    # file was written successfully (the insert below rolls this back with it).
-    replaced_placeholders = (
-        db.query(models.Assignment)
-        .filter(
-            models.Assignment.subject == clean_subject,
-            models.Assignment.year == year,
-            models.Assignment.division == clean_division,
-            models.Assignment.stored_name.is_(None),
+    # A real file supersedes the same subject/year/division text-only rows, so
+    # the student sees one card per subject. Another text-only post must NOT
+    # delete earlier text-only assignments: those are separate work, not
+    # placeholders waiting for a file.
+    if stored_files:
+        replaced_placeholders = (
+            db.query(models.Assignment)
+            .filter(
+                models.Assignment.subject == clean_subject,
+                models.Assignment.year == year,
+                models.Assignment.division == clean_division,
+                models.Assignment.stored_name.is_(None),
+            )
+            .all()
         )
-        .all()
-    )
-    for row in replaced_placeholders:
-        db.delete(row)
+        for row in replaced_placeholders:
+            db.delete(row)
 
     # The first file also fills the legacy single-file columns, so the old
     # download route and any client that predates multiple attachments keep
-    # working against the same assignment.
-    _path, primary_name, primary_original, primary_size = stored_files[0]
+    # working against the same assignment. A text-only assignment leaves them
+    # NULL, exactly like every pre-existing row.
+    if stored_files:
+        _path, primary_name, primary_original, primary_size = stored_files[0]
+    else:
+        primary_name = None
+        primary_original = None
+        primary_size = None
 
     assignment = models.Assignment(
         subject=clean_subject,

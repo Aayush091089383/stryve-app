@@ -2403,6 +2403,74 @@ check(
     str(phy_cards)[:300],
 )
 
+# --------------------------------------------------------------------------
+# A text-only assignment ("Read chapter 4") needs no file at all. Two such
+# posts are two pieces of work, so the second must not delete the first.
+# --------------------------------------------------------------------------
+def post_text_only(title):
+    return requests.post(
+        upload_url,
+        headers=auth(admin_token),
+        data={
+            "title": title,
+            "subject": "Professional Communication Skills",
+            "due_date": MONDAY_STR,
+            "year": "1",
+            "division": "D",
+            "description": "Read the chapter before Monday.",
+            "batch": "",
+        },
+        timeout=20,
+    )
+
+
+text_only = post_text_only("Read chapter 4")
+check(
+    "an assignment can be created without a file",
+    text_only.status_code == 201,
+    text_only.text[:200],
+)
+text_only_body = text_only.json()
+check(
+    "a text-only assignment reports no attachment",
+    text_only_body.get("has_attachment") is False
+    and text_only_body.get("attachments") == []
+    and text_only_body.get("original_name") is None,
+    str(text_only_body)[:250],
+)
+text_only_row = conn.execute(
+    "SELECT stored_name, original_name, file_size FROM assignments WHERE id=?",
+    (text_only_body["id"],),
+).fetchone()
+check(
+    "a text-only row stores no file columns",
+    text_only_row == (None, None, None),
+    str(text_only_row),
+)
+check(
+    "the text-only assignment is visible to its class",
+    any(
+        a["id"] == text_only_body["id"]
+        for a in requests.get(
+            f"{BASE}/assignments", headers=auth(TOKENS["1"]), timeout=10
+        ).json()
+    ),
+)
+
+second_text_only = post_text_only("Read chapter 5")
+check(
+    "a second text-only assignment is accepted",
+    second_text_only.status_code == 201,
+    second_text_only.text[:200],
+)
+check(
+    "a second text-only assignment does not delete the first",
+    conn.execute(
+        "SELECT COUNT(*) FROM assignments WHERE id=?", (text_only_body["id"],)
+    ).fetchone()[0]
+    == 1,
+)
+
 mine = requests.get(f"{BASE}/teacher/assignments/mine", headers=auth(admin_token), timeout=10).json()
 check("a teacher sees the assignments they uploaded", {a["id"] for a in mine} >= {created_upload.json()["id"], batch_upload.json()["id"]})
 check("the list does not include other people's uploads", all(a["uploaded_by"] is not None for a in mine))
