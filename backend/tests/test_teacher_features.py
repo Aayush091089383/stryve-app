@@ -4490,6 +4490,183 @@ check(
 
 schedule_db.close()
 
+# ==========================================================================
+section("4c. Staff schedule-changes listing (portal claim management)")
+# ==========================================================================
+# Section 4b left four claims on today's date in this throwaway database (three
+# in Division D, one in F) and one yesterday. Reading is open to every staff
+# account; releasing stays the release endpoint's job, and can_delete must say
+# exactly what that endpoint would allow.
+admin_changes = requests.get(
+    f"{BASE}/admin/schedule-changes", headers=auth(admin_token), timeout=10
+)
+check(
+    "an admin can list schedule changes",
+    admin_changes.status_code == 200,
+    admin_changes.text[:200],
+)
+admin_body = admin_changes.json()
+check(
+    "the listing defaults to today on the college clock",
+    admin_body.get("date") == today_iso,
+    str(admin_body.get("date")),
+)
+check(
+    "every claim on the date is returned",
+    admin_body.get("count") == 4,
+    str(admin_body.get("claims")),
+)
+check(
+    "rows are ordered by division then start time",
+    [(row["division"], row["time"]) for row in admin_body["claims"]]
+    == [
+        ("D", "10:15 - 11:15"),
+        ("D", "14:00 - 15:00"),
+        ("D", "15:15 - 16:15"),
+        ("F", "10:15 - 11:15"),
+    ],
+    str([(row["division"], row["time"]) for row in admin_body["claims"]]),
+)
+check(
+    "an admin may release every claim",
+    all(row["can_delete"] for row in admin_body["claims"]),
+    str([(row["id"], row["can_delete"]) for row in admin_body["claims"]]),
+)
+check(
+    "rows name the claimant and describe the slot",
+    any(
+        row["claimed_by_name"] == "S M Gangurde"
+        and row["batch"] == ""
+        and row["subject"] is None
+        and row["day"] == today_name
+        for row in admin_body["claims"]
+    )
+    and any(
+        row["claimed_by_name"] == "S P Kulkarni"
+        and row["batch"] == "D-3"
+        and row["subject"] == "EG"
+        for row in admin_body["claims"]
+    ),
+    str(admin_body["claims"]),
+)
+
+only_d = requests.get(
+    f"{BASE}/admin/schedule-changes?date={today_iso}&division=D",
+    headers=auth(smg_token),
+    timeout=10,
+).json()
+check(
+    "a teacher can read the same list, filtered to one division",
+    only_d["count"] == 3 and all(row["division"] == "D" for row in only_d["claims"]),
+    str(only_d["claims"]),
+)
+lowercase = requests.get(
+    f"{BASE}/admin/schedule-changes?date={today_iso}&division=d",
+    headers=auth(smg_token),
+    timeout=10,
+).json()
+check(
+    "the division filter is case-insensitive",
+    lowercase["count"] == 3,
+    str(lowercase["count"]),
+)
+check(
+    "a division with no claims answers honestly empty",
+    requests.get(
+        f"{BASE}/admin/schedule-changes?date={today_iso}&division=A",
+        headers=auth(admin_token),
+        timeout=10,
+    ).json()["claims"]
+    == [],
+)
+yesterday = requests.get(
+    f"{BASE}/admin/schedule-changes?date={yesterday_iso}",
+    headers=auth(admin_token),
+    timeout=10,
+).json()
+check(
+    "another date returns that date's claims only",
+    yesterday["count"] == 1
+    and yesterday["claims"][0]["time"] == "09:00 - 10:00"
+    and yesterday["claims"][0]["batch"] == "",
+    str(yesterday["claims"]),
+)
+
+teacher_view = requests.get(
+    f"{BASE}/admin/schedule-changes", headers=auth(smg_token), timeout=10
+).json()
+check(
+    "a teacher sees every claim, not only their own",
+    teacher_view["count"] == 4,
+    str(teacher_view["claims"]),
+)
+check(
+    "a teacher may release only their own claims",
+    all(
+        row["can_delete"] == (row["claimed_by_id"] == smg_id)
+        for row in teacher_view["claims"]
+    ),
+    str([(row["claimed_by_id"], row["can_delete"]) for row in teacher_view["claims"]]),
+)
+check(
+    "the other teacher's claim is listed but not releasable",
+    any(
+        row["claimed_by_id"] == spk_id and row["can_delete"] is False
+        for row in teacher_view["claims"]
+    ),
+    str(teacher_view["claims"]),
+)
+
+check(
+    "the listing needs a staff session -> 401",
+    requests.get(f"{BASE}/admin/schedule-changes", timeout=10).status_code == 401,
+)
+check(
+    "a student session is refused -> 403",
+    requests.get(
+        f"{BASE}/admin/schedule-changes",
+        headers=auth(TOKENS["71"]),
+        timeout=10,
+    ).status_code
+    == 403,
+)
+check(
+    "a malformed date is refused -> 400",
+    requests.get(
+        f"{BASE}/admin/schedule-changes?date=26-10-2026",
+        headers=auth(admin_token),
+        timeout=10,
+    ).status_code
+    == 400,
+)
+
+# The portal's Release button calls the existing endpoint; an admin must be able
+# to release a claim a teacher holds.
+target_claim = next(
+    row
+    for row in admin_body["claims"]
+    if row["claimed_by_id"] == spk_id and row["batch"] == "D-3"
+)
+released = requests.delete(
+    f"{BASE}/teacher/free-periods/claims/{target_claim['id']}",
+    headers=auth(admin_token),
+    timeout=10,
+)
+check(
+    "an admin can release a claim a teacher holds",
+    released.status_code == 200,
+    released.text[:160],
+)
+after_release = requests.get(
+    f"{BASE}/admin/schedule-changes", headers=auth(admin_token), timeout=10
+).json()
+check(
+    "the released claim disappears from the listing",
+    after_release["count"] == 3
+    and all(row["id"] != target_claim["id"] for row in after_release["claims"]),
+    str(after_release["claims"]),
+)
+
 real_stamp_end = (
     (REAL_DB.stat().st_size, REAL_DB.stat().st_mtime_ns) if REAL_DB.exists() else None
 )

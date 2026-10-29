@@ -734,6 +734,34 @@ class ScheduleChangesResponse(BaseModel):
     message: str
 
 
+class AdminScheduleChangeOut(BaseModel):
+    """One claimed free period as the staff portal lists it.
+
+    ``can_delete`` mirrors the release endpoint's rule (an admin may release any
+    claim, a teacher only their own), so the portal never offers a button the
+    backend would refuse.
+    """
+
+    id: int
+    claim_date: str
+    day: str
+    time: str
+    division: str
+    batch: str
+    subject: Optional[str] = None
+    claimed_by_name: str
+    claimed_by_id: int
+    can_delete: bool
+
+
+class AdminScheduleChangesOut(BaseModel):
+    """Every claim on one date, for the portal's Schedule Changes tab."""
+
+    date: str  # YYYY-MM-DD, on the college clock
+    count: int
+    claims: list[AdminScheduleChangeOut]
+
+
 class FreePeriodAvailabilityOut(BaseModel):
     date: str
     day: str

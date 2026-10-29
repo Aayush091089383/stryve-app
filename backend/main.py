@@ -104,6 +104,8 @@ from schemas import (
     FreePeriodClaimRequest,
     ScheduleChangeOut,
     ScheduleChangesResponse,
+    AdminScheduleChangeOut,
+    AdminScheduleChangesOut,
     FreePeriodSlotOut,
     FacultyOut,
     LabRoomOut,
@@ -3995,6 +3997,59 @@ def release_free_period(
     db.delete(row)
     db.commit()
     return {"message": "Claim released", "claim_id": claim_id}
+
+
+@app.get("/admin/schedule-changes", response_model=AdminScheduleChangesOut)
+def list_schedule_changes(
+    date: str | None = None,
+    division: str | None = None,
+    teacher: models.Teacher = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Every free-period claim on one date, for the staff portal.
+
+    Reading is open to every staff account: a teacher needs to see who holds a
+    slot as much as an admin does. Deleting reuses the release endpoint, whose
+    rule (admin any, teacher own only) is reported here per row as
+    ``can_delete`` so the portal never offers a button the backend would refuse.
+    """
+    target_date = _parse_date(date) if date else _college_today()
+
+    query = (
+        db.query(models.FreePeriodClaim)
+        .options(joinedload(models.FreePeriodClaim.teacher))
+        .filter(models.FreePeriodClaim.claim_date == target_date.isoformat())
+    )
+
+    wanted = (division or "").strip().upper()
+    if wanted:
+        query = query.filter(models.FreePeriodClaim.division == wanted)
+
+    claims = query.order_by(
+        models.FreePeriodClaim.division,
+        models.FreePeriodClaim.start_time,
+        models.FreePeriodClaim.id,
+    ).all()
+
+    rows = [
+        AdminScheduleChangeOut(
+            id=claim.id,
+            claim_date=claim.claim_date,
+            day=claim.day,
+            time=f"{claim.start_time} - {claim.end_time}",
+            division=claim.division,
+            batch=claim.batch or "",
+            subject=claim.subject,
+            claimed_by_name=(claim.teacher.name if claim.teacher else "Unknown teacher"),
+            claimed_by_id=claim.teacher_id,
+            can_delete=(teacher.role == "admin" or claim.teacher_id == teacher.id),
+        )
+        for claim in claims
+    ]
+
+    return AdminScheduleChangesOut(
+        date=target_date.isoformat(), count=len(rows), claims=rows
+    )
 
 
 # ==================================================================

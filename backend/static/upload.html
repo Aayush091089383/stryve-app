@@ -1024,6 +1024,14 @@
         <span>Attendance</span>
       </button>
 
+      <button class="nav-item" type="button" data-tab="schedule-changes" id="tab-schedule-changes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>
+        </svg>
+        <span>Schedule changes</span>
+      </button>
+
       <button class="nav-item" type="button" data-tab="roster" id="navRoster" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -1395,6 +1403,62 @@
           </section>
         </section>
 
+        <!-- ------------------------------------------------ schedule changes -->
+        <section class="panel" id="panel-schedule-changes">
+          <section class="card">
+            <div class="section-head">
+              <h2>Claimed free periods</h2>
+              <button class="ghost small" id="scRefresh" type="button">Refresh</button>
+            </div>
+            <p class="hint">
+              Every free period a teacher has claimed on the chosen date. A claim with no
+              batch covers the whole division. Teachers can release their own claims;
+              administrators can release any of them. Releasing here is the same action as
+              releasing it in the app - the slot becomes claimable again immediately.
+            </p>
+
+            <div class="row">
+              <div class="field">
+                <label for="scDate">Date</label>
+                <input id="scDate" type="date" />
+              </div>
+              <div class="field">
+                <label for="scDivision">Division</label>
+                <select id="scDivision">
+                  <option value="" selected>All divisions</option>
+                  <option value="A">Division A</option>
+                  <option value="B">Division B</option>
+                  <option value="C">Division C</option>
+                  <option value="D">Division D</option>
+                </select>
+              </div>
+            </div>
+
+            <p class="hint" id="scCount">Not loaded</p>
+            <div id="scMessage" class="message" role="status" aria-live="polite"></div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Date</th>
+                    <th scope="col">Day</th>
+                    <th scope="col">Time</th>
+                    <th scope="col">Division</th>
+                    <th scope="col">Batch</th>
+                    <th scope="col">Subject</th>
+                    <th scope="col">Claimed by</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="scBody">
+                  <tr><td colspan="8" class="state">Open this tab to load schedule changes.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
         <!-- -------------------------------------------------------- roster -->
         <section class="panel" id="panel-roster">
           <div class="grid-2">
@@ -1685,6 +1749,10 @@
       title: "Attendance",
       sub: "Mark present or absent for a lecture you are assigned to teach."
     },
+    "schedule-changes": {
+      title: "Schedule changes",
+      sub: "Free periods teachers have claimed, by date and division."
+    },
     roster: {
       title: "Class roster",
       sub: "Who is in the class, including students who have not registered yet."
@@ -1799,6 +1867,12 @@
   var rosterFilterDivision = document.getElementById("rosterFilterDivision");
   var rosterFilterBatch = document.getElementById("rosterFilterBatch");
   var refreshRosterBtn = document.getElementById("refreshRosterBtn");
+  var scDate = document.getElementById("scDate");
+  var scDivision = document.getElementById("scDivision");
+  var scRefresh = document.getElementById("scRefresh");
+  var scBody = document.getElementById("scBody");
+  var scMessage = document.getElementById("scMessage");
+  var scCount = document.getElementById("scCount");
   var fileModal = document.getElementById("fileModal");
   var fileModalTitle = document.getElementById("fileModalTitle");
   var fileModalBody = document.getElementById("fileModalBody");
@@ -1971,7 +2045,7 @@
     if (tab === "roster") return isAdmin();
     if (tab === "approvals") return canReview();
     return tab === "assignments" || tab === "announcements" ||
-      tab === "attendance" || tab === "profile";
+      tab === "attendance" || tab === "schedule-changes" || tab === "profile";
   }
 
   function activate(tab) {
@@ -1995,6 +2069,7 @@
     if (tab === "assignments") loadMine();
     if (tab === "announcements") loadAnnouncements();
     if (tab === "attendance") prepareAttendance();
+    if (tab === "schedule-changes") loadScheduleChanges();
     if (tab === "roster") loadRoster();
     if (tab === "approvals") loadPending();
     if (tab === "teachers") loadTeachers();
@@ -2046,6 +2121,9 @@
     if (typeof hideMessage === "function") hideMessage(attendanceMessage);
     resetRosterTable("Open this tab to load the roster.");
     rosterCount.textContent = "Not loaded";
+    resetScheduleChangesTable("Open this tab to load schedule changes.");
+    scCount.textContent = "Not loaded";
+    hideMessage(scMessage);
     if (rosterFile) rosterFile.value = "";
     hideMessage(rosterMessage);
     hideMessage(rosterUploadMessage);
@@ -4150,6 +4228,177 @@
     control.addEventListener("change", function () {
       if (activeTab === "roster") loadRoster();
     });
+  });
+
+  // ------------------------------------------------------ schedule changes
+  // Every claim on one date, readable by every staff account. The backend sets
+  // can_delete per row (admin any, teacher own only), so this screen never
+  // offers a release the existing endpoint would refuse.
+  var scRows = [];
+
+  function collegeToday() {
+    // Claim dates are college-calendar days (IST), not the browser's zone.
+    try {
+      return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    } catch (error) {
+      return new Date().toISOString().slice(0, 10);
+    }
+  }
+
+  function resetScheduleChangesTable(message) {
+    scRows = [];
+    scBody.textContent = "";
+    var row = document.createElement("tr");
+    var cell = document.createElement("td");
+    cell.colSpan = 8;
+    cell.className = "state";
+    cell.textContent = message || "Open this tab to load schedule changes.";
+    row.appendChild(cell);
+    scBody.appendChild(row);
+  }
+
+  async function loadScheduleChanges() {
+    hideMessage(scMessage);
+
+    if (!scDate.value) scDate.value = collegeToday();
+    resetScheduleChangesTable("Loading schedule changes…");
+    scCount.textContent = "Loading…";
+
+    try {
+      var query = "/admin/schedule-changes?date=" + encodeURIComponent(scDate.value);
+      if (scDivision.value) {
+        query += "&division=" + encodeURIComponent(scDivision.value);
+      }
+
+      var result = await api(query);
+
+      if (result.response.status === 401) { expired(); return false; }
+
+      if (!result.response.ok) {
+        resetScheduleChangesTable("Could not load schedule changes.");
+        scCount.textContent = "Not loaded";
+        showMessage(
+          scMessage,
+          errorText(result.body, "Could not load schedule changes (" + result.response.status + ")."),
+          "error"
+        );
+        return false;
+      }
+
+      var body = result.body || {};
+      scRows = Array.isArray(body.claims) ? body.claims : [];
+      // The server answers with the date it actually used (today on the college
+      // clock when none was sent), so the filter always names the loaded day.
+      if (body.date) scDate.value = body.date;
+      renderScheduleChanges();
+      return true;
+    } catch (error) {
+      resetScheduleChangesTable("Could not load schedule changes.");
+      scCount.textContent = "Not loaded";
+      showMessage(scMessage, "Could not load schedule changes. Check your connection.", "error");
+      return false;
+    }
+  }
+
+  function renderScheduleChanges() {
+    scBody.textContent = "";
+
+    if (scRows.length === 0) {
+      resetScheduleChangesTable("No schedule changes on this date.");
+      scCount.textContent = "0 claims";
+      return;
+    }
+
+    scRows.forEach(function (claim) {
+      var tr = document.createElement("tr");
+
+      [claim.claim_date, claim.day, claim.time, claim.division].forEach(function (value) {
+        var cell = document.createElement("td");
+        cell.textContent = value || "—";
+        tr.appendChild(cell);
+      });
+
+      var batch = document.createElement("td");
+      batch.textContent = claim.batch || "Whole division";
+
+      var subject = document.createElement("td");
+      subject.textContent = claim.subject || "—";
+
+      var claimant = document.createElement("td");
+      claimant.textContent = claim.claimed_by_name || "Unknown teacher";
+
+      var actions = document.createElement("td");
+      if (claim.can_delete) {
+        var release = document.createElement("button");
+        release.className = "ghost small";
+        release.type = "button";
+        release.textContent = "Release";
+        release.setAttribute(
+          "aria-label",
+          "Release the " + (claim.time || "") + " claim for Division " + (claim.division || "")
+        );
+        release.addEventListener("click", function () {
+          deleteScheduleChange(claim, release);
+        });
+        actions.appendChild(release);
+      } else {
+        actions.textContent = "—";
+      }
+
+      tr.appendChild(batch);
+      tr.appendChild(subject);
+      tr.appendChild(claimant);
+      tr.appendChild(actions);
+      scBody.appendChild(tr);
+    });
+
+    var mine = scRows.filter(function (claim) { return claim.can_delete; }).length;
+    scCount.textContent = scRows.length + " claim(s) · " + mine + " you can release";
+  }
+
+  async function deleteScheduleChange(claim, button) {
+    var label = (claim.time || "") + " on " + (claim.claim_date || "") +
+      " for Division " + (claim.division || "");
+    if (!window.confirm("Release the " + label + "?")) return;
+
+    button.disabled = true;
+    hideMessage(scMessage);
+
+    try {
+      var result = await api(
+        "/teacher/free-periods/claims/" + encodeURIComponent(claim.id),
+        { method: "DELETE" }
+      );
+
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        showMessage(
+          scMessage,
+          errorText(result.body, "Could not release that claim (" + result.response.status + ")."),
+          "error"
+        );
+        button.disabled = false;
+        return;
+      }
+
+      // Reloading first (it clears the message) then confirming, so the success
+      // note survives the refresh; a failed refresh keeps its own error instead.
+      if (await loadScheduleChanges()) {
+        showMessage(scMessage, "Claim released.", "success");
+      }
+    } catch (error) {
+      showMessage(scMessage, "Could not release that claim. Check your connection.", "error");
+      button.disabled = false;
+    }
+  }
+
+  scRefresh.addEventListener("click", loadScheduleChanges);
+  scDate.addEventListener("change", function () {
+    if (activeTab === "schedule-changes") loadScheduleChanges();
+  });
+  scDivision.addEventListener("change", function () {
+    if (activeTab === "schedule-changes") loadScheduleChanges();
   });
 
   // ---------------------------------------------------------------- profile
