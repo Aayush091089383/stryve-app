@@ -374,6 +374,52 @@
 
   .file-note { margin: 9px 0 0; font-size: 12px; color: var(--muted); }
 
+  /* ---------------------------------------------------- account type */
+  .role-choice {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .role-choice label {
+    margin: 0;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 13px;
+  }
+
+  .role-choice input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .role-choice span {
+    display: block;
+    padding: 10px 12px;
+    text-align: center;
+    font-weight: 650;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: rgba(8, 13, 25, 0.55);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .role-choice input:checked + span {
+    color: #fff;
+    border-color: rgba(79, 140, 255, 0.55);
+    background: var(--accent-soft);
+  }
+
+  .role-choice input:focus-visible + span {
+    outline: 2px solid rgba(79, 140, 255, 0.75);
+    outline-offset: 2px;
+  }
+
   /* ---------------------------------------------------------------- buttons */
   button {
     display: inline-flex;
@@ -502,6 +548,174 @@
   }
 
   .assignment-row + .assignment-row { margin-top: 10px; }
+
+  /* ------------------------------------------------------ student home */
+  .today-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .today-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    background: rgba(8, 13, 25, 0.45);
+  }
+
+  .today-time {
+    flex: none;
+    min-width: 138px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #9dbfff;
+    line-height: 1.5;
+  }
+
+  .today-info { min-width: 0; }
+
+  .today-info strong {
+    display: block;
+    font-size: 14.5px;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+
+  .today-info span {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+
+  /* ------------------------------------------------- student assignments */
+  .assignment-folder {
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(8, 13, 25, 0.32);
+  }
+
+  .assignment-folder + .assignment-folder { margin-top: 12px; }
+
+  .assignment-folder-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .assignment-folder-head h3 {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+
+  .assignment-folder-head span { flex: none; font-size: 11.5px; color: var(--muted); }
+
+  .student-assignment {
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(8, 13, 25, 0.45);
+  }
+
+  .student-assignment + .student-assignment { margin-top: 10px; }
+
+  .student-assignment h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+
+  .student-assignment .meta {
+    margin: 4px 0 0;
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* ------------------------------------------------- student attendance */
+  .attendance-hero {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+
+  .attendance-ring {
+    --pct: 0;
+    width: 156px;
+    height: 156px;
+    flex: none;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: conic-gradient(
+      var(--accent) calc(var(--pct) * 1%),
+      rgba(148, 174, 255, 0.12) 0
+    );
+  }
+
+  .attendance-ring-inner {
+    width: 124px;
+    height: 124px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 2px;
+    background: var(--surface-solid);
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+
+  .attendance-ring-inner strong { font-size: 30px; font-weight: 700; line-height: 1; }
+
+  .attendance-ring-inner span { font-size: 11px; color: var(--muted); }
+
+  .attendance-stats { flex: 1 1 220px; min-width: 0; }
+
+  .attendance-stats h3 { margin: 0 0 6px; font-size: 16px; font-weight: 650; }
+
+  .attendance-stats p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+
+  .subject-progress + .subject-progress { margin-top: 16px; }
+
+  .subject-progress-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .subject-progress-head strong {
+    font-size: 13.5px;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+
+  .subject-progress-head span { flex: none; font-size: 12.5px; font-weight: 700; color: #9dbfff; }
+
+  .progress-track {
+    height: 8px;
+    margin-top: 8px;
+    border-radius: 999px;
+    background: rgba(148, 174, 255, 0.13);
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent);
+    transition: width 0.25s ease;
+  }
 
   .assignment-info { min-width: 0; }
 
@@ -927,6 +1141,14 @@
 
     .pending-actions { justify-content: flex-start; }
   }
+
+  @media (max-width: 560px) {
+    .today-row { flex-direction: column; gap: 5px; }
+
+    .today-time { min-width: 0; }
+
+    .attendance-hero { align-items: flex-start; gap: 18px; }
+  }
 </style>
 </head>
 <body>
@@ -938,15 +1160,29 @@
       <div class="mark" aria-hidden="true">S</div>
       <div>
         <h1>Stryve Portal</h1>
-        <p>Teacher and admin dashboard</p>
+        <p>Students, teachers and admins</p>
       </div>
     </header>
 
     <section class="card">
       <h2>Sign in</h2>
-      <p class="hint">Teacher and admin accounts only. Students cannot use this portal.</p>
+      <p class="hint">Use the account type and college email you were given.</p>
 
       <form id="loginForm" novalidate>
+        <div class="field">
+          <label>Sign in as</label>
+          <div class="role-choice" role="radiogroup" aria-label="Account type">
+            <label>
+              <input type="radio" name="loginRole" value="student" checked />
+              <span>Student</span>
+            </label>
+            <label>
+              <input type="radio" name="loginRole" value="teacher" />
+              <span>Teacher / Admin</span>
+            </label>
+          </div>
+        </div>
+
         <div class="field">
           <label for="email">Email</label>
           <input id="email" name="email" type="email" autocomplete="username"
@@ -998,7 +1234,23 @@
     <nav class="nav" aria-label="Dashboard sections">
       <p class="nav-label">Workspace</p>
 
-      <button class="nav-item active" type="button" data-tab="assignments">
+      <button class="nav-item" type="button" data-tab="t-home" data-audience="staff" id="navTeacherHome">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M4 10.5L12 4l8 6.5"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/>
+        </svg>
+        <span>Home</span>
+      </button>
+
+      <button class="nav-item" type="button" data-tab="s-home" data-audience="student" id="navStudentHome" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M4 10.5L12 4l8 6.5"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/>
+        </svg>
+        <span>Home</span>
+      </button>
+
+      <button class="nav-item active" type="button" data-tab="assignments" data-audience="staff">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
           <path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5"/><path d="M10 16h5"/>
@@ -1006,7 +1258,15 @@
         <span>Assignments</span>
       </button>
 
-      <button class="nav-item" type="button" data-tab="announcements" id="tab-announcements">
+      <button class="nav-item" type="button" data-tab="s-assignments" data-audience="student" id="navStudentAssignments" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5"/><path d="M10 16h5"/>
+        </svg>
+        <span>Assignments</span>
+      </button>
+
+      <button class="nav-item" type="button" data-tab="announcements" data-audience="staff" id="tab-announcements">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
           <path d="M4 10v4a2 2 0 0 0 2 2h1l6 4V4L7 8H6a2 2 0 0 0-2 2z"/>
@@ -1015,7 +1275,16 @@
         <span>Announcements</span>
       </button>
 
-      <button class="nav-item" type="button" data-tab="attendance" id="tab-attendance">
+      <button class="nav-item" type="button" data-tab="s-announcements" data-audience="student" id="navStudentAnnouncements" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M4 10v4a2 2 0 0 0 2 2h1l6 4V4L7 8H6a2 2 0 0 0-2 2z"/>
+          <path d="M17.5 9.2a4 4 0 0 1 0 5.6"/>
+        </svg>
+        <span>Announcements</span>
+      </button>
+
+      <button class="nav-item" type="button" data-tab="attendance" data-audience="staff" id="tab-attendance">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
           <path d="M4 5h16v15H4z"/><path d="M8 3v4"/><path d="M16 3v4"/>
@@ -1024,7 +1293,16 @@
         <span>Attendance</span>
       </button>
 
-      <button class="nav-item" type="button" data-tab="schedule-changes" id="tab-schedule-changes">
+      <button class="nav-item" type="button" data-tab="s-attendance" data-audience="student" id="navStudentAttendance" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M4 5h16v15H4z"/><path d="M8 3v4"/><path d="M16 3v4"/>
+          <path d="M8 13l2.4 2.4L16 10"/>
+        </svg>
+        <span>Attendance</span>
+      </button>
+
+      <button class="nav-item" type="button" data-tab="schedule-changes" data-audience="staff" id="tab-schedule-changes">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
           <circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>
@@ -1032,7 +1310,7 @@
         <span>Schedule changes</span>
       </button>
 
-      <button class="nav-item" type="button" data-tab="roster" id="navRoster" hidden>
+      <button class="nav-item" type="button" data-tab="roster" data-audience="staff" id="navRoster" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
           <path d="M4 5h16v15H4z"/><path d="M4 10h16"/><path d="M9 3v4"/><path d="M15 3v4"/>
@@ -1040,7 +1318,7 @@
         <span>Class roster</span>
       </button>
 
-      <button class="nav-item" type="button" data-tab="approvals" id="navApprovals" hidden>
+      <button class="nav-item" type="button" data-tab="approvals" data-audience="staff" id="navApprovals" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
           <circle cx="12" cy="12" r="9"/><path d="M8 12.4l2.6 2.6L16.2 9.4"/>
@@ -1049,7 +1327,7 @@
         <span class="badge" id="pendingBadge" hidden>0</span>
       </button>
 
-      <button class="nav-item" type="button" data-tab="teachers" id="navTeachers" hidden>
+      <button class="nav-item" type="button" data-tab="teachers" data-audience="staff" id="navTeachers" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
           <circle cx="9" cy="8" r="3.2"/>
@@ -1060,7 +1338,7 @@
         <span>Teacher management</span>
       </button>
 
-      <button class="nav-item" type="button" data-tab="profile">
+      <button class="nav-item" type="button" data-tab="profile" data-audience="all">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
           <circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c0-3.4 3.2-5.4 7.5-5.4s7.5 2 7.5 5.4"/>
@@ -1092,6 +1370,38 @@
       </div>
 
       <div class="panels">
+        <!-- ---------------------------------------------- student home -->
+        <section class="panel" id="panel-s-home">
+          <section class="card">
+            <div class="section-head">
+              <h2>Today at a glance</h2>
+              <button class="ghost small" id="sHomeRefresh" type="button">Refresh</button>
+            </div>
+            <p class="hint" id="sHomeDay">Loading today's date…</p>
+            <p class="hint">Your lectures and practicals for today, from the official timetable.</p>
+            <div class="today-list" id="sHomeList">
+              <p class="state">Loading today's classes…</p>
+            </div>
+            <div id="sHomeMessage" class="message" role="status" aria-live="polite"></div>
+          </section>
+        </section>
+
+        <!-- ---------------------------------------------- teacher home -->
+        <section class="panel" id="panel-t-home">
+          <section class="card">
+            <div class="section-head">
+              <h2>Today's classes</h2>
+              <button class="ghost small" id="tHomeRefresh" type="button">Refresh</button>
+            </div>
+            <p class="hint" id="tHomeDay">Loading today's date…</p>
+            <p class="hint">The classes you are assigned to teach today, from your timetable.</p>
+            <div class="today-list" id="teacherHomeList">
+              <p class="state">Loading today's classes…</p>
+            </div>
+            <div id="tHomeMessage" class="message" role="status" aria-live="polite"></div>
+          </section>
+        </section>
+
         <!-- ------------------------------------------------- assignments -->
         <section class="panel active" id="panel-assignments">
           <div class="grid-2">
@@ -1185,6 +1495,40 @@
               <div id="recentMessage" class="message" role="status" aria-live="polite"></div>
             </section>
           </div>
+        </section>
+
+        <!-- ---------------------------------------- student assignments -->
+        <section class="panel" id="panel-s-assignments">
+          <section class="card">
+            <div class="section-head">
+              <h2>Your assignments</h2>
+              <button class="ghost small" id="studentAssignmentRefresh" type="button">Refresh</button>
+            </div>
+            <p class="hint">
+              Grouped by subject. Open a PDF or video without downloading it first.
+              Text-only instructions are shown in full.
+            </p>
+            <div id="studentAssignmentList">
+              <p class="state">Loading assignments…</p>
+            </div>
+            <div id="studentAssignmentMessage" class="message" role="status" aria-live="polite"></div>
+          </section>
+        </section>
+
+        <!-- --------------------------------------- student announcements -->
+        <section class="panel" id="panel-s-announcements">
+          <section class="card">
+            <div class="section-head">
+              <h2>Announcements</h2>
+              <button class="ghost small" id="studentAnnouncementRefresh" type="button">Refresh</button>
+            </div>
+            <p class="hint">Notices for your year and division, newest first.</p>
+            <div class="announcement-filters" id="studentAnnouncementFilters" role="group" aria-label="Filter announcements by subject"></div>
+            <div id="studentAnnouncementsList">
+              <p class="state">Loading announcements…</p>
+            </div>
+            <div id="studentAnnouncementsMessage" class="message" role="status" aria-live="polite"></div>
+          </section>
         </section>
 
         <!-- ------------------------------------------------ announcements -->
@@ -1411,6 +1755,22 @@
                 </tbody>
               </table>
             </div>
+          </section>
+        </section>
+
+        <!-- ------------------------------------------- student attendance -->
+        <section class="panel" id="panel-s-attendance">
+          <section class="card">
+            <div class="section-head">
+              <h2>My attendance</h2>
+              <button class="ghost small" id="studentAttendanceRefresh" type="button">Refresh</button>
+            </div>
+            <p class="hint">Every lecture recorded for you, by subject.</p>
+            <div id="studentAttendanceSummary">
+              <p class="state">Loading your attendance…</p>
+            </div>
+            <div id="studentAttendanceSubjects"></div>
+            <div id="studentAttendanceMessage" class="message" role="status" aria-live="polite"></div>
           </section>
         </section>
 
@@ -1743,11 +2103,35 @@
   var TOKEN_KEY = "stryve.portal.token";
   var NAME_KEY = "stryve.portal.name";
   var ROLE_KEY = "stryve.portal.role";
+  // "student" or "teacher". The student token endpoint has no role field, so
+  // the portal must remember which login issued the token before it can call
+  // the matching /me route on the next visit.
+  var AUTH_KEY = "stryve.portal.auth";
   var MAX_BYTES = 100 * 1024 * 1024;
   var MAX_FILES = 10;
   var ALLOWED = [".pdf", ".mp4", ".mov", ".mkv"];
 
   var TAB_META = {
+    "t-home": {
+      title: "Home",
+      sub: "Today's classes and a quick view of your teaching day."
+    },
+    "s-home": {
+      title: "Home",
+      sub: "Your timetable for today, at a glance."
+    },
+    "s-assignments": {
+      title: "Assignments",
+      sub: "Everything posted for your year, division and batch."
+    },
+    "s-announcements": {
+      title: "Announcements",
+      sub: "Notices for your year and division."
+    },
+    "s-attendance": {
+      title: "Attendance",
+      sub: "Your own attendance, by subject."
+    },
     assignments: {
       title: "Assignments",
       sub: "Upload material and manage due dates for Division D."
@@ -1894,11 +2278,34 @@
   var profileMessage = document.getElementById("profileMessage");
   var refreshProfileBtn = document.getElementById("refreshProfileBtn");
 
-  var state = { me: null };
+  var sHomeDay = document.getElementById("sHomeDay");
+  var sHomeList = document.getElementById("sHomeList");
+  var sHomeMessage = document.getElementById("sHomeMessage");
+  var sHomeRefresh = document.getElementById("sHomeRefresh");
+  var tHomeDay = document.getElementById("tHomeDay");
+  var teacherHomeList = document.getElementById("teacherHomeList");
+  var tHomeMessage = document.getElementById("tHomeMessage");
+  var tHomeRefresh = document.getElementById("tHomeRefresh");
+  var studentAssignmentList = document.getElementById("studentAssignmentList");
+  var studentAssignmentMessage = document.getElementById("studentAssignmentMessage");
+  var studentAssignmentRefresh = document.getElementById("studentAssignmentRefresh");
+  var studentAnnouncementFilters = document.getElementById("studentAnnouncementFilters");
+  var studentAnnouncementsList = document.getElementById("studentAnnouncementsList");
+  var studentAnnouncementsMessage = document.getElementById("studentAnnouncementsMessage");
+  var studentAnnouncementRefresh = document.getElementById("studentAnnouncementRefresh");
+  var studentAttendanceSummary = document.getElementById("studentAttendanceSummary");
+  var studentAttendanceSubjects = document.getElementById("studentAttendanceSubjects");
+  var studentAttendanceMessage = document.getElementById("studentAttendanceMessage");
+  var studentAttendanceRefresh = document.getElementById("studentAttendanceRefresh");
+
+  var state = { me: null, auth: "" };
   var myAssignments = [];
   var pendingRows = [];
   var teacherRows = [];
   var announcementRows = [];
+  var studentAssignmentRows = [];
+  var studentAnnouncementRows = [];
+  var studentAnnouncementFilter = "all";
 
   // Same seven labels the backend accepts. A post without a subject is
   // "Common" and is stored as NULL, so "common" is not a subject value here.
@@ -1924,7 +2331,7 @@
     document.getElementById("annSubject").appendChild(option);
   });
 
-  var activeTab = "assignments";
+  var activeTab = "s-home";
 
   // ------------------------------------------------------------ primitives
   function token() {
@@ -1935,11 +2342,12 @@
     try { return sessionStorage.getItem(key) || ""; } catch (e) { return ""; }
   }
 
-  function saveSession(data) {
+  function saveSession(data, auth) {
     try {
       sessionStorage.setItem(TOKEN_KEY, data.token || "");
       sessionStorage.setItem(NAME_KEY, data.name || "");
       sessionStorage.setItem(ROLE_KEY, data.role || "");
+      sessionStorage.setItem(AUTH_KEY, auth || "teacher");
     } catch (e) { /* private mode: the token still lives in this page */ }
   }
 
@@ -1948,7 +2356,20 @@
       sessionStorage.removeItem(TOKEN_KEY);
       sessionStorage.removeItem(NAME_KEY);
       sessionStorage.removeItem(ROLE_KEY);
+      sessionStorage.removeItem(AUTH_KEY);
     } catch (e) { /* nothing to clear */ }
+  }
+
+  // Old browser sessions predate AUTH_KEY. The portal was teacher-only then,
+  // so an unmarked token is a staff token, not a student one.
+  function sessionAuth() {
+    var saved = remember(AUTH_KEY);
+    return saved === "student" ? "student" : "teacher";
+  }
+
+  function isStudent() {
+    return state.auth === "student" ||
+      (!state.auth && !!state.me && state.me.role === "student");
   }
 
   function showMessage(el, text, kind) {
@@ -2018,10 +2439,13 @@
   function expired() {
     clearSession();
     state.me = null;
+    state.auth = "";
     myAssignments = [];
     pendingRows = [];
     teacherRows = [];
     announcementRows = [];
+    studentAssignmentRows = [];
+    studentAnnouncementRows = [];
     showLogin();
     showMessage(loginMessage, "Your session ended. Sign in again.", "info");
   }
@@ -2047,20 +2471,31 @@
   function prettyRole(role) {
     if (role === "admin") return "Admin";
     if (role === "teacher") return "Teacher";
+    if (role === "student") return "Student";
     return role ? role.charAt(0).toUpperCase() + role.slice(1) : "Account";
   }
 
   // --------------------------------------------------------------- routing
   function allowed(tab) {
+    if (!state.me) return false;
+
+    // The two dashboards share the portal shell but never each other's tabs.
+    if (isStudent()) {
+      return tab === "s-home" || tab === "s-assignments" ||
+        tab === "s-announcements" || tab === "s-attendance" ||
+        tab === "profile";
+    }
+
     if (tab === "teachers") return isAdmin();
     if (tab === "roster") return isAdmin();
     if (tab === "approvals") return canReview();
-    return tab === "assignments" || tab === "announcements" ||
-      tab === "attendance" || tab === "schedule-changes" || tab === "profile";
+    return tab === "t-home" || tab === "assignments" ||
+      tab === "announcements" || tab === "attendance" ||
+      tab === "schedule-changes" || tab === "profile";
   }
 
   function activate(tab) {
-    if (!allowed(tab)) tab = "assignments";
+    if (!allowed(tab)) tab = isStudent() ? "s-home" : "t-home";
     activeTab = tab;
 
     var buttons = document.querySelectorAll(".nav-item");
@@ -2073,10 +2508,15 @@
       panels[j].classList.toggle("active", panels[j].id === "panel-" + tab);
     }
 
-    var meta = TAB_META[tab] || TAB_META.assignments;
+    var meta = TAB_META[tab] || TAB_META[isStudent() ? "s-home" : "t-home"];
     pageTitle.textContent = meta.title;
     pageSub.textContent = meta.sub;
 
+    if (tab === "s-home") loadStudentHome();
+    if (tab === "t-home") loadTeacherHome();
+    if (tab === "s-assignments") loadStudentAssignments();
+    if (tab === "s-announcements") loadStudentAnnouncements();
+    if (tab === "s-attendance") loadStudentAttendance();
     if (tab === "assignments") loadMine();
     if (tab === "announcements") loadAnnouncements();
     if (tab === "attendance") prepareAttendance();
@@ -2090,21 +2530,33 @@
   // ---------------------------------------------------------------- session
   function renderUser(me) {
     var name = me.name || remember(NAME_KEY) || "Signed in";
+    var student = isStudent();
     userName.textContent = name;
     userEmail.textContent = me.email || "";
-    userRole.textContent = prettyRole(me.role || remember(ROLE_KEY));
+    userRole.textContent = prettyRole(student ? "student" : (me.role || remember(ROLE_KEY)));
     userAvatar.textContent = initials(name);
-    navTeachers.hidden = me.role !== "admin";
-    navRoster.hidden = me.role !== "admin";
-    navApprovals.hidden = !canReview();
+
+    // Every nav item declares who may see it. The admin-only and
+    // approval-only checks below then narrow that further.
+    var navItems = document.querySelectorAll(".nav-item[data-audience]");
+    for (var i = 0; i < navItems.length; i++) {
+      var audience = navItems[i].getAttribute("data-audience");
+      navItems[i].hidden = audience === "student" ? !student :
+        (audience === "staff" ? student : false);
+    }
+
+    navTeachers.hidden = student || me.role !== "admin";
+    navRoster.hidden = student || me.role !== "admin";
+    navApprovals.hidden = student || !canReview();
 
     if (navApprovals.hidden) {
       pendingBadge.hidden = true;
     }
   }
 
-  function enterDashboard(me) {
+  function enterDashboard(me, auth) {
     state.me = me;
+    state.auth = auth || (me.role === "student" ? "student" : "teacher");
     loginView.hidden = true;
     app.hidden = false;
     renderUser(me);
@@ -2112,18 +2564,43 @@
     hideMessage(teachersMessage);
     hideMessage(announcementPostMessage);
     hideMessage(announcementsMessage);
-    showMessage(uploadMessage, "Signed in as " + (me.name || "your account") + ".", "info");
-    activate("assignments");
-    if (canReview()) loadPending(); // fills the Approvals badge
+    hideMessage(sHomeMessage);
+    hideMessage(tHomeMessage);
+    hideMessage(studentAssignmentMessage);
+    hideMessage(studentAnnouncementsMessage);
+    hideMessage(studentAttendanceMessage);
+    if (isStudent()) {
+      activate("s-home");
+    } else {
+      activate("t-home");
+      if (canReview()) loadPending(); // fills the Approvals badge
+    }
   }
 
   function showLogin() {
     app.hidden = true;
     loginView.hidden = false;
+    state.me = null;
+    state.auth = "";
     myAssignments = [];
     pendingRows = [];
     teacherRows = [];
     announcementRows = [];
+    studentAssignmentRows = [];
+    studentAnnouncementRows = [];
+    studentAnnouncementFilter = "all";
+    studentAssignmentList.textContent = "";
+    studentAnnouncementsList.textContent = "";
+    studentAnnouncementFilters.textContent = "";
+    studentAttendanceSummary.textContent = "";
+    studentAttendanceSubjects.textContent = "";
+    sHomeList.textContent = "";
+    teacherHomeList.textContent = "";
+    hideMessage(sHomeMessage);
+    hideMessage(tHomeMessage);
+    hideMessage(studentAssignmentMessage);
+    hideMessage(studentAnnouncementsMessage);
+    hideMessage(studentAttendanceMessage);
     announcementFilter = "all";
     announcementFilters.textContent = "";
     attendanceRows = [];
@@ -2163,6 +2640,8 @@
     event.preventDefault();
     hideMessage(loginMessage);
 
+    var selectedRole = document.querySelector('input[name="loginRole"]:checked');
+    var auth = selectedRole ? selectedRole.value : "student";
     var email = document.getElementById("email").value.trim();
     var password = document.getElementById("password").value;
 
@@ -2174,7 +2653,7 @@
     busy(loginBtn, loginSpinner, loginLabel, true, "Signing in…");
 
     try {
-      var result = await api("/teacher/login", {
+      var result = await api(auth === "student" ? "/login" : "/teacher/login", {
         method: "POST",
         json: { email: email, password: password }
       });
@@ -2186,26 +2665,55 @@
         return;
       }
 
-      saveSession(result.body);
+      if (auth === "student") result.body.role = "student";
+      saveSession(result.body, auth);
       document.getElementById("password").value = "";
 
-      // /teacher/me is the authority on the role badge, the permission flags and
-      // the account id (the token response only carries a role string).
-      var profile = {
-        id: result.body.teacher_id,
-        name: result.body.name || email,
-        email: result.body.email || email,
-        role: result.body.role || ""
-      };
-      try {
-        var meResult = await api("/teacher/me");
-        if (meResult.response.status === 401) { expired(); return; }
-        if (meResult.response.ok && meResult.body && meResult.body.id) profile = meResult.body;
-      } catch (meError) {
-        // Keep the token response; the dashboard still works and reloads later.
+      var profile;
+      if (auth === "student") {
+        // The student token response has no role and no permission flags;
+        // /me is the authority on the account and its class group.
+        profile = {
+          id: result.body.student_id,
+          name: result.body.name || email,
+          email: result.body.email || email,
+          roll_number: result.body.roll_number || "",
+          branch: result.body.branch || "",
+          year: result.body.year,
+          division: result.body.division || "",
+          batch: result.body.batch || "",
+          status: "approved",
+          role: "student"
+        };
+        try {
+          var studentMe = await api("/me");
+          if (studentMe.response.status === 401) { expired(); return; }
+          if (studentMe.response.ok && studentMe.response.body && studentMe.response.body.id) {
+            profile = studentMe.response.body;
+            profile.role = "student";
+          }
+        } catch (studentMeError) {
+          // Keep the token response; the dashboard still works and reloads later.
+        }
+      } else {
+        // /teacher/me is the authority on the role badge, the permission flags
+        // and the account id (the token response only carries a role string).
+        profile = {
+          id: result.body.teacher_id,
+          name: result.body.name || email,
+          email: result.body.email || email,
+          role: result.body.role || ""
+        };
+        try {
+          var meResult = await api("/teacher/me");
+          if (meResult.response.status === 401) { expired(); return; }
+          if (meResult.response.ok && meResult.body && meResult.body.id) profile = meResult.body;
+        } catch (meError) {
+          // Keep the token response; the dashboard still works and reloads later.
+        }
       }
 
-      enterDashboard(profile);
+      enterDashboard(profile, auth);
     } catch (error) {
       showMessage(loginMessage, "Could not reach the server. Check your connection and try again.", "error");
     } finally {
@@ -2215,10 +2723,11 @@
 
   logoutBtn.addEventListener("click", async function () {
     var current = token();
+    var endpoint = isStudent() ? "/logout" : "/teacher/logout";
     logoutBtn.disabled = true;
     try {
       if (current) {
-        await fetch("/teacher/logout", {
+        await fetch(endpoint, {
           method: "POST",
           headers: { Authorization: "Bearer " + current }
         });
@@ -2227,6 +2736,7 @@
     clearSession();
     logoutBtn.disabled = false;
     state.me = null;
+    state.auth = "";
     uploadForm.reset();
     hideMessage(uploadMessage);
     showLogin();
@@ -4414,6 +4924,625 @@
     if (activeTab === "schedule-changes") loadScheduleChanges();
   });
 
+  // ----------------------------------------------------------- home views
+  var COLLEGE_TIME_ZONE = "Asia/Kolkata";
+
+  function collegeDayName() {
+    try {
+      return new Date().toLocaleDateString("en-US", {
+        timeZone: COLLEGE_TIME_ZONE, weekday: "long"
+      });
+    } catch (error) {
+      return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date().getDay()];
+    }
+  }
+
+  function collegeDateLabel() {
+    try {
+      return new Date().toLocaleDateString("en-GB", {
+        timeZone: COLLEGE_TIME_ZONE, weekday: "long", day: "numeric",
+        month: "short", year: "numeric"
+      });
+    } catch (error) {
+      return new Date().toDateString();
+    }
+  }
+
+  function setHomeDay(node, count) {
+    var text = "Today · " + collegeDateLabel();
+    if (count != null) {
+      text += " · " + (count === 0 ? "No classes" :
+        (count === 1 ? "1 class" : count + " classes"));
+    }
+    node.textContent = text;
+  }
+
+  // A timetable row as a readable card. Both home screens read the printed
+  // times as 12-hour labels while the API keeps its 24-hour values.
+  function renderTodayRows(container, rows, staffView) {
+    container.textContent = "";
+
+    if (!rows.length) {
+      container.appendChild(stateNode("No classes scheduled for today."));
+      return;
+    }
+
+    rows.forEach(function (entry) {
+      var row = document.createElement("article");
+      row.className = "today-row";
+
+      var time = document.createElement("div");
+      time.className = "today-time";
+      time.textContent = clock12h(entry.start_time) + " – " + clock12h(entry.end_time);
+
+      var info = document.createElement("div");
+      info.className = "today-info";
+
+      var subject = document.createElement("strong");
+      subject.textContent = entry.subject || "Class";
+
+      var meta = document.createElement("span");
+      var bits = [];
+      if (staffView && entry.subject_code) bits.push(entry.subject_code);
+      if (entry.faculty) bits.push(entry.faculty);
+      if (entry.room) bits.push("Room " + entry.room);
+      bits.push(entry.batch || "Whole division");
+      bits.push(entry.entry_type === "practical" ? "Practical" : "Lecture");
+      meta.textContent = bits.join(" · ");
+
+      info.appendChild(subject);
+      info.appendChild(meta);
+      row.appendChild(time);
+      row.appendChild(info);
+      container.appendChild(row);
+    });
+  }
+
+  async function loadStudentHome() {
+    if (!token()) return;
+    hideMessage(sHomeMessage);
+    sHomeList.textContent = "";
+    sHomeList.appendChild(stateNode("Loading today's classes…"));
+    setHomeDay(sHomeDay, null);
+    sHomeRefresh.disabled = true;
+
+    try {
+      var result = await api("/timetable");
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        sHomeList.textContent = "";
+        sHomeList.appendChild(stateNode(
+          errorText(result.body, "Could not load your timetable (" + result.response.status + ")."),
+          "error"
+        ));
+        return;
+      }
+
+      var today = collegeDayName();
+      var rows = (Array.isArray(result.body) ? result.body : []).filter(function (entry) {
+        return entry.day === today && !entry.is_break && !entry.is_free_period;
+      }).sort(function (a, b) {
+        return String(a.start_time).localeCompare(String(b.start_time));
+      });
+
+      setHomeDay(sHomeDay, rows.length);
+      renderTodayRows(sHomeList, rows, false);
+    } catch (error) {
+      sHomeList.textContent = "";
+      sHomeList.appendChild(stateNode("Could not load your timetable. Check your connection.", "error"));
+    } finally {
+      sHomeRefresh.disabled = false;
+    }
+  }
+
+  async function loadTeacherHome() {
+    if (!token()) return;
+    hideMessage(tHomeMessage);
+    teacherHomeList.textContent = "";
+    teacherHomeList.appendChild(stateNode("Loading today's classes…"));
+    setHomeDay(tHomeDay, null);
+    tHomeRefresh.disabled = true;
+
+    try {
+      var result = await api("/teacher/assignments");
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        teacherHomeList.textContent = "";
+        teacherHomeList.appendChild(stateNode(
+          errorText(result.body, "Could not load your classes (" + result.response.status + ")."),
+          "error"
+        ));
+        return;
+      }
+
+      var today = collegeDayName();
+      var rows = (Array.isArray(result.body) ? result.body : []).filter(function (entry) {
+        return entry.day === today;
+      }).sort(function (a, b) {
+        return String(a.start_time).localeCompare(String(b.start_time));
+      });
+
+      setHomeDay(tHomeDay, rows.length);
+      renderTodayRows(teacherHomeList, rows, true);
+    } catch (error) {
+      teacherHomeList.textContent = "";
+      teacherHomeList.appendChild(stateNode("Could not load your classes. Check your connection.", "error"));
+    } finally {
+      tHomeRefresh.disabled = false;
+    }
+  }
+
+  // ------------------------------------------------- student assignments
+  function isPlaceholderAssignment(item) {
+    if (item.has_attachment) return false;
+    var title = String(item.title || "").trim().toLowerCase();
+    var subject = String(item.subject || "").trim().toLowerCase();
+    var description = String(item.description || "").trim();
+    return title === subject || description === "No assignment posted yet.";
+  }
+
+  // The API keeps the old single-file fields for clients that predate multiple
+  // attachments; translate them into the same list the new rows use.
+  function assignmentFiles(item) {
+    if (Array.isArray(item.attachments) && item.attachments.length > 0) {
+      return item.attachments;
+    }
+    if (item.has_attachment && item.original_name) {
+      return [{
+        id: null,
+        original_name: item.original_name,
+        file_size: item.file_size,
+        legacy: true
+      }];
+    }
+    return [];
+  }
+
+  function isVideoName(name) {
+    return /\.(mp4|mov|mkv)$/i.test(String(name || ""));
+  }
+
+  function buildStudentAssignment(item) {
+    var article = document.createElement("article");
+    article.className = "student-assignment";
+
+    var title = document.createElement("h4");
+    title.textContent = item.title || "Untitled assignment";
+    article.appendChild(title);
+
+    var meta = document.createElement("p");
+    meta.className = "meta";
+    var metaBits = ["Due " + dateLabel(item.due_date)];
+    if (item.batch) metaBits.push(item.batch);
+    meta.textContent = metaBits.join(" · ");
+    article.appendChild(meta);
+
+    var description = String(item.description || "").trim();
+    if (description) {
+      var body = document.createElement("p");
+      body.className = "announcement-body";
+      appendLinkified(body, description);
+      article.appendChild(body);
+    }
+
+    var files = assignmentFiles(item);
+    if (files.length > 0) {
+      var fileList = document.createElement("div");
+      fileList.className = "announcement-files";
+      files.forEach(function (file) {
+        var row = document.createElement("div");
+        row.className = "announcement-file";
+
+        var name = document.createElement("span");
+        name.className = "announcement-file-name";
+        name.textContent = file.original_name || "Attached file";
+
+        var size = document.createElement("span");
+        size.className = "announcement-file-size";
+        size.textContent = formatBytes(file.file_size);
+
+        var open = document.createElement("button");
+        open.type = "button";
+        open.className = "ghost small";
+        open.textContent = isVideoName(file.original_name) ? "Play video" : "Open PDF";
+        open.addEventListener("click", function () {
+          openStudentAssignmentFile(item, file, open);
+        });
+
+        row.appendChild(name);
+        row.appendChild(size);
+        row.appendChild(open);
+        fileList.appendChild(row);
+      });
+      article.appendChild(fileList);
+    }
+
+    return article;
+  }
+
+  async function loadStudentAssignments() {
+    if (!token()) return;
+    hideMessage(studentAssignmentMessage);
+    studentAssignmentList.textContent = "";
+    studentAssignmentList.appendChild(stateNode("Loading assignments…"));
+    studentAssignmentRefresh.disabled = true;
+
+    try {
+      var result = await api("/assignments");
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        studentAssignmentList.textContent = "";
+        studentAssignmentList.appendChild(stateNode(
+          errorText(result.body, "Could not load assignments (" + result.response.status + ")."),
+          "error"
+        ));
+        return;
+      }
+
+      studentAssignmentRows = (Array.isArray(result.body) ? result.body : [])
+        .filter(function (item) { return !isPlaceholderAssignment(item); });
+
+      if (studentAssignmentRows.length === 0) {
+        studentAssignmentList.textContent = "";
+        studentAssignmentList.appendChild(stateNode("No assignments posted yet."));
+        return;
+      }
+
+      var groups = {};
+      studentAssignmentRows.forEach(function (item) {
+        var subject = String(item.subject || "").trim() || "General";
+        if (!groups[subject]) groups[subject] = [];
+        groups[subject].push(item);
+      });
+
+      studentAssignmentList.textContent = "";
+      Object.keys(groups).sort(function (a, b) {
+        return a.toLowerCase().localeCompare(b.toLowerCase());
+      }).forEach(function (subject) {
+        var folder = document.createElement("section");
+        folder.className = "assignment-folder";
+
+        var head = document.createElement("div");
+        head.className = "assignment-folder-head";
+        var heading = document.createElement("h3");
+        heading.textContent = subject;
+        var count = document.createElement("span");
+        count.textContent = groups[subject].length === 1
+          ? "1 assignment" : groups[subject].length + " assignments";
+        head.appendChild(heading);
+        head.appendChild(count);
+        folder.appendChild(head);
+
+        groups[subject].sort(function (a, b) {
+          var byDue = String(a.due_date).localeCompare(String(b.due_date));
+          return byDue !== 0 ? byDue : (a.id - b.id);
+        }).forEach(function (item) {
+          folder.appendChild(buildStudentAssignment(item));
+        });
+
+        studentAssignmentList.appendChild(folder);
+      });
+    } catch (error) {
+      studentAssignmentList.textContent = "";
+      studentAssignmentList.appendChild(stateNode("Could not load assignments. Check your connection.", "error"));
+    } finally {
+      studentAssignmentRefresh.disabled = false;
+    }
+  }
+
+  async function openStudentAssignmentFile(item, file, button) {
+    button.disabled = true;
+    hideMessage(studentAssignmentMessage);
+    var url = file.id == null
+      ? "/assignments/" + encodeURIComponent(item.id) + "/file"
+      : "/assignments/" + encodeURIComponent(item.id) + "/files/" + encodeURIComponent(file.id);
+
+    try {
+      var response = await fetch(url, {
+        headers: { Authorization: "Bearer " + token() }
+      });
+
+      if (response.status === 401) { expired(); return; }
+
+      if (!response.ok) {
+        var body = await readJson(response);
+        showMessage(studentAssignmentMessage,
+          errorText(body, "Could not open that file (" + response.status + ")."),
+          "error");
+        return;
+      }
+
+      var blob = await response.blob();
+      showFilePreview({ original_name: file.original_name }, blob);
+    } catch (error) {
+      showMessage(studentAssignmentMessage, "Could not open that file. Check your connection.", "error");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  // ----------------------------------------------- student announcements
+  function renderStudentAnnouncementFilters() {
+    studentAnnouncementFilters.textContent = "";
+    var options = [{ value: "all", label: "All" }, { value: "common", label: "Common" }];
+    ANNOUNCEMENT_SUBJECTS.forEach(function (subject) {
+      options.push({ value: subject, label: subject });
+    });
+
+    options.forEach(function (option) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "ghost small";
+      button.textContent = option.label;
+      button.setAttribute("aria-pressed", studentAnnouncementFilter === option.value ? "true" : "false");
+      button.addEventListener("click", function () {
+        studentAnnouncementFilter = option.value;
+        renderStudentAnnouncementFilters();
+        renderStudentAnnouncements();
+      });
+      studentAnnouncementFilters.appendChild(button);
+    });
+  }
+
+  function matchesStudentAnnouncement(item) {
+    if (studentAnnouncementFilter === "all") return true;
+    if (studentAnnouncementFilter === "common") return !item.subject;
+    return item.subject === studentAnnouncementFilter;
+  }
+
+  function renderStudentAnnouncements() {
+    studentAnnouncementsList.textContent = "";
+    var visible = studentAnnouncementRows.filter(matchesStudentAnnouncement);
+
+    if (visible.length === 0) {
+      studentAnnouncementsList.appendChild(stateNode(
+        studentAnnouncementRows.length === 0
+          ? "No announcements yet."
+          : "No announcements in this subject."
+      ));
+      return;
+    }
+
+    visible.forEach(function (item) {
+      var article = document.createElement("article");
+      article.className = "announcement";
+
+      var head = document.createElement("div");
+      head.className = "announcement-head";
+      var title = document.createElement("div");
+      title.className = "announcement-title";
+      var strong = document.createElement("strong");
+      strong.textContent = item.title || "Announcement";
+      var meta = document.createElement("span");
+      meta.className = "announcement-meta";
+      meta.textContent = [item.subject || "Common", audienceLabel(item),
+        item.author_name || "Teacher", formatDate(item.created_at)].join(" · ");
+      title.appendChild(strong);
+      title.appendChild(meta);
+      head.appendChild(title);
+      article.appendChild(head);
+
+      var body = document.createElement("p");
+      body.className = "announcement-body";
+      appendLinkified(body, item.message || "");
+      article.appendChild(body);
+
+      if (Array.isArray(item.attachments) && item.attachments.length > 0) {
+        var files = document.createElement("div");
+        files.className = "announcement-files";
+        item.attachments.forEach(function (attachment) {
+          var row = document.createElement("div");
+          row.className = "announcement-file";
+
+          var name = document.createElement("span");
+          name.className = "announcement-file-name";
+          name.textContent = attachment.original_name || "Attached file";
+
+          var size = document.createElement("span");
+          size.className = "announcement-file-size";
+          size.textContent = formatBytes(attachment.file_size);
+
+          var open = document.createElement("button");
+          open.type = "button";
+          open.className = "ghost small";
+          open.textContent = isVideoName(attachment.original_name) ? "Play video" : "Open PDF";
+          open.addEventListener("click", function () {
+            openStudentAnnouncementFile(item, attachment, open);
+          });
+
+          row.appendChild(name);
+          row.appendChild(size);
+          row.appendChild(open);
+          files.appendChild(row);
+        });
+        article.appendChild(files);
+      }
+
+      studentAnnouncementsList.appendChild(article);
+    });
+  }
+
+  async function loadStudentAnnouncements() {
+    if (!token()) return;
+    hideMessage(studentAnnouncementsMessage);
+    studentAnnouncementsList.textContent = "";
+    studentAnnouncementsList.appendChild(stateNode("Loading announcements…"));
+    studentAnnouncementRefresh.disabled = true;
+
+    try {
+      var result = await api("/announcements");
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        studentAnnouncementsList.textContent = "";
+        studentAnnouncementsList.appendChild(stateNode(
+          errorText(result.body, "Could not load announcements (" + result.response.status + ")."),
+          "error"
+        ));
+        return;
+      }
+
+      studentAnnouncementRows = Array.isArray(result.body) ? result.body : [];
+      renderStudentAnnouncementFilters();
+      renderStudentAnnouncements();
+    } catch (error) {
+      studentAnnouncementsList.textContent = "";
+      studentAnnouncementsList.appendChild(stateNode("Could not load announcements. Check your connection.", "error"));
+    } finally {
+      studentAnnouncementRefresh.disabled = false;
+    }
+  }
+
+  async function openStudentAnnouncementFile(item, attachment, button) {
+    button.disabled = true;
+    hideMessage(studentAnnouncementsMessage);
+
+    try {
+      var response = await fetch(
+        "/announcements/" + encodeURIComponent(item.id) + "/files/" + encodeURIComponent(attachment.id),
+        { headers: { Authorization: "Bearer " + token() } }
+      );
+
+      if (response.status === 401) { expired(); return; }
+
+      if (!response.ok) {
+        var body = await readJson(response);
+        showMessage(studentAnnouncementsMessage,
+          errorText(body, "Could not open that file (" + response.status + ")."),
+          "error");
+        return;
+      }
+
+      var blob = await response.blob();
+      showFilePreview(attachment, blob);
+    } catch (error) {
+      showMessage(studentAnnouncementsMessage, "Could not open that file. Check your connection.", "error");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  // -------------------------------------------------- student attendance
+  function percentLabel(value) {
+    var number = Number(value);
+    if (!isFinite(number)) return "0%";
+    return (Math.round(number * 10) / 10).toString().replace(/\.0$/, "") + "%";
+  }
+
+  async function loadStudentAttendance() {
+    if (!token()) return;
+    hideMessage(studentAttendanceMessage);
+    studentAttendanceSummary.textContent = "";
+    studentAttendanceSummary.appendChild(stateNode("Loading your attendance…"));
+    studentAttendanceSubjects.textContent = "";
+    studentAttendanceRefresh.disabled = true;
+
+    try {
+      var result = await api("/student/attendance");
+      if (result.response.status === 401) { expired(); return; }
+
+      if (!result.response.ok) {
+        studentAttendanceSummary.textContent = "";
+        studentAttendanceSummary.appendChild(stateNode(
+          errorText(result.body, "Could not load your attendance (" + result.response.status + ")."),
+          "error"
+        ));
+        return;
+      }
+
+      var data = result.body || {};
+      var percentage = Math.max(0, Math.min(100, Number(data.overall_percentage) || 0));
+      var total = Number(data.total_classes) || 0;
+      var attended = Number(data.attended) || 0;
+
+      studentAttendanceSummary.textContent = "";
+      var hero = document.createElement("div");
+      hero.className = "attendance-hero";
+
+      var ring = document.createElement("div");
+      ring.className = "attendance-ring";
+      ring.style.setProperty("--pct", String(percentage));
+      var inner = document.createElement("div");
+      inner.className = "attendance-ring-inner";
+      var big = document.createElement("strong");
+      big.textContent = percentLabel(percentage);
+      var small = document.createElement("span");
+      small.textContent = "overall";
+      inner.appendChild(big);
+      inner.appendChild(small);
+      ring.appendChild(inner);
+
+      var stats = document.createElement("div");
+      stats.className = "attendance-stats";
+      var heading = document.createElement("h3");
+      heading.textContent = total === 0 ? "No lectures recorded yet" : "You attended " + attended + " of " + total + " lectures";
+      var note = document.createElement("p");
+      note.textContent = total === 0
+        ? "Attendance appears here once a teacher records it."
+        : "Across every subject with a recorded lecture.";
+      stats.appendChild(heading);
+      stats.appendChild(note);
+
+      hero.appendChild(ring);
+      hero.appendChild(stats);
+      studentAttendanceSummary.appendChild(hero);
+
+      var subjects = Array.isArray(data.subjects) ? data.subjects : [];
+      if (subjects.length === 0) {
+        studentAttendanceSubjects.appendChild(stateNode("No attendance recorded yet."));
+        return;
+      }
+
+      subjects.forEach(function (subject) {
+        var item = document.createElement("div");
+        item.className = "subject-progress";
+
+        var head = document.createElement("div");
+        head.className = "subject-progress-head";
+        var name = document.createElement("strong");
+        name.textContent = subject.subject || "Subject";
+        var value = document.createElement("span");
+        value.textContent = percentLabel(subject.percentage);
+        head.appendChild(name);
+        head.appendChild(value);
+
+        var detail = document.createElement("p");
+        detail.className = "meta";
+        detail.style.margin = "4px 0 0";
+        detail.style.fontSize = "11.5px";
+        detail.style.color = "var(--muted)";
+        detail.textContent = (Number(subject.attended) || 0) + " of " +
+          (Number(subject.total_classes) || 0) + " lectures attended";
+
+        var track = document.createElement("div");
+        track.className = "progress-track";
+        var fill = document.createElement("div");
+        fill.className = "progress-fill";
+        fill.style.width = Math.max(0, Math.min(100, Number(subject.percentage) || 0)) + "%";
+        track.appendChild(fill);
+
+        item.appendChild(head);
+        item.appendChild(detail);
+        item.appendChild(track);
+        studentAttendanceSubjects.appendChild(item);
+      });
+    } catch (error) {
+      studentAttendanceSummary.textContent = "";
+      studentAttendanceSummary.appendChild(stateNode("Could not load your attendance. Check your connection.", "error"));
+    } finally {
+      studentAttendanceRefresh.disabled = false;
+    }
+  }
+
+  sHomeRefresh.addEventListener("click", loadStudentHome);
+  tHomeRefresh.addEventListener("click", loadTeacherHome);
+  studentAssignmentRefresh.addEventListener("click", loadStudentAssignments);
+  studentAnnouncementRefresh.addEventListener("click", loadStudentAnnouncements);
+  studentAttendanceRefresh.addEventListener("click", loadStudentAttendance);
+
   // ---------------------------------------------------------------- profile
   function renderProfile() {
     profileGrid.textContent = "";
@@ -4430,6 +5559,18 @@
     var me = state.me;
     addProfileItem("Name", me.name || "—");
     addProfileItem("Email", me.email || "—");
+
+    if (isStudent()) {
+      addProfileItem("Role", "Student");
+      addProfileItem("Roll number", me.roll_number || "—");
+      addProfileItem("Branch", me.branch || "—");
+      addProfileItem("Year", me.year != null ? String(me.year) : "—");
+      addProfileItem("Division", me.division || "—");
+      addProfileItem("Batch", me.batch || "—");
+      addProfileItem("Status", me.status === "approved" ? "Approved" : (me.status || "—"));
+      return;
+    }
+
     addProfileItem("Role", prettyRole(me.role));
     addProfileItem("Status", me.is_active === false ? "Deactivated" : "Active");
     addProfileItem("Approvals", (isAdmin() || me.can_approve_registrations) ? "Allowed" : "Not granted");
@@ -4465,7 +5606,7 @@
     refreshProfileBtn.disabled = true;
 
     try {
-      var result = await api("/teacher/me");
+      var result = await api(isStudent() ? "/me" : "/teacher/me");
 
       if (result.response.status === 401) { expired(); return; }
 
@@ -4476,6 +5617,7 @@
 
       if (result.body && result.body.id) {
         state.me = result.body;
+        if (isStudent()) state.me.role = "student";
         renderUser(state.me);
         renderProfile();
       }
@@ -4491,10 +5633,12 @@
   // ------------------------------------------------------- restore session
   (async function restore() {
     if (!token()) { showLogin(); return; }
+    var auth = sessionAuth();
     try {
-      var result = await api("/teacher/me");
+      var result = await api(auth === "student" ? "/me" : "/teacher/me");
       if (result.response.ok && result.body && result.body.id) {
-        enterDashboard(result.body);
+        if (auth === "student") result.body.role = "student";
+        enterDashboard(result.body, auth);
       } else {
         clearSession();
         showLogin();

@@ -217,24 +217,26 @@ app.add_middleware(
 )
 
 # ------------------------------------------------------------------
-# Static assets and the browser upload portal
+# Static assets and the browser portal
 # ------------------------------------------------------------------
 # Anchored to backend/ (never the working directory), because uvicorn may be
 # started from the repository root. StaticFiles is mounted under /static so a
 # future route can never shadow a file by accident; /portal is the one stable
-# address a teacher needs to remember.
+# address every role needs to remember.
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 @app.get("/portal", include_in_schema=False)
 def serve_upload_portal():
-    """The teacher/admin upload page.
+    """The unified student/teacher/admin portal.
 
-    Plain HTML is served from the same origin as the API, so the page's
+    The same HTML is served for every role; the page chooses the student or
+    staff login endpoint and then renders only the nav and panels that role may
+    use. Plain HTML comes from the same origin as the API, so the page's
     relative fetch() calls work unchanged on localhost, the ngrok tunnel and
-    any other host the backend is reached through. Access control is the
-    teacher login itself: without a valid bearer token the page can render but
+    any other host the backend is reached through. Access control is the login
+    and the API itself: without a valid bearer token the page can render but
     every call it makes is rejected.
     """
     return FileResponse(
