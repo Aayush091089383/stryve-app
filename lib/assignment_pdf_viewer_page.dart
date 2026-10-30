@@ -414,8 +414,6 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
                 color: GlassColors.secondaryTextOf(context),
               ),
               linkStyle: const TextStyle(fontWeight: FontWeight.w600),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ],

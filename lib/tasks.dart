@@ -306,6 +306,7 @@ class _TasksContent extends StatelessWidget {
           (a) => AssignmentCard(
             subject: a.subject,
             title: a.title,
+            description: a.description,
             dueDate: formatDueDate(a.dueDate),
             batch: a.batch,
             hasAttachment: a.hasAttachment,

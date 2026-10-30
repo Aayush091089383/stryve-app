@@ -42,11 +42,12 @@ Assignment assignment({
   int id = 1,
   String title = 'Algebra Worksheet',
   bool hasAttachment = true,
+  String? description = 'Solve every question in the attached sheet.',
 }) => Assignment(
   id: id,
   subject: 'M-1',
   title: title,
-  description: 'Solve every question in the attached sheet.',
+  description: description,
   dueDate: '2026-10-20',
   batch: 'D-3',
   hasAttachment: hasAttachment,
@@ -144,6 +145,7 @@ Future<void> pumpViewer(
   FakePdfSurface? surface,
   AssignmentPdfSave? save,
   int assignmentId = 1,
+  Assignment? assignmentOverride,
 }) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 1.0;
@@ -152,7 +154,7 @@ Future<void> pumpViewer(
   await tester.pumpWidget(
     MaterialApp(
       home: AssignmentPdfViewerPage(
-        assignment: assignment(id: assignmentId),
+        assignment: assignmentOverride ?? assignment(id: assignmentId),
         token: kToken,
         load: load,
         savePdf: save,
@@ -224,6 +226,29 @@ void main() {
         find.text('Solve every question in the attached sheet.'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('shows a long description in full, without a line cap', (
+      tester,
+    ) async {
+      final longDescription = List.generate(
+        40,
+        (i) => 'Paragraph ${i + 1}: answer every question on page ${i + 1}.',
+      ).join('\n');
+
+      await pumpViewer(
+        tester,
+        assignmentOverride: assignment(description: longDescription),
+        load: (_) async => AssignmentPdfResult.loaded(testPdfBytes()),
+      );
+      await tester.pumpAndSettle();
+
+      final rendered = tester.widgetList<Text>(find.byType(Text)).firstWhere(
+        (text) => text.textSpan?.toPlainText() == longDescription,
+      );
+      expect(rendered.maxLines, isNull);
+      expect(find.textContaining('pdf-surface:'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('never puts the token in the PDF source name', (tester) async {

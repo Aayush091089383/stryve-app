@@ -1,9 +1,9 @@
 // The dedicated student Assignments screen.
 //
 // Pinned here:
-// * it renders exactly what GET /assignments returns - including the
-//   description the Tasks card does not use - and shows READ PDF only where the
-//   backend says an attachment exists;
+// * it renders exactly what GET /assignments returns - including a long
+//   description in full - and shows READ PDF only where the backend says an
+//   attachment exists;
 // * loading, empty and error states each render their own UI, and an error is
 //   never shown as an empty list;
 // * Try Again bypasses the cache and refetches;
@@ -140,11 +140,45 @@ void main() {
     expect(find.text('Due: 28 Oct 2026'), findsOneWidget);
     expect(find.text('D-1'), findsOneWidget);
 
-    // The description is a real API field, shown only on this screen.
+    // The description is a real API field, rendered in the card.
     expect(find.text('Solve the attached problems.'), findsOneWidget);
 
     // Only the assignment that actually has a file offers the action.
     expect(find.text('READ PDF'), findsOneWidget);
+  });
+
+  testWidgets('a long description is shown in full, not clipped', (tester) async {
+    // The kind of paragraph a teacher pastes in: several sentences and blank
+    // lines, well past the old three-line preview.
+    final longDescription = List.generate(
+      24,
+      (i) =>
+          'Step ${i + 1}: read the section and write the answer in your own words.',
+    ).join('\n');
+
+    await pumpAssignments(
+      tester,
+      MockClient(
+        (_) async => ok([
+          assignmentJson(
+            id: 4,
+            subject: 'DTIL',
+            title: 'DTIL 1',
+            description: longDescription,
+            hasAttachment: false,
+            originalName: null,
+          ),
+        ]),
+      ),
+    );
+    await openFolder(tester, 'DTIL');
+
+    expect(find.text(longDescription), findsOneWidget);
+    final rendered = tester.widgetList<Text>(find.byType(Text)).firstWhere(
+      (text) => text.textSpan?.toPlainText() == longDescription,
+    );
+    expect(rendered.maxLines, isNull, reason: 'the whole description wraps');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('an empty response shows the empty state, not a blank screen', (

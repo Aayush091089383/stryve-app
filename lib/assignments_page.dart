@@ -24,8 +24,7 @@ import 'video_player_page.dart';
 ///
 /// This is deliberately NOT a second Tasks screen. The Tasks tab keeps its own
 /// "Pending Tasks" list (plus its static Completed placeholder); this screen is
-/// the full catalogue, which is also why it can show the assignment
-/// `description` the Tasks card does not use.
+/// the full catalogue, with every assignment's instructions shown in full.
 ///
 /// Scope is whatever the backend allows: year + division + (own batch and
 /// division-wide). Nothing is widened on the client - the server is the only
@@ -830,8 +829,9 @@ class _AssignmentFileRow extends StatelessWidget {
             // tapped, not read out.
             LinkifiedText(
               description,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
+              // The whole description is shown. Assignment instructions can
+              // be long, and a student must not have to guess what was cut
+              // off after the third line.
               style: TextStyle(fontSize: 12, height: 1.35, color: secondary),
               linkStyle: const TextStyle(fontWeight: FontWeight.w600),
             ),

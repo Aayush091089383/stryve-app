@@ -32,9 +32,8 @@ String formatAssignmentDueDate(String rawDate) {
 /// One assignment, rendered exactly as the Tasks tab has always rendered it.
 ///
 /// Extracted from `tasks.dart` so the dedicated Assignments screen reuses the
-/// same card instead of a look-alike. The assignment's [description] is an
-/// optional extra: the backend returns it, the Tasks tab does not pass it, so
-/// Tasks is pixel-identical to before.
+/// same card instead of a look-alike. The assignment's [description] is shown
+/// in full when the caller passes it.
 class AssignmentCard extends StatelessWidget {
   const AssignmentCard({
     super.key,
@@ -205,8 +204,8 @@ class AssignmentCard extends StatelessWidget {
             const SizedBox(height: 10),
             LinkifiedText(
               description!,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              // Teacher instructions are coursework, not a caption: a long
+              // description wraps in full instead of being cut to a preview.
               style: TextStyle(
                 fontSize: 13,
                 height: 1.35,

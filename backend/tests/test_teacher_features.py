@@ -2316,6 +2316,20 @@ created_upload = upload(admin_token)
 check("a teacher can upload a PDF", created_upload.status_code == 201, created_upload.text[:200])
 check("the upload returns the metadata", created_upload.json().get("subject") == "M-1" and created_upload.json().get("has_attachment") is True, str(created_upload.json())[:200])
 
+student_view = requests.get(
+    f"{BASE}/assignments", headers=auth(TOKENS["1"]), timeout=10
+).json()
+student_row = next(
+    (row for row in student_view if row["id"] == created_upload.json()["id"]),
+    None,
+)
+check(
+    "the student's assignment payload carries the uploaded description",
+    student_row is not None
+    and student_row.get("description") == "Solve all questions",
+    str(student_row)[:250],
+)
+
 stored = conn.execute(
     "SELECT stored_name, original_name, file_size, uploaded_by FROM assignments WHERE id=?",
     (created_upload.json()["id"],),

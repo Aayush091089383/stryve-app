@@ -31,11 +31,16 @@ class Assignment {
 
   factory Assignment.fromJson(Map<String, dynamic> json) {
     final raw = json['attachments'];
+    final description = (json['description'] as String?)?.trim();
     return Assignment(
       id: json['id'],
       subject: json['subject'],
       title: json['title'],
-      description: json['description'],
+      // Blank instructions are "no description", not an empty line the UI
+      // has to remember to hide on every screen.
+      description: description == null || description.isEmpty
+          ? null
+          : description,
       dueDate: json['due_date'],
       batch: json['batch'],
       hasAttachment: json['has_attachment'] as bool? ?? false,
