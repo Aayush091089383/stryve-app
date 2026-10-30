@@ -407,13 +407,27 @@ class _AssignmentPdfViewerPageState extends State<AssignmentPdfViewerPage> {
           ),
           if ((assignment.description ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 8),
-            LinkifiedText(
-              assignment.description!.trim(),
-              style: TextStyle(
-                fontSize: 12.5,
-                color: GlassColors.secondaryTextOf(context),
+            // The full description stays available, but it cannot push the PDF
+            // off the screen: instructions that outgrow this box scroll inside
+            // it, and the document keeps the remaining height. The old
+            // unbounded card let a long description collapse the reader to
+            // nothing.
+            ConstrainedBox(
+              key: const Key('assignment-description-scroll'),
+              constraints: const BoxConstraints(maxHeight: 180),
+              child: Scrollbar(
+                child: SingleChildScrollView(
+                  primary: false,
+                  child: LinkifiedText(
+                    assignment.description!.trim(),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: GlassColors.secondaryTextOf(context),
+                    ),
+                    linkStyle: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
               ),
-              linkStyle: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ],
         ],

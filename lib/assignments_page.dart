@@ -411,7 +411,12 @@ class _AssignmentsPageState extends State<AssignmentsPage> {
           20,
           topInset,
           20,
-          24 + widget.bottomInset,
+          // The floating navigation bar covers the bottom [bottomInset] of the
+          // viewport. A card with full instructions and several attachments is
+          // much taller than one used to be, so give the final card more than
+          // the bar's own height: 40px of clear space keeps its last action
+          // tappable instead of flush against (or behind) the glass.
+          widget.bottomInset + 40,
         ),
         children: [
           Row(

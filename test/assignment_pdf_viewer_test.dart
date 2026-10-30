@@ -146,8 +146,9 @@ Future<void> pumpViewer(
   AssignmentPdfSave? save,
   int assignmentId = 1,
   Assignment? assignmentOverride,
+  Size size = const Size(1080, 2400),
 }) async {
-  tester.view.physicalSize = const Size(1080, 2400);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
@@ -247,6 +248,42 @@ void main() {
         (text) => text.textSpan?.toPlainText() == longDescription,
       );
       expect(rendered.maxLines, isNull);
+      expect(find.textContaining('pdf-surface:'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a long description scrolls in a box, keeping the PDF room', (
+      tester,
+    ) async {
+      final longDescription = List.generate(
+        40,
+        (i) => 'Paragraph ${i + 1}: answer every question on page ${i + 1}.',
+      ).join('\n');
+
+      await pumpViewer(
+        tester,
+        size: const Size(400, 800),
+        assignmentOverride: assignment(description: longDescription),
+        load: (_) async => AssignmentPdfResult.loaded(testPdfBytes()),
+      );
+      await tester.pumpAndSettle();
+
+      // The description is not truncated: every paragraph is still in the
+      // widget, inside a bounded scroll area of its own.
+      expect(
+        tester
+            .widgetList<Text>(find.byType(Text))
+            .any((text) => text.textSpan?.toPlainText() == longDescription),
+        isTrue,
+      );
+      expect(
+        tester
+            .getSize(find.byKey(const Key('assignment-description-scroll')))
+            .height,
+        lessThanOrEqualTo(180),
+      );
+      // With the description capped, the reader keeps screen space and
+      // nothing overflows on a normal phone.
       expect(find.textContaining('pdf-surface:'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

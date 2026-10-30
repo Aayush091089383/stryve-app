@@ -77,13 +77,22 @@ Future<void> pumpAssignments(
   WidgetTester tester,
   http.Client client, {
   Size size = const Size(1080, 2400),
+  bool embedded = false,
+  double bottomInset = 0,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
   await tester.pumpWidget(
-    MaterialApp(home: AssignmentsPage(student: studentFixture(), client: client)),
+    MaterialApp(
+      home: AssignmentsPage(
+        student: studentFixture(),
+        client: client,
+        embedded: embedded,
+        bottomInset: bottomInset,
+      ),
+    ),
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 50));
@@ -178,6 +187,46 @@ void main() {
       (text) => text.textSpan?.toPlainText() == longDescription,
     );
     expect(rendered.maxLines, isNull, reason: 'the whole description wraps');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the last READ PDF clears the floating navigation bar', (
+    tester,
+  ) async {
+    final longDescription = List.generate(
+      30,
+      (i) => 'Step ${i + 1}: read the section and show your working.',
+    ).join('\n');
+
+    await pumpAssignments(
+      tester,
+      MockClient(
+        (_) async => ok([
+          assignmentJson(
+            id: 8,
+            subject: 'DTIL',
+            title: 'Long instructions',
+            description: longDescription,
+          ),
+        ]),
+      ),
+      size: const Size(400, 800),
+      embedded: true,
+      bottomInset: 92,
+    );
+    await openFolder(tester, 'DTIL');
+
+    // Scroll to the very end, as a student would after reading the card.
+    await tester.drag(find.byType(ListView), const Offset(0, -3000));
+    await tester.pumpAndSettle();
+
+    final buttonBottom = tester.getBottomLeft(find.text('READ PDF')).dy;
+    const navTop = 800 - 92;
+    expect(
+      buttonBottom,
+      lessThanOrEqualTo(navTop),
+      reason: 'the card action must not finish behind the floating bar',
+    );
     expect(tester.takeException(), isNull);
   });
 
