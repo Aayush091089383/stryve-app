@@ -32,7 +32,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional, Tuple
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from config import settings
@@ -87,9 +87,16 @@ def resolve_database_path(url: Optional[str] = None) -> Optional[Path]:
 
 DATABASE_URL, DATABASE_PATH = resolve_database_url(settings.DATABASE_URL)
 
+# ``check_same_thread`` is a sqlite3 DBAPI argument. A Postgres driver rejects
+# it with a TypeError on the first connect, so it is applied to SQLite only;
+# every other backend gets its default connect arguments.
+connect_args = (
+    {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+)
+
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False},
+    connect_args=connect_args,
 )
 
 SessionLocal = sessionmaker(
@@ -141,6 +148,47 @@ def verify_database_file(path: Optional[Path], allow_create: bool) -> None:
         )
 
 
+# Columns added to ``teachers`` after the table first shipped. create_all() only
+# creates missing TABLES, so an existing database would otherwise make the first
+# ORM query fail on a column the file does not have yet. These ALTERs are purely
+# additive: no row, index or existing column is touched, and running them again
+# is a no-op.
+ADDITIVE_TEACHER_COLUMNS = {
+    "phone": "VARCHAR",
+    "gmail": "VARCHAR",
+    "cabin_number": "VARCHAR",
+    "display_subject": "VARCHAR",
+    "manual_location": "VARCHAR",
+}
+
+
+def ensure_additive_columns(bind=None) -> list[str]:
+    """Add the teacher-profile columns to an existing database, in place.
+
+    Returns the names actually added, which keeps the startup path observable in
+    the log without ever printing data. A fresh database is created with every
+    column by ``create_all``, so this normally adds nothing.
+    """
+    target = bind if bind is not None else engine
+    inspector = inspect(target)
+    if "teachers" not in inspector.get_table_names():
+        return []
+
+    existing = {column["name"] for column in inspector.get_columns("teachers")}
+    added: list[str] = []
+
+    with target.begin() as connection:
+        for name, sql_type in ADDITIVE_TEACHER_COLUMNS.items():
+            if name in existing:
+                continue
+            connection.execute(
+                text(f'ALTER TABLE teachers ADD COLUMN "{name}" {sql_type}')
+            )
+            added.append(name)
+
+    return added
+
+
 def init_database(bind=None, allow_create: Optional[bool] = None) -> Optional[Path]:
     """Validate the configured database file, then create any missing tables.
 
@@ -153,7 +201,14 @@ def init_database(bind=None, allow_create: Optional[bool] = None) -> Optional[Pa
     existed_before = DATABASE_PATH is not None and DATABASE_PATH.exists()
 
     verify_database_file(DATABASE_PATH, allow_create)
-    Base.metadata.create_all(bind=bind if bind is not None else engine)
+    target = bind if bind is not None else engine
+    Base.metadata.create_all(bind=target)
+    added = ensure_additive_columns(target)
+    if added:
+        print(
+            "[campusync] added additive column(s) to teachers: "
+            + ", ".join(added)
+        )
 
     if DATABASE_PATH is not None and not existed_before:
         print(f"[campusync] created database at {DATABASE_PATH}")

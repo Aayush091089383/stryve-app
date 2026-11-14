@@ -8,6 +8,11 @@
 fastapi==0.143.3
 uvicorn[standard]==0.54.0
 sqlalchemy==2.1.5
+# Postgres drivers for the Supabase database. SQLAlchemy 2.1 resolves a plain
+# ``postgresql://`` URL to psycopg 3, so that is what a Supabase URI uses;
+# psycopg2-binary stays for explicit ``postgresql+psycopg2://`` URLs.
+psycopg[binary]==3.3.9
+psycopg2-binary==2.9.13
 pydantic==2.14.1
 pydantic-settings==2.16.0
 python-dotenv==1.2.4
