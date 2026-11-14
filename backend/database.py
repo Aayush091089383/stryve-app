@@ -97,6 +97,11 @@ connect_args = (
 engine = create_engine(
     DATABASE_URL,
     connect_args=connect_args,
+    # Postgres over the internet: a pooled connection the cloud network has
+    # already dropped costs one dead round trip on the next request, so probe
+    # before use and recycle anything older than five minutes.
+    pool_pre_ping=True,
+    pool_recycle=300,
 )
 
 SessionLocal = sessionmaker(
